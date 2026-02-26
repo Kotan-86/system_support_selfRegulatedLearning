@@ -26,7 +26,7 @@ class TestAppStep3HistoryInPrompt:
             mock_llm.return_value = "りんごですね。"
             r1 = app_client.post(
                 "/chat",
-                json={"message": "りんご"},
+                json={"message": "りんご", "participant_id": "1"},
                 content_type="application/json",
             )
             assert r1.status_code == 200

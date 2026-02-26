@@ -1,0 +1,13 @@
+{
+  "name": "quiz-form-payload-test",
+  "version": "1.0.0",
+  "description": "Payload builder and Jest tests for POST /api/quiz-attempts (quiz_form/quizForm.gs と同一仕様)",
+  "private": true,
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

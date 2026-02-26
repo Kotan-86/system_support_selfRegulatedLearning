@@ -19,7 +19,7 @@ class TestAppStep2SessionIdCreation:
             mock_llm.return_value = "スタブ応答"
             r = app_client.post(
                 "/chat",
-                json={"message": "はじめてのメッセージ"},
+                json={"message": "はじめてのメッセージ", "participant_id": "1"},
                 content_type="application/json",
             )
         assert r.status_code == 200
@@ -42,7 +42,7 @@ class TestAppStep2SessionIdReuse:
             # 1 回目: session_id なしで送り、返ってきた session_id を取得
             r1 = app_client.post(
                 "/chat",
-                json={"message": "1回目"},
+                json={"message": "1回目", "participant_id": "1"},
                 content_type="application/json",
             )
             assert r1.status_code == 200

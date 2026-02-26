@@ -48,7 +48,7 @@ class TestAppStep1PostChat:
             mock_llm.return_value = "スタブ応答"
             r = app_client.post(
                 "/chat",
-                json={"message": "こんにちは"},
+                json={"message": "こんにちは", "participant_id": "1"},
                 content_type="application/json",
             )
         assert r.status_code == 200, "message があるときは 200 を返すこと"

@@ -8,9 +8,16 @@ service_account.json
 
 # --- ローカルデータ（中に個人情報が入る可能性） ---
 db/data/*.db
+viewing_logs.tsv
+scripts/seed_demo_data.py
 
 # --- 参照用プロトタイプ（別管理 or 秘密を含む可能性） ---
 llmtutor_prototype/
+
+# --- GAS 用（payload テストの node_modules のみ除外） ---
+gas/payload/node_modules/
+lecture_video_platform/payload/node_modules/
+quiz_form/payload/node_modules/
 
 # --- 仮想環境・キャッシュ（再現可能・リポジトリに不要） ---
 .venv/

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS viewing_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     participant_id TEXT NOT NULL,
     time_stamp DATETIME NOT NULL,
-    current_time INTEGER NOT NULL,
+    "current_time" INTEGER NOT NULL,
     action TEXT NOT NULL,
     duration REAL NOT NULL
 );

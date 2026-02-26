@@ -24,7 +24,10 @@ class TestStep5Integration:
             pytest.skip("db.init_db または db.repository が未実装のためスキップ")
 
         init_db.init_db()
-        sid = repository.create_session()
+        try:
+            sid = repository.create_session("1")
+        except TypeError:
+            pytest.skip("create_session(participant_id) が未実装のためスキップ")
         repository.add_message(sid, "user", "小テストの問5がわかりません")
         repository.add_message(
             sid, "assistant", "問5についてですね。どの部分が難しかったか教えてもらえますか？"

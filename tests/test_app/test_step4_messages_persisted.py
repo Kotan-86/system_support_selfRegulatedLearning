@@ -22,7 +22,7 @@ class TestAppStep4MessagesPersisted:
             mock_llm.return_value = "テスト用の応答です。"
             r = app_client.post(
                 "/chat",
-                json={"message": "永続化テスト"},
+                json={"message": "永続化テスト", "participant_id": "1"},
                 content_type="application/json",
             )
             assert r.status_code == 200

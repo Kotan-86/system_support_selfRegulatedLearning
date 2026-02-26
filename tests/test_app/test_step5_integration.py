@@ -23,7 +23,7 @@ class TestAppStep5Integration:
             mock_llm.return_value = "1回目の応答"
             r1 = app_client.post(
                 "/chat",
-                json={"message": "1回目"},
+                json={"message": "1回目", "participant_id": "1"},
                 content_type="application/json",
             )
             assert r1.status_code == 200

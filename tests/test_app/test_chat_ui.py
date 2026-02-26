@@ -75,6 +75,15 @@ class TestChatUiHtmlStructure:
             "2 通目以降で session_id を送る記述（session_id または sessionId）が script 内に含まれること"
         )
 
+    def test_root_has_learner_id_prompt(self, app_client) -> None:
+        """初回表示で学習者ID案内（学習者IDを教えてください / 半角数字）が含まれること。"""
+        if app_client is None:
+            pytest.skip("app.main が未実装のためスキップ")
+        r = app_client.get("/")
+        html = r.get_data(as_text=True)
+        assert "学習者ID" in html, "GET / の HTML に「学習者ID」の文言が含まれること"
+        assert "半角数字" in html, "GET / の HTML に「半角数字」の文言が含まれること"
+
 
 class TestChatUiCss:
     """app/static/css/style.css が存在し、キーセレクタが定義されている。"""

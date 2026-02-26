@@ -14,18 +14,31 @@ def get_db_path() -> Path:
     return _get_db_path()
 
 
-def create_session() -> str:
-    """セッションを 1 件挿入し、発行した id（UUID 文字列）を返す。"""
+def create_session(participant_id: str) -> str:
+    """セッションを 1 件挿入し、発行した id（UUID 文字列）を返す。participant_id を sessions に保存する。"""
     path = get_db_path()
     sid = str(uuid.uuid4())
     conn = sqlite3.connect(str(path))
     conn.execute(
-        "INSERT INTO sessions (id, created_at) VALUES (?, CURRENT_TIMESTAMP)",
-        (sid,),
+        "INSERT INTO sessions (id, created_at, participant_id) VALUES (?, CURRENT_TIMESTAMP, ?)",
+        (sid, participant_id),
     )
     conn.commit()
     conn.close()
     return sid
+
+
+def get_participant_id_for_session(session_id: str) -> str | None:
+    """指定セッションの participant_id を返す。セッションが存在しなければ None。"""
+    path = get_db_path()
+    conn = sqlite3.connect(str(path))
+    cur = conn.execute(
+        "SELECT participant_id FROM sessions WHERE id = ?",
+        (session_id,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row is not None else None
 
 
 def add_message(session_id: str, role: str, content: str) -> None:

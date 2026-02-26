@@ -20,6 +20,9 @@
         const messageInput = document.getElementById('message-input');
         let sessionId = null;
 
+        const LEARNER_ID_PROMPT = '学習者IDを教えてください（半角数字のみ）';
+        const LEARNER_ID_ERROR = '学習者IDは半角数字のみで入力してください';
+
         function appendMessage(text, className) {
             const div = document.createElement('div');
             div.className = className;
@@ -42,10 +45,21 @@
             if (el) el.remove();
         }
 
+        // 初回表示: 学習者IDを教えてください（半角数字のみ）
+        appendMessage(LEARNER_ID_PROMPT, 'tutor-message');
+
         messageForm.addEventListener('submit', async function(event) {
             event.preventDefault();
             const userMessage = messageInput.value.trim();
             if (!userMessage) return;
+
+            if (sessionId === null) {
+                // 初回: 半角数字のみ検証
+                if (!/^[0-9]+$/.test(userMessage)) {
+                    appendMessage(LEARNER_ID_ERROR, 'tutor-message');
+                    return;
+                }
+            }
 
             appendMessage(userMessage, 'user-message');
             messageInput.value = '';
@@ -55,7 +69,11 @@
 
             try {
                 const body = { message: userMessage };
-                if (sessionId) body.session_id = sessionId;
+                if (sessionId) {
+                    body.session_id = sessionId;
+                } else {
+                    body.participant_id = userMessage;
+                }
 
                 const response = await fetch('/chat', {
                     method: 'POST',
