@@ -5,6 +5,7 @@ service_account.json
 !.env.example
 *.pem
 *.key
+run_app.ps1
 
 # --- ローカルデータ（中に個人情報が入る可能性） ---
 db/data/*.db
