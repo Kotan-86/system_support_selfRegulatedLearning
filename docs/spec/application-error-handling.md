@@ -62,25 +62,108 @@ application/
 
 ### AppError と HTTP（interfaces 層）
 
-| ErrorCode / AppError | HTTP |
-|----------------------|------|
-| `LECTURE_NOT_FOUND` / `LectureNotFoundError` | 404 |
-| `LEARNING_SESSION_NOT_FOUND` / `LearningSessionNotFoundError` | 404 |
-| `TUTOR_SESSION_NOT_FOUND` / `TutorSessionNotFoundError` | 404 |
-| `VALIDATION_ERROR` 系（不変条件・入力不正） | 400 |
-| `DUPLICATE_LEARNING_SESSION` / `ConflictError` | 409 |
-| `TUTOR_SESSION_POLICY_VIOLATION` / `ConflictError` | 409 |
-| `LLM_GATEWAY_ERROR` / `LlmGatewayError` | 502 等 |
-| Session 未作成（`GetLearningSnapshot`） | **エラーにしない** → `Ok`（空 Snapshot） |
-| Snapshot 未作成（`SendChatMessage` 経由） | **エラーにしない** → 空 Snapshot を入力に使う |
-| Export 対象データ 0 件（フィルタ結果が空） | **エラーにしない** → `Ok`（空の Export DTO） |
-| TutorSession 未作成（Learning のみ記録済み） | **エラーにしない** → 対話ログは空配列 |
+`ErrorCode`・`AppError` クラス・HTTP ステータス・返却 UC の網羅的一覧は [エラーステータス一覧](#エラーステータス一覧) を参照する。interfaces 層は `AppError.code` から HTTP ステータスへ変換する。
 
 ### 検証の原則
 
 - Port から取得したドメインデータ（`Lecture`, `LearningSession` 等）を材料に、**永続化・ドメイン操作の前** に Application で検証する
 - 検証に通過した場合のみ `LearningSession.start` / `record_viewing_event` 等を呼ぶ
 - `repository.save` は、直前の手順がすべて成功した場合にのみ実行する
+
+---
+
+## エラーステータス一覧
+
+「エラーステータス」= アプリケーション層の **`ErrorCode`（機械可読）** + **`AppError` 具象クラス（型）**。HTTP ステータスは interfaces 層の変換結果であり、本一覧の副属性として記載する。
+
+### NotFound 系（HTTP 404）
+
+| ErrorCode | AppError クラス | 意味 | 返す UC |
+|-----------|----------------|------|---------|
+| `LECTURE_NOT_FOUND` | `LectureNotFoundError` | 講義カタログに `lecture_id` が無い | `RecordQuizAttempt`, `GetLearningSnapshot`, `SendChatMessage`, `ExportResearchData` |
+| `LEARNING_SESSION_NOT_FOUND` | `LearningSessionNotFoundError` | `learning_session_id` 指定で Session が無い（Export の明示スコープのみ） | `ExportResearchData` |
+| `TUTOR_SESSION_NOT_FOUND` | `TutorSessionNotFoundError` | 指定 `tutor_session_id` が無い | `SendChatMessage`（継続時） |
+
+### Conflict 系（HTTP 409）
+
+| ErrorCode | AppError クラス | 意味 | 返す UC |
+|-----------|----------------|------|---------|
+| `DUPLICATE_LEARNING_SESSION` | `ConflictError` | 同一 `(learner_id, lecture_id)` の Learning Session 重複 | `StartOrGetLearningSession` |
+| `TUTOR_SESSION_POLICY_VIOLATION` | `ConflictError` | 同一 `learning_session_id` の TutorSession 2 本目（`NearTermExperimentPolicy` 違反） | `StartOrGetTutorSession` |
+
+### Validation 系（HTTP 400）
+
+`ValidationError` は共通基底。`ErrorCode` でサブ種別を区別する（[ValidationError の code 規約](#validationerror-の-code-規約) 参照）。
+
+| ErrorCode | 意味 | 返す UC / 条件 |
+|-----------|------|----------------|
+| `VALIDATION_ERROR` | 汎用（VO 空文字、必須フィールド欠落など） | 全 UC の Request 検証（手順 0） |
+| `INVALID_VIEWING_EVENT` | 視聴不変条件違反 | `RecordViewingEvent` |
+| `UNKNOWN_QUESTION_INDEX` | 講義に存在しない `question_index` | `RecordQuizAttempt` |
+| `INVALID_QUIZ_ATTEMPT` | 小テスト不変条件違反 | `RecordQuizAttempt` |
+| `EMPTY_USER_MESSAGE` | `user_message` が空 | `SendChatMessage` |
+| `EXPORT_DATA_INTEGRITY` | Export Read データの結合不整合 | `ExportResearchData` |
+| `EXPORT_FILTER_REQUIRED` | フィルタ未指定（`learner_id` / `lecture_id` / `learning_session_id` がすべて `None`） | `ExportResearchData` |
+
+### 外部依存障害（HTTP 502 等）
+
+| ErrorCode | AppError クラス | 意味 | 返す UC |
+|-----------|----------------|------|---------|
+| `LLM_GATEWAY_ERROR` | `LlmGatewayError` | LLM 呼び出し失敗・空応答 | `SendChatMessage`（将来: `Classify` / `Invoke`） |
+
+### AppError に含めないもの
+
+| 種別 | 扱い |
+|------|------|
+| `repository.save` 等のインフラ障害 | `Err` にせず例外送出 → interfaces で 500（本仕様スコープ外） |
+| ドメインの `ValueError` / `TypeError` | Application 層で捕捉し `ValidationError` に変換してから `err` を返す（UC 内で変換） |
+
+### ValidationError の code 規約
+
+| 使い分け | `ErrorCode` | 例 |
+|----------|-------------|-----|
+| 汎用入力不正 | `VALIDATION_ERROR` | `learner_id` 空文字、必須フィールド欠落、VO 不変条件違反 |
+| ドメイン固有の検証失敗 | 上記 Validation 系サブコード | `INVALID_VIEWING_EVENT`, `UNKNOWN_QUESTION_INDEX` 等 |
+
+- 各具象 `ValidationError` は `code` フィールドに対応する `ErrorCode` を固定する
+- interfaces 層は `error_code`（`ErrorCode` 値）と `error`（`message`）の両方をクライアントへ返却する（interfaces 契約は別仕様）
+
+### UC × ErrorCode マトリクス
+
+各 UC が直接または compose 経由で返しうる `ErrorCode`。`-` は返さない。
+
+| ErrorCode | StartOrGetLearningSession | RecordViewingEvent | RecordQuizAttempt | GetLearningSnapshot | StartOrGetTutorSession | SendChatMessage | ExportResearchData |
+|-----------|:-------------------------:|:------------------:|:-----------------:|:-------------------:|:----------------------:|:---------------:|:------------------:|
+| `VALIDATION_ERROR` | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| `DUPLICATE_LEARNING_SESSION` | ○ | ○¹ | ○¹ | - | - | ○¹ | - |
+| `INVALID_VIEWING_EVENT` | - | ○ | - | - | - | - | - |
+| `UNKNOWN_QUESTION_INDEX` | - | - | ○ | - | - | - | - |
+| `INVALID_QUIZ_ATTEMPT` | - | - | ○ | - | - | - | - |
+| `LECTURE_NOT_FOUND` | - | - | ○ | ○ | - | ○ | ○ |
+| `TUTOR_SESSION_POLICY_VIOLATION` | - | - | - | - | ○ | ○² | - |
+| `TUTOR_SESSION_NOT_FOUND` | - | - | - | - | - | ○ | - |
+| `EMPTY_USER_MESSAGE` | - | - | - | - | - | ○ | - |
+| `LLM_GATEWAY_ERROR` | - | - | - | - | - | ○ | - |
+| `LEARNING_SESSION_NOT_FOUND` | - | - | - | - | - | - | ○ |
+| `EXPORT_DATA_INTEGRITY` | - | - | - | - | - | - | ○ |
+| `EXPORT_FILTER_REQUIRED` | - | - | - | - | - | - | ○ |
+
+¹ `StartOrGetLearningSession` を compose した場合に伝播  
+² `StartOrGetTutorSession` を compose した場合に伝播
+
+### エラーにしない正常系
+
+404 や 400 に変換せず、`Ok` として扱うケース。
+
+| UC | 状況 | 扱い |
+|----|------|------|
+| `GetLearningSnapshot` | Learning Session 未作成 | `Ok`（空 Snapshot、`content_updated_at=None`） |
+| `SendChatMessage` | Snapshot 取得結果が空（Learning Session 未作成） | 正常継続。空 Snapshot をプロンプト入力に使う |
+| `SendChatMessage` | 初回メッセージが半角数字のみ | 正常継続。定型文を返し LLM を呼ばない |
+| `ExportResearchData` | フィルタ指定済み（手順 0 通過）かつ `learning_session_id` 未指定で該当 Session 0 件 | `Ok`（空 Export DTO） |
+| `ExportResearchData` | Learning Session はあるが TutorSession が無い | 正常。`messages` は空配列 |
+| `ExportResearchData` | 視聴ログ・小テストが 0 件の Session | 正常。該当配列は空 |
+| `ExportResearchData` | `learner_id` 指定で該当 Session 0 件（`learning_session_id` 未指定） | 正常。空の `Ok` |
 
 ---
 
@@ -317,7 +400,7 @@ Tutoring / Learning の **Write Repository は注入しない**。
 | 2 | `lecture_id` 指定かつ `lecture is None` | — | **`err(LectureNotFoundError)`** で終了 | HTTP 404 |
 | 3 | `learning_sessions = learning_export_query.list_filtered(learner_id, lecture_id, learning_session_id)` | 続行 | — | |
 | 4 | `learning_session_id` 指定かつ `learning_sessions` が空 | — | **`err(LearningSessionNotFoundError)`** で終了 | 明示スコープの 404 |
-| 5 | `learning_session_id` 未指定かつ結果 0 件 | **`ok(Response(rows=(), counts=0))`** で終了 | — | **正常系**（該当データなし） |
+| 5 | `learning_session_id` 未指定かつ結果 0 件 | **`ok(Response(rows=(), counts=0))`** で終了 | — | **正常系**（該当データなし）。手順 0 通過済み（いずれかの ID が指定されている）場合に限る |
 | 6 | `tutor_sessions = tutor_export_query.list_by_learning_session_ids(...)` | 続行 | — | Learning 結果の ID 群で取得 |
 | 7 | 結合整合性検証（下表「結合検証」） | 続行 | `ValidationError`（`EXPORT_DATA_INTEGRITY`） | Read データの不整合 |
 | 8 | 各行を `ResearchExportRow` に組み立て（`lecture_id` は Session から取得） | 続行 | — | TutorSession 無し行は `messages=()` |
@@ -328,7 +411,7 @@ Tutoring / Learning の **Write Repository は注入しない**。
 | 条件 | `err` |
 |------|-------|
 | 指定された `learner_id` / `lecture_id` / `learning_session_id` が空文字（VO 不変条件違反） | `ValidationError` |
-| フィルタ未指定（すべて `None`） | 続行（**全件 Export**。近い実験では参加者 1 人想定） |
+| フィルタ未指定（すべて `None`） | `ValidationError`（`EXPORT_FILTER_REQUIRED`）。メッセージ例: 「`learner_id`、`lecture_id`、`learning_session_id` のいずれかを指定してください」 |
 
 #### 結合検証（手順 7 の詳細）
 
@@ -374,7 +457,8 @@ Tutoring / Learning の **Write Repository は注入しない**。
 - [ ] Learning 4 UC すべての `execute` が `Result[..., AppError]` を返す
 - [ ] Tutoring 2 UC（`StartOrGetTutorSession`, `SendChatMessage`）の `execute` が `Result[..., AppError]` を返す
 - [ ] `ExportResearchData` の `execute` が `Result[..., AppError]` を返し、**Write Port を呼ばない**
-- [ ] `ExportResearchData` でデータ 0 件・TutorSession 未作成を正常系（`Ok`）として扱う
+- [ ] `ExportResearchData` でフィルタ指定ありのデータ 0 件・TutorSession 未作成を正常系（`Ok`）として扱う
+- [ ] `ExportResearchData` でフィルタ未指定時に `EXPORT_FILTER_REQUIRED`（HTTP 400）を返す
 - [ ] 上表の失敗手順で `repository.save` が呼ばれない（Write 系 UC の新規作成・追記）
 - [ ] `GetLearningSnapshot` / `SendChatMessage` で Learning Session 未作成時に空 Snapshot を正常系として扱う
 - [ ] `SendChatMessage` で LLM 失敗時に Message が永続化されない

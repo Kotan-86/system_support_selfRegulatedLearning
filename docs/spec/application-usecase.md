@@ -68,16 +68,23 @@ tests/
 - ID 型は Shared Kernel（`LearnerId`, `LectureId` 等）をそのまま使う
 - HTTP / JSON のフィールド名変換（`participant_id` → `learner_id`）は **interfaces 層** が行う
 
-### 例外
+### 例外（AppError / Result）
 
-| 例外 | 意味 | HTTP 変換（interfaces 層） |
-|------|------|------------------------------|
-| `LectureNotFound` | `lectureId` に対応する講義カタログが無い | 404 |
-| Session 未作成（`GetLearningSnapshot`） | 例外にしない。空 Snapshot を返す | 200 |
-| `ValueError` | ドメイン不変条件違反 | 400 |
-| `TutorSessionAlreadyExists` | 近い実験: 2 本目 TutorSession | 409（Tutoring） |
-| `TutorSessionNotFound` | 指定 `tutor_session_id` が存在しない | 404 |
-| `LlmGatewayError` | LLM 呼び出し失敗 | 502 等（interfaces） |
+ユースケースの失敗は `Result` の `Err(AppError)` として返す（[application-error-handling.md](./application-error-handling.md)）。interfaces 層が HTTP ステータスへ変換する。
+
+| AppError | ErrorCode | 意味 | HTTP（interfaces） |
+|----------|-----------|------|-------------------|
+| `LectureNotFoundError` | `LECTURE_NOT_FOUND` | 講義カタログに `lecture_id` が無い | 404 |
+| `LearningSessionNotFoundError` | `LEARNING_SESSION_NOT_FOUND` | 指定 `learning_session_id` の Session が無い | 404 |
+| `TutorSessionNotFoundError` | `TUTOR_SESSION_NOT_FOUND` | 指定 `tutor_session_id` が無い | 404 |
+| `ConflictError` | `DUPLICATE_LEARNING_SESSION` | 同一 `(learner_id, lecture_id)` の Learning Session 重複 | 409 |
+| `ConflictError` | `TUTOR_SESSION_POLICY_VIOLATION` | 同一 `learning_session_id` の TutorSession 2 本目 | 409 |
+| `ValidationError` | （サブコード各種） | 入力・不変条件違反 | 400 |
+| `LlmGatewayError` | `LLM_GATEWAY_ERROR` | LLM 呼び出し失敗 | 502 等 |
+
+**エラーにしない正常系**（`Ok` として扱う）: `GetLearningSnapshot` の Session 未作成 → 空 Snapshot（HTTP 200）。詳細は [application-error-handling.md#エラーにしない正常系](./application-error-handling.md#エラーにしない正常系)。
+
+全 ErrorCode と UC マトリクス: [application-error-handling.md#エラーステータス一覧](./application-error-handling.md#エラーステータス一覧)
 
 ### テスト
 
@@ -219,9 +226,11 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 例外
 
-| 条件 | 例外 | 発生層 |
-|------|------|--------|
-| 同一 `(learnerId, lectureId)` が既に存在（競合） | `ValueError` | domain |
+[application-error-handling.md#StartOrGetLearningSession](./application-error-handling.md#startorgetlearningsession)
+
+| 条件 | AppError | ErrorCode |
+|------|----------|-----------|
+| 同一 `(learnerId, lectureId)` が既に存在（競合） | `ConflictError` | `DUPLICATE_LEARNING_SESSION` |
 
 ### 受入基準
 
@@ -289,16 +298,18 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 例外
 
-| 条件 | 例外 |
-|------|------|
-| `play` / `pause` で `position_delta != 0` | `ValueError`（domain） |
-| skip / seek で符号が action と不一致 | `ValueError`（domain） |
+[application-error-handling.md#RecordViewingEvent](./application-error-handling.md#recordviewingevent)
+
+| 条件 | AppError | ErrorCode |
+|------|----------|-----------|
+| `play` / `pause` で `position_delta != 0` | `ValidationError` | `INVALID_VIEWING_EVENT` |
+| skip / seek で符号が action と不一致 | `ValidationError` | `INVALID_VIEWING_EVENT` |
 
 ### 受入基準
 
 - [ ] 初回イベント → Session も新規作成される（`StartOrGet` 経由）
 - [ ] 2 件目以降 → 同一 Session に追記、`viewing_events` が 1 件増える
-- [ ] 不変条件違反 → `save` 前に例外、`repository.save` は呼ばれない
+- [ ] 不変条件違反 → `err(ValidationError)` を返し、`repository.save` は呼ばれない
 - [ ] `backward_skip` + 負の `position_delta` が受理される
 
 ---
@@ -324,7 +335,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 ### 前提条件
 
 - `learnerId`, `lectureId` が確定している
-- `LectureCatalog.find_by_id(lectureId)` が `Lecture` を返す（存在しない場合は `LectureNotFound`）
+- `LectureCatalog.find_by_id(lectureId)` が `Lecture` を返す（存在しない場合は `err(LectureNotFoundError)` / `LECTURE_NOT_FOUND`）
 - 各 `QuizAnswer.question_index` が `Lecture.quizDefinition` に存在する
 
 ### 入力 `RecordQuizAttemptRequest`
@@ -379,8 +390,8 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 ### 手順 `execute`
 
 1. `lecture = lecture_catalog.find_by_id(request.lecture_id)`
-2. `lecture is None` なら `LectureNotFound` を raise
-3. 各 `answer.question_index` が `lecture.quiz_definition` に存在することを検証（不存在なら `ValueError`）
+2. `lecture is None` なら **`err(LectureNotFoundError)`**（`LECTURE_NOT_FOUND`）で終了
+3. 各 `answer.question_index` が `lecture.quiz_definition` に存在することを検証（不存在なら **`err(ValidationError)`** / `UNKNOWN_QUESTION_INDEX`）
 4. `session_response = start_or_get.execute(...)`
 5. `attempt_id = quiz_attempt_id_generator.next_id()`
 6. `updated = session_response.session.record_quiz_attempt(attempt_id=..., attempted_at=..., score_numerator=..., score_denominator=..., answers=...)`
@@ -389,17 +400,19 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 例外
 
-| 条件 | 例外 |
-|------|------|
-| 講義カタログに `lectureId` が無い | `LectureNotFound` |
-| スコア不変条件違反 | `ValueError`（domain） |
-| 未知の `question_index` | `ValueError` |
+[application-error-handling.md#RecordQuizAttempt](./application-error-handling.md#recordquizattempt)
+
+| 条件 | AppError | ErrorCode |
+|------|----------|-----------|
+| 講義カタログに `lectureId` が無い | `LectureNotFoundError` | `LECTURE_NOT_FOUND` |
+| スコア不変条件違反 | `ValidationError` | `INVALID_QUIZ_ATTEMPT` |
+| 未知の `question_index` | `ValidationError` | `UNKNOWN_QUESTION_INDEX` |
 
 ### 受入基準
 
 - [ ] 初回受験 → Session も新規作成されうる
 - [ ] 再受験 → 同一 Session に 2 件目の `QuizAttempt` が追加される
-- [ ] 存在しない `lectureId` → `LectureNotFound`
+- [ ] 存在しない `lectureId` → `err(LectureNotFoundError)` / `LECTURE_NOT_FOUND`
 - [ ] カタログに無い `question_index` → 拒否
 - [ ] 5 問形式: `answers` 5 件・`question_index` 1〜5 で保存できる
 - [ ] `question_index=3`, `is_correct=false` が Snapshot の `quiz_answers` に含まれ、AI が第 3 問の不正解を特定できる
@@ -456,7 +469,7 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 ### 前提条件
 
 - `learnerId`, `lectureId` は空でない
-- `LectureCatalog.find_by_id(lectureId)` が `Lecture` を返す（無い場合は `LectureNotFound` → interfaces 層で 404）
+- `LectureCatalog.find_by_id(lectureId)` が `Lecture` を返す（無い場合は `err(LectureNotFoundError)` / `LECTURE_NOT_FOUND` → interfaces 層で 404）
 - `LearningSession` が未作成の場合は **200 + 空 Snapshot** を返す（視聴・小テスト前の LAD / 初回チャットは正常系）
 
 ### 本 UC が行わないこと
@@ -485,7 +498,7 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 
 | 状況 | Application 層 | HTTP |
 |------|----------------|------|
-| 講義カタログに `lectureId` 無し | `LectureNotFound` | 404 |
+| 講義カタログに `lectureId` 無し | `LectureNotFoundError`（`LECTURE_NOT_FOUND`） | 404 |
 | Session 未作成（視聴・小テスト前） | 空 Snapshot + `content_updated_at=None` | **200** |
 | Session あり | Snapshot + `content_updated_at` | 200 |
 
@@ -498,7 +511,7 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 ### 手順 `execute`
 
 1. `lecture = lecture_catalog.find_by_id(request.lecture_id)`
-2. `lecture is None` なら `LectureNotFound` を raise
+2. `lecture is None` なら **`err(LectureNotFoundError)`**（`LECTURE_NOT_FOUND`）で終了
 3. `session = repository.find_by_learner_and_lecture(request.learner_id, request.lecture_id)`
 4. `session is None` なら空の `LearningSnapshot` と `content_updated_at=None` を return
 5. `snapshot = LearningSnapshotBuilder.build(session=session, lecture=lecture)`
@@ -507,9 +520,11 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 
 ### 例外
 
-| 条件 | 例外 |
-|------|------|
-| 講義カタログに `lectureId` が無い | `LectureNotFound` |
+[application-error-handling.md#GetLearningSnapshot](./application-error-handling.md#getlearningsnapshot)
+
+| 条件 | AppError | ErrorCode |
+|------|----------|-----------|
+| 講義カタログに `lectureId` が無い | `LectureNotFoundError` | `LECTURE_NOT_FOUND` |
 
 ### 受入基準
 
@@ -521,7 +536,7 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 - [ ] スコープは 1 `LearningSession` のみ（他 learner / lecture の混入なし）
 - [ ] Builder / Interactor はプロンプト文字列を生成しない
 - [ ] Session 未作成 → 空 Snapshot、`content_updated_at=None`（**404 にしない**）
-- [ ] 存在しない `lectureId` → `LectureNotFound`（interfaces 層で 404）
+- [ ] 存在しない `lectureId` → `err(LectureNotFoundError)` / `LECTURE_NOT_FOUND`（interfaces 層で 404）
 - [ ] `SendChatMessage` が `LearningSnapshotQuery` 経由で本 UC と同契約の Snapshot を取得できる
 
 ### 既存 API 互換（interfaces 層・Application Port なし）
@@ -651,10 +666,12 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 例外
 
-| 条件 | 例外 | HTTP（interfaces） |
-|------|------|-------------------|
-| 同一 `learningSessionId` に 2 本目を start（近い実験） | `ValueError`（Policy） | 409 |
-| 同一 `learningSessionId` が既に存在（競合） | 手順 1 で get するため通常発生しない | — |
+[application-error-handling.md#StartOrGetTutorSession](./application-error-handling.md#startorgettutorsession)
+
+| 条件 | AppError | ErrorCode | HTTP（interfaces） |
+|------|----------|-----------|-------------------|
+| 同一 `learningSessionId` に 2 本目を start（近い実験） | `ConflictError` | `TUTOR_SESSION_POLICY_VIOLATION` | 409 |
+| 同一 `learningSessionId` が既に存在（競合） | 手順 1 で get するため通常発生しない | — | — |
 
 ### 受入基準
 
@@ -736,12 +753,12 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 手順 `execute`（近い実験）
 
-1. `user_message` が空なら `ValueError`
+1. `user_message` が空なら **`err(ValidationError)`**（`EMPTY_USER_MESSAGE`）で終了
 2. **TutorSession 解決**
-   - `tutor_session_id` 指定時: `tutor_session = repository.find_by_id(...)`。無ければ `TutorSessionNotFound`
+   - `tutor_session_id` 指定時: `tutor_session = repository.find_by_id(...)`。無ければ **`err(TutorSessionNotFoundError)`**（`TUTOR_SESSION_NOT_FOUND`）
    - 未指定時: `learning = start_or_get_learning_session.execute(learner_id, lecture_id, ...)` → `start_or_get_tutor_session.execute(learning_session_id=learning.session_id, ...)`
 3. `snapshot = learning_snapshot_query.get_by_learner_and_lecture(learner_id, lecture_id)`
-4. `lecture = lecture_catalog.find_by_id(lecture_id)`（プロンプト用。無ければ `LectureNotFound`）
+4. `lecture = lecture_catalog.find_by_id(lecture_id)`（プロンプト用。無ければ **`err(LectureNotFoundError)`** / `LECTURE_NOT_FOUND`）
 5. **初回・半角数字のみ特例**（既存挙動）: `messages` が空かつ `user_message` が `^[0-9]+$` のとき、定型文を `assistant_content` とし **LLM を呼ばない**（`FirstMessagePolicy` 相当）
 6. 上記以外: `prompt = chat_prompt_builder.build(snapshot, tutor_session.messages, user_message, lecture)` → `assistant_content = llm_gateway.generate(prompt)`
 7. `user_msg_id`, `asst_msg_id = message_id_generator.next_id()` × 2
@@ -751,12 +768,14 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 例外
 
-| 条件 | 例外 | HTTP |
-|------|------|------|
-| `user_message` 空 | `ValueError` | 400 |
-| 未知の `tutor_session_id` | `TutorSessionNotFound` | 404 |
-| 講義カタログ不在 | `LectureNotFound` | 404 |
-| LLM 障害 | `LlmGatewayError`（application 定義） | 502 等 |
+[application-error-handling.md#SendChatMessage](./application-error-handling.md#sendchatmessage)
+
+| 条件 | AppError | ErrorCode | HTTP |
+|------|----------|-----------|------|
+| `user_message` 空 | `ValidationError` | `EMPTY_USER_MESSAGE` | 400 |
+| 未知の `tutor_session_id` | `TutorSessionNotFoundError` | `TUTOR_SESSION_NOT_FOUND` | 404 |
+| 講義カタログ不在 | `LectureNotFoundError` | `LECTURE_NOT_FOUND` | 404 |
+| LLM 障害 | `LlmGatewayError` | `LLM_GATEWAY_ERROR` | 502 等 |
 
 ### HTTP 応答（interfaces 層）
 
