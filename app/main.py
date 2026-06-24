@@ -11,6 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.prompts import SYSTEM_PROMPT
 from app.srt import get_segments_for_times, parse_srt_file
+from application.common.viewing_seconds import parse_position_delta, parse_video_position
 from db import init_db, repository
 from db import learning_repository as learning_repo
 
@@ -235,13 +236,20 @@ def api_viewing_log():
     if duration is None:
         return jsonify({"error": "duration は必須です"}), 400
 
+    parsed_current_time = parse_video_position(current_time)
+    if parsed_current_time.is_err:
+        return jsonify({"error": parsed_current_time.error.message}), 400
+    parsed_duration = parse_position_delta(duration)
+    if parsed_duration.is_err:
+        return jsonify({"error": parsed_duration.error.message}), 400
+
     try:
         learning_repo.insert_viewing_log(
             participant_id=str(participant_id),
             time_stamp=str(time_stamp),
-            current_time=int(current_time),
+            current_time=parsed_current_time.value,
             action=str(action),
-            duration=float(duration),
+            duration=parsed_duration.value,
         )
         return "", 201
     except (TypeError, ValueError) as e:

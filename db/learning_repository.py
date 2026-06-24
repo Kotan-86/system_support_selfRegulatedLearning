@@ -61,7 +61,7 @@ def insert_viewing_log(
     time_stamp: str,
     current_time: int,
     action: str,
-    duration: float,
+    duration: int,
 ) -> None:
     """viewing_logs に 1 行 INSERT する。"""
     conn = _get_connection()
@@ -93,7 +93,7 @@ def insert_viewing_logs(events: list[dict]) -> None:
                     e["time_stamp"],
                     int(e["current_time"]),
                     e["action"],
-                    float(e["duration"]),
+                    int(float(e["duration"])),
                 )
                 for e in events
             ],
@@ -145,7 +145,10 @@ def get_lad_data_for_participant(participant_id: str) -> dict:
                FROM viewing_logs WHERE participant_id = ? ORDER BY time_stamp ASC""",
             (participant_id,),
         )
-        viewing_logs = [dict(row) for row in cur.fetchall()]
+        viewing_logs = [
+            {**dict(row), "current_time": int(row["current_time"]), "duration": int(row["duration"])}
+            for row in cur.fetchall()
+        ]
 
         cur = conn.execute(
             """SELECT id, participant_id, created_at, score_numerator, score_denominator
