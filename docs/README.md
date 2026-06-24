@@ -14,11 +14,19 @@
 |-------------|------|
 | [spec/domain-model.md](spec/domain-model.md) | エンティティ・値オブジェクト・不変条件・Read Model |
 | [spec/domain-implementation-plan.md](spec/domain-implementation-plan.md) | ドメイン層の段階的実装計画（AI 実装用） |
+| [spec/application-usecase.md](spec/application-usecase.md) | Use Case / Port / DTO・Interactor 規約 |
+| [spec/application-error-handling.md](spec/application-error-handling.md) | `Result` / `AppError`・エラーステータス一覧 |
+| [spec/interfaces-layer.md](spec/interfaces-layer.md) | Controller / Presenter / ViewModel・LAD 表示契約 |
+| [spec/interfaces-implementation-plan.md](spec/interfaces-implementation-plan.md) | interfaces 層の段階的実装計画（AI 実装用） |
 
 ## 読み方
 
 1. **domain-model.md** … 何を作るか（What）と受入条件の根拠
-2. **domain-implementation-plan.md** … どの順序で PR 分割するか。各フェーズ末尾の受入基準で完了判定
+2. **domain-implementation-plan.md** … ドメイン層をどの順序で PR 分割するか
+3. **application-usecase.md** … Use Case と Port の契約
+4. **application-error-handling.md** … 失敗の型と HTTP 委譲の前提
+5. **interfaces-layer.md** … 外部契約（ViewModel）と ingress / egress の責務分界
+6. **interfaces-implementation-plan.md** … interfaces 層をどの順序で PR 分割するか。各フェーズ末尾の受入基準で完了判定
 
 ## 用語
 
