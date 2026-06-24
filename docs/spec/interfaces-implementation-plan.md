@@ -22,11 +22,15 @@
 | Tutoring | `SendChatMessage` 用 Controller / Presenter |
 | テスト | `tests/test_interfaces/`（UC Fake 注入・DB 不要） |
 
-### 本計画に含めない（別フェーズ）
+### 本計画の完了範囲
+
+**Phase 0〜6 まで**が interfaces 層実装の全体。フレームワーク非依存の Controller / Presenter / ViewModel と `tests/test_interfaces/` で完結する。
+
+### 本計画に含めない（別計画）
 
 - Infrastructure Adapter（`db/` Mapper、Repository 実装の UC 接続）
-- Flask ルート配線（`app/main.py` 置換）
-- `LearnerTypeClassifier` の本番ルール実装
+- Flask ルート配線（`app/main.py` 置換・ViewModel の `jsonify`）
+- `RuleBasedLearnerTypeClassifier`（本番ルール実装）
 - Research Export の interfaces 層
 - DB スキーマ変更
 
@@ -273,31 +277,13 @@ Session 未作成（空 Snapshot）→ HTTP 200 相当の成功 ViewModel（空�
 - Fake `SendChatMessageUseCase` で `ChatResponseViewModel` が生成される
 - エラー系（`TUTOR_SESSION_NOT_FOUND` 等）が `ErrorViewModel` に変換される
 
----
+## 本計画完了後の次ステップ（別計画）
 
-### Phase 7: Flask 接続（Infrastructure 完了後）
+interfaces 層（Phase 0〜6）完了後、以下は**別ドキュメント / 別 PR 系列**で進める。
 
-**前提**: Phase 6 まで完了 + Application Infrastructure Adapter（`db/` Mapper 等）が UC を駆動できる状態
-
-**What**
-
-- `app/main.py` ルートを Controller 呼び出しに置換
-- ViewModel → `jsonify`（唯一の Flask 依存点）
-- `tests/test_api/test_lad_api.py` を **新 LAD 契約**に更新（破壊的変更）
-- 既存 API 統合テスト GREEN 維持
-
-**受入基準**
-
-- `uv run pytest tests/ -v` 全パス
-- `GET /api/participants/{id}/lad` が新 ViewModel 形状を返す
-
----
-
-### Phase 8（後続・本計画外）: 学習者タイプ判定ルール
-
-- `RuleBasedLearnerTypeClassifier` 実装
-- 閾値仕様を [interfaces-layer.md](./interfaces-layer.md) に追記
-- 代表パターンのイベント列 → 期待 `type_code` テスト
+1. **Infrastructure Adapter 接続** — `db/` Mapper 等で UC を実 DB から駆動
+2. **Flask 接続** — `app/main.py` ルートを Controller 呼び出しに置換、ViewModel → `jsonify`、`test_lad_api.py` を新 LAD 契約に更新
+3. **学習者タイプ判定ルール** — `RuleBasedLearnerTypeClassifier` 実装と閾値仕様（Stub の差し替え）
 
 ## テスト戦略
 
@@ -306,22 +292,22 @@ Session 未作成（空 Snapshot）→ HTTP 200 相当の成功 ViewModel（空�
 | Presenter / Metrics | 純関数・Fake UC / 手作り `LearningSnapshot` |
 | Controller | Use Case / Presenter を Fake 注入 |
 | Catalog | 4タイプの lookup スモーク |
-| Classifier | Phase 2 は Stub のみ。Phase 8 でルールテスト追加 |
-| Flask / DB | Phase 7 まで interfaces 単体テストに閉じる |
+| Classifier | Stub のみ（本計画）。ルール実装・テストは別計画 |
+| Flask / DB | 本計画のスコープ外。`tests/test_interfaces/` のみで検証 |
 
 ## リスクと対処
 
 | リスク | 対処 |
 |--------|------|
-| LAD フロントが旧 JSON 前提 | 破壊的変更を仕様に明記。Phase 7 で同時更新 |
+| LAD フロントが旧 JSON 前提 | 破壊的変更を仕様に明記。Flask 接続（別計画）で同時更新 |
 | `lecture_id` 未導入 API | `default_lecture` で近い実験をカバー。将来クエリ param へ拡張 |
 | `application/learning/adapters` との混同 | ディレクトリ名 `interfaces/`、仕様で役割を区別 |
 | SRT 依存 | Phase 5 で `app/srt.py` 参照。必要なら `interfaces/common/srt` へ後続移動 |
 
-## 完了の受入基準（interfaces 層・Flask 接続前）
+## 完了の受入基準（interfaces 層・Phase 0〜6）
 
 - [ ] [interfaces-layer.md](./interfaces-layer.md) が存在し、LAD ViewModel と責務分界が記載されている
-- [ ] Controller → UC → Presenter → ViewModel の Learning Read 縦切りがテストで検証されている
+- [ ] Controller → UC → Presenter → ViewModel の Learning Read / Write・Tutoring 縦切りがテストで検証されている
 - [ ] LAD 4表示要素（集計×2・クイズ表・プロファイル）が ViewModel に表現されている
 - [ ] Classifier は Stub、Catalog は静的文を返す
 - [ ] `interfaces/` に Flask / SQLite / vertexai の import がない
