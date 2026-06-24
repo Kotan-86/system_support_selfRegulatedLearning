@@ -338,7 +338,7 @@ LearningSnapshot（Read Model・Entity ではない）
 | occurredAt | datetime | 操作が記録された壁時計時刻 |
 | videoPosition | int | 動画内位置（秒） |
 | action | ViewingAction | 操作種別 |
-| positionDelta | float | 前位置からの変位（秒・符号付き） |
+| positionDelta | int | 前位置からの変位（秒・符号付き整数） |
 
 **ViewingAction（列挙）**
 
@@ -352,7 +352,8 @@ LearningSnapshot（Read Model・Entity ではない）
 **不変条件**
 
 - `videoPosition >= 0`
-- `positionDelta` は符号付き実数（秒）
+- `positionDelta` は符号付き整数（秒）
+- ingress（API 等）で受け取った小数秒は **0 方向へ切り捨て**て整数化してからドメインに渡す
 - `action` が `play` または `pause` のとき、`positionDelta == 0`
 - `action` が `forward_skip` または `forward_seek` のとき、`positionDelta > 0`（動画端で 0 になる edge case は許容）
 - `action` が `backward_skip` または `backward_seek` のとき、`positionDelta < 0`（動画端で 0 になる edge case は許容）

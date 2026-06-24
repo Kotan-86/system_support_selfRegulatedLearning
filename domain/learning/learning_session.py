@@ -66,7 +66,7 @@ class LearningSession:
         occurred_at: datetime,
         video_position: int,
         action: ViewingAction,
-        position_delta: float,
+        position_delta: int,
     ) -> LearningSession:
         event = ViewingEvent.create(
             id=event_id,

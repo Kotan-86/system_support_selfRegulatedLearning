@@ -21,7 +21,7 @@ FIXED_NOW = datetime(2026, 6, 21, 12, 0, 0, tzinfo=timezone.utc)
 def _create_event(
     *,
     action: ViewingAction,
-    position_delta: float,
+    position_delta: int,
     video_position: int = 60,
 ) -> ViewingEvent:
     return ViewingEvent.create(
@@ -43,7 +43,7 @@ class TestViewingEventPositionDeltaMatrix:
         assert event.position_delta == 0
 
     @pytest.mark.parametrize("action", [ViewingAction.PLAY, ViewingAction.PAUSE])
-    @pytest.mark.parametrize("invalid_delta", [-1.0, 1.0, -0.5, 5.0])
+    @pytest.mark.parametrize("invalid_delta", [-1, 1, 5])
     def test_play_and_pause_reject_non_zero_delta(
         self,
         action: ViewingAction,
@@ -59,8 +59,8 @@ class TestViewingEventPositionDeltaMatrix:
     )
     def test_forward_actions_require_positive_delta(self, action: ViewingAction) -> None:
         """forward_skip / forward_seek は positionDelta > 0 を要求する。"""
-        event = _create_event(action=action, position_delta=5.0)
-        assert event.position_delta == 5.0
+        event = _create_event(action=action, position_delta=5)
+        assert event.position_delta == 5
 
     @pytest.mark.parametrize(
         "action",
@@ -78,7 +78,7 @@ class TestViewingEventPositionDeltaMatrix:
         "action",
         [ViewingAction.FORWARD_SKIP, ViewingAction.FORWARD_SEEK],
     )
-    @pytest.mark.parametrize("invalid_delta", [-1.0, -0.1])
+    @pytest.mark.parametrize("invalid_delta", [-1])
     def test_forward_actions_reject_negative_delta(
         self,
         action: ViewingAction,
@@ -94,8 +94,8 @@ class TestViewingEventPositionDeltaMatrix:
     )
     def test_backward_actions_require_negative_delta(self, action: ViewingAction) -> None:
         """backward_skip / backward_seek は positionDelta < 0 を要求する。"""
-        event = _create_event(action=action, position_delta=-5.0)
-        assert event.position_delta == -5.0
+        event = _create_event(action=action, position_delta=-5)
+        assert event.position_delta == -5
 
     @pytest.mark.parametrize(
         "action",
@@ -113,7 +113,7 @@ class TestViewingEventPositionDeltaMatrix:
         "action",
         [ViewingAction.BACKWARD_SKIP, ViewingAction.BACKWARD_SEEK],
     )
-    @pytest.mark.parametrize("invalid_delta", [1.0, 0.1])
+    @pytest.mark.parametrize("invalid_delta", [1])
     def test_backward_actions_reject_positive_delta(
         self,
         action: ViewingAction,

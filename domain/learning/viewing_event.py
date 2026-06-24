@@ -21,7 +21,7 @@ class ViewingAction(str, Enum):
     BACKWARD_SEEK = "backward_seek"
 
 
-def _validate_position_delta(action: ViewingAction, position_delta: float) -> None:
+def _validate_position_delta(action: ViewingAction, position_delta: int) -> None:
     if action in (ViewingAction.PLAY, ViewingAction.PAUSE):
         if position_delta != 0:
             raise ValueError(
@@ -51,7 +51,7 @@ class ViewingEvent:
     occurred_at: datetime
     video_position: int
     action: ViewingAction
-    position_delta: float
+    position_delta: int
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise TypeError("Use ViewingEvent.create to construct ViewingEvent")
@@ -64,7 +64,7 @@ class ViewingEvent:
         occurred_at: datetime,
         video_position: int,
         action: ViewingAction,
-        position_delta: float,
+        position_delta: int,
     ) -> ViewingEvent:
         if video_position < 0:
             raise ValueError("video_position must be >= 0")
