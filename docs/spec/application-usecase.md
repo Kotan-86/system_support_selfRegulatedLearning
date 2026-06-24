@@ -66,6 +66,7 @@ tests/
 
 - `@dataclass(frozen=True)` とする
 - ID 型は Shared Kernel（`LearnerId`, `LectureId` 等）をそのまま使う
+- Start-or-Get UC の結果種別は `StartOrGetOutcome`（`StrEnum`: `CREATED` / `RETRIEVED`）を Response の `outcome` フィールドに載せる
 - HTTP / JSON のフィールド名変換（`participant_id` → `learner_id`）は **interfaces 層** が行う
 
 ### 例外（AppError / Result）
@@ -208,7 +209,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 |-----------|-----|------|
 | `session_id` | `LearningSessionId` | |
 | `session` | `LearningSession` | 呼び出し元が追記処理を続けるため、集約を返す |
-| `created` | `bool` | `true` = 新規 start、`false` = 既存 get |
+| `outcome` | `StartOrGetOutcome` | `CREATED` = 新規 start、`RETRIEVED` = 既存 get |
 
 ### 依存 Port
 
@@ -218,11 +219,11 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 ### 手順 `execute`
 
 1. `existing = repository.find_by_learner_and_lecture(request.learner_id, request.lecture_id)`
-2. `existing is not None` なら `Response(session_id=existing.id, session=existing, created=False)` を return
+2. `existing is not None` なら `Response(session_id=existing.id, session=existing, outcome=RETRIEVED)` を return
 3. `new_id = id_generator.next_id()`
 4. `session = LearningSession.start(id=new_id, learner_id=request.learner_id, lecture_id=request.lecture_id, started_at=request.started_at, existing_sessions=repository.list_by_learner(request.learner_id))`
 5. `repository.save(session)`
-6. `Response(session_id=session.id, session=session, created=True)` を return
+6. `Response(session_id=session.id, session=session, outcome=CREATED)` を return
 
 ### 例外
 
@@ -234,8 +235,8 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 受入基準
 
-- [ ] 未作成の `(learnerId, lectureId)` → `created=True` で 1 件 `save` される
-- [ ] 既存 Session がある → `created=False`、`save` は呼ばれない
+- [ ] 未作成の `(learnerId, lectureId)` → `outcome=CREATED` で 1 件 `save` される
+- [ ] 既存 Session がある → `outcome=RETRIEVED`、`save` は呼ばれない
 - [ ] 同一 `(learnerId, lectureId)` で 2 回呼び出し → 2 回目は get（Session は 1 本）
 - [ ] 異なる `lectureId` なら同一 `learnerId` で複数 Session を持てる
 
@@ -271,9 +272,11 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 | `learner_id` | `LearnerId` | yes | `participant_id` |
 | `lecture_id` | `LectureId` | yes | （未導入。近い実験では固定値可） |
 | `occurred_at` | `datetime` | yes | `time_stamp` |
-| `video_position` | `int` | yes | `current_time` |
+| `video_position` | `int` | yes | `current_time`（ingress で小数切り捨て） |
 | `action` | `ViewingAction` | yes | `action` |
-| `position_delta` | `float` | yes | `duration` |
+| `position_delta` | `int` | yes | `duration`（ingress で小数切り捨て） |
+
+**ingress 正規化**: interfaces 層（現状は `POST /api/viewing-log`）は `application.common.viewing_seconds` で `current_time` / `duration` を整数秒へ変換する。小数は Python `int()` と同様に 0 方向へ切り捨てる。`NaN` / `Infinity` / 非数値文字列は `ValidationError`。
 
 ### 出力 `RecordViewingEventResponse`
 
@@ -646,7 +649,7 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 |-----------|-----|------|
 | `tutor_session_id` | `TutorSessionId` | |
 | `session` | `TutorSession` | 呼び出し元が Message 追記を続けるため、集約を返す |
-| `created` | `bool` | `true` = 新規 start、`false` = 既存 get |
+| `outcome` | `StartOrGetOutcome` | `CREATED` = 新規 start、`RETRIEVED` = 既存 get |
 
 ### 依存
 
@@ -657,12 +660,12 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 ### 手順 `execute`
 
 1. `existing = repository.find_by_learning_session_id(request.learning_session_id)`
-2. `existing is not None` なら `Response(tutor_session_id=existing.id, session=existing, created=False)` を return
+2. `existing is not None` なら `Response(tutor_session_id=existing.id, session=existing, outcome=RETRIEVED)` を return
 3. `NearTermExperimentPolicy.assert_can_start_tutor_session(existing_sessions=repository.list_all(), request=TutorSessionStartRequest(id=新ID, learning_session_id=...))`
 4. `new_id = id_generator.next_id()`
 5. `session = TutorSession.start(id=new_id, learning_session_id=request.learning_session_id, started_at=request.started_at)`
 6. `repository.save(session)`
-7. `Response(tutor_session_id=session.id, session=session, created=True)` を return
+7. `Response(tutor_session_id=session.id, session=session, outcome=CREATED)` を return
 
 ### 例外
 
@@ -675,8 +678,8 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 受入基準
 
-- [ ] 未作成の `learningSessionId` → `created=True` で 1 件 `save` される
-- [ ] 既存 TutorSession がある → `created=False`、`save` は呼ばれない
+- [ ] 未作成の `learningSessionId` → `outcome=CREATED` で 1 件 `save` される
+- [ ] 既存 TutorSession がある → `outcome=RETRIEVED`、`save` は呼ばれない
 - [ ] 同一 `learningSessionId` で 2 回呼び出し → 2 回目は get（TutorSession は 1 本）
 - [ ] 近い実験: 異なる `learningSessionId` なら複数 TutorSession を持てる
 - [ ] Policy により 2 本目 start が拒否される

@@ -177,13 +177,13 @@ application/
 |------|------|--------|-----------------|------|
 | 0 | Request 検証: `learner_id`, `lecture_id` が空でない | 続行 | `ValidationError` | Shared Kernel 不変条件。DTO 構築前に interfaces で弾いてもよい |
 | 1 | `existing = repository.find_by_learner_and_lecture(learner_id, lecture_id)` | 続行 | — | |
-| 2 | `existing is not None` | **`ok(Response(..., created=False))`** で終了 | — | `save` は呼ばない |
+| 2 | `existing is not None` | **`ok(Response(..., outcome=RETRIEVED))`** で終了 | — | `save` は呼ばない |
 | 3 | `existing_sessions = repository.list_by_learner(learner_id)` | 続行 | — | |
 | 4 | `(learner_id, lecture_id)` の重複が `existing_sessions` に無いことを検証 | 続行 | `ConflictError`（`DUPLICATE_LEARNING_SESSION`） | 手順 2 をすり抜けた競合の防御 |
 | 5 | `new_id = id_generator.next_id()` | 続行 | — | |
 | 6 | `session = LearningSession.start(...)` | 続行 | — | 手順 4 通過後のみ呼ぶ |
 | 7 | `repository.save(session)` | 続行 | — | インフラ障害は送出（`err` にしない） |
-| 8 | — | **`ok(Response(..., created=True))`** で終了 | — | |
+| 8 | — | **`ok(Response(..., outcome=CREATED))`** で終了 | — | |
 
 **本 UC で返さないもの**: `LectureNotFoundError`（講義カタログ確認は行わない）
 
@@ -275,14 +275,14 @@ Tutoring の Interactor は **Learning Entity を import しない**（[applicat
 |------|------|--------|-----------------|------|
 | 0 | Request 検証: `learning_session_id` が空でない | 続行 | `ValidationError` | Shared Kernel 不変条件 |
 | 1 | `existing = repository.find_by_learning_session_id(learning_session_id)` | 続行 | — | |
-| 2 | `existing is not None` | **`ok(Response(..., created=False))`** で終了 | — | `save` は呼ばない |
+| 2 | `existing is not None` | **`ok(Response(..., outcome=RETRIEVED))`** で終了 | — | `save` は呼ばない |
 | 3 | `all_sessions = repository.list_all()` | 続行 | — | Policy 判定用 |
 | 4 | `new_id = id_generator.next_id()` | 続行 | — | Policy 入力に必要 |
 | 5 | `NearTermExperimentPolicy.can_start_tutor_session(existing_sessions=all_sessions, request=...)` | 続行 | `ConflictError`（`TUTOR_SESSION_POLICY_VIOLATION`） | 同一 `learning_session_id` の 2 本目を拒否 |
 | 6 | 同一 `learning_session_id` が `all_sessions` に無いことを再確認 | 続行 | `ConflictError`（`TUTOR_SESSION_POLICY_VIOLATION`） | 手順 2 をすり抜けた競合の防御 |
 | 7 | `session = TutorSession.start(...)` | 続行 | — | 手順 5〜6 通過後のみ |
 | 8 | `repository.save(session)` | 続行 | — | 手順 5〜7 成功後のみ |
-| 9 | — | **`ok(Response(..., created=True))`** で終了 | — | |
+| 9 | — | **`ok(Response(..., outcome=CREATED))`** で終了 | — | |
 
 **本 UC で返さないもの**: `LectureNotFoundError`, `TutorSessionNotFoundError`（`LearningSession` の作成は呼び出し元の責務）
 
