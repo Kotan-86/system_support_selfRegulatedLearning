@@ -5,6 +5,9 @@ from __future__ import annotations
 from application.learning.dto.get_learning_snapshot import GetLearningSnapshotResponse
 from domain.learning.lecture import Lecture
 
+from interfaces.learning.classifiers.rule_based_learner_type_classifier import (
+    RuleBasedLearnerTypeClassifier,
+)
 from interfaces.learning.ports.learner_type_catalog import LearnerTypeCatalog
 from interfaces.learning.ports.learner_type_classifier import LearnerTypeClassifier
 from interfaces.learning.services.quiz_result_rows import build_quiz_result_rows
@@ -22,19 +25,25 @@ class LadDashboardPresenter:
 
     def __init__(
         self,
-        classifier: LearnerTypeClassifier,
         catalog: LearnerTypeCatalog,
+        *,
+        classifier: LearnerTypeClassifier | None = None,
     ) -> None:
-        self._classifier = classifier
+        self._classifier = classifier or RuleBasedLearnerTypeClassifier()
         self._catalog = catalog
 
     def present(
         self,
         response: GetLearningSnapshotResponse,
         lecture: Lecture,
+        *,
+        video_duration_sec: int,
     ) -> LadDashboardViewModel:
         snapshot = response.snapshot
-        metrics = ViewingBehaviorMetrics.from_events(snapshot.viewing_events)
+        metrics = ViewingBehaviorMetrics.from_events(
+            snapshot.viewing_events,
+            video_duration_sec=video_duration_sec,
+        )
         type_code = self._classifier.classify(metrics)
         catalog_entry = self._catalog.lookup(type_code) if type_code else None
 

@@ -15,6 +15,7 @@ from application.common.errors import (
     LlmGatewayError,
     TutorSessionNotFoundError,
     ValidationError,
+    VideoMetadataGatewayError,
 )
 
 ALL_ERROR_CODES: tuple[ErrorCode, ...] = tuple(ErrorCode)
@@ -27,7 +28,12 @@ NOT_FOUND_ERROR_CODES: frozenset[ErrorCode] = frozenset(
     }
 )
 
-EXTERNAL_ERROR_CODES: frozenset[ErrorCode] = frozenset({ErrorCode.LLM_GATEWAY_ERROR})
+EXTERNAL_ERROR_CODES: frozenset[ErrorCode] = frozenset(
+    {
+        ErrorCode.LLM_GATEWAY_ERROR,
+        ErrorCode.VIDEO_METADATA_GATEWAY_ERROR,
+    }
+)
 
 NON_VALIDATION_ERROR_CODES: frozenset[ErrorCode] = frozenset(ALL_ERROR_CODES) - VALIDATION_ERROR_CODES
 NON_CONFLICT_ERROR_CODES: frozenset[ErrorCode] = frozenset(ALL_ERROR_CODES) - CONFLICT_ERROR_CODES
@@ -74,8 +80,8 @@ class TestErrorCode:
     """全 ErrorCode が定義されていることを検証する。"""
 
     def test_all_error_codes_defined(self) -> None:
-        """仕様の 13 種類の ErrorCode が列挙可能である。"""
-        assert len(ALL_ERROR_CODES) == 13
+        """仕様の 14 種類の ErrorCode が列挙可能である。"""
+        assert len(ALL_ERROR_CODES) == 14
 
     @pytest.mark.parametrize(
         ("code", "value"),
@@ -93,6 +99,7 @@ class TestErrorCode:
             (ErrorCode.EXPORT_DATA_INTEGRITY, "EXPORT_DATA_INTEGRITY"),
             (ErrorCode.EXPORT_FILTER_REQUIRED, "EXPORT_FILTER_REQUIRED"),
             (ErrorCode.LLM_GATEWAY_ERROR, "LLM_GATEWAY_ERROR"),
+            (ErrorCode.VIDEO_METADATA_GATEWAY_ERROR, "VIDEO_METADATA_GATEWAY_ERROR"),
         ],
     )
     def test_error_code_string_value(self, code: ErrorCode, value: str) -> None:
@@ -155,6 +162,11 @@ class TestAppErrorConcreteClasses:
         error = LlmGatewayError("LLM 呼び出しに失敗しました")
         assert error.code == ErrorCode.LLM_GATEWAY_ERROR
         assert error.message == "LLM 呼び出しに失敗しました"
+
+    def test_video_metadata_gateway_error(self) -> None:
+        error = VideoMetadataGatewayError("動画メタデータ API が利用できません")
+        assert error.code == ErrorCode.VIDEO_METADATA_GATEWAY_ERROR
+        assert error.message == "動画メタデータ API が利用できません"
 
 
 class TestValidationError:

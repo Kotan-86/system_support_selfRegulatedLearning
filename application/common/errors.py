@@ -29,6 +29,7 @@ class ErrorCode(StrEnum):
 
     # 外部依存障害（HTTP 502 等）
     LLM_GATEWAY_ERROR = "LLM_GATEWAY_ERROR"
+    VIDEO_METADATA_GATEWAY_ERROR = "VIDEO_METADATA_GATEWAY_ERROR"
 
 
 VALIDATION_ERROR_CODES: frozenset[ErrorCode] = frozenset(
@@ -124,3 +125,11 @@ class LlmGatewayError(AppError):
 
     def __init__(self, message: str) -> None:
         super().__init__(ErrorCode.LLM_GATEWAY_ERROR, message)
+
+
+@dataclass(frozen=True, init=False)
+class VideoMetadataGatewayError(AppError):
+    """動画メタデータ API 障害かつキャッシュ hit なし。"""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(ErrorCode.VIDEO_METADATA_GATEWAY_ERROR, message)

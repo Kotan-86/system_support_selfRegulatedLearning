@@ -15,6 +15,7 @@ from application.common.errors import (
     LlmGatewayError,
     TutorSessionNotFoundError,
     ValidationError,
+    VideoMetadataGatewayError,
 )
 from interfaces.common.error_presenter import present_error, status_kind_for_error_code
 from interfaces.learning.view_models.errors import StatusKind
@@ -29,7 +30,12 @@ NOT_FOUND_ERROR_CODES: frozenset[ErrorCode] = frozenset(
     }
 )
 
-GATEWAY_ERROR_CODES: frozenset[ErrorCode] = frozenset({ErrorCode.LLM_GATEWAY_ERROR})
+GATEWAY_ERROR_CODES: frozenset[ErrorCode] = frozenset(
+    {
+        ErrorCode.LLM_GATEWAY_ERROR,
+        ErrorCode.VIDEO_METADATA_GATEWAY_ERROR,
+    }
+)
 
 
 class TestStatusKindForErrorCode:
@@ -114,4 +120,12 @@ class TestPresentError:
         view_model = present_error(error)
 
         assert view_model.error_code == "LLM_GATEWAY_ERROR"
+        assert view_model.status_kind == StatusKind.GATEWAY
+
+    def test_video_metadata_gateway_error(self) -> None:
+        error = VideoMetadataGatewayError("動画メタデータ API が利用できません")
+
+        view_model = present_error(error)
+
+        assert view_model.error_code == "VIDEO_METADATA_GATEWAY_ERROR"
         assert view_model.status_kind == StatusKind.GATEWAY

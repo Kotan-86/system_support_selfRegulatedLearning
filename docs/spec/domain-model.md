@@ -273,6 +273,10 @@ LearningSnapshot（Read Model・Entity ではない）
 - `quizDefinition` は講義に 1 つ
 - `videoUrl` と `quizDefinition` は空でない（講義として有効であること）
 
+**備考**
+
+- LAD 学習者タイプ判定時、interfaces 層の `VideoDurationResolver`（Infrastructure 実装）が `videoUrl` を参照して動画総尺を解決する（解決方法の How は infrastructure 実装に委ねる）
+
 ---
 
 ### LearningSession（Aggregate Root）

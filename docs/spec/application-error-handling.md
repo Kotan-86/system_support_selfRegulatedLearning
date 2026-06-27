@@ -104,12 +104,14 @@ application/
 | `EMPTY_USER_MESSAGE` | `user_message` が空 | `SendChatMessage` |
 | `EXPORT_DATA_INTEGRITY` | Export Read データの結合不整合 | `ExportResearchData` |
 | `EXPORT_FILTER_REQUIRED` | フィルタ未指定（`learner_id` / `lecture_id` / `learning_session_id` がすべて `None`） | `ExportResearchData` |
+| `VALIDATION_ERROR` | 動画尺 `<= 0`、または `video_url` から video ID 解決不可 | interfaces 層 `GetLearningSnapshotController`（`VideoDurationResolver`） |
 
 ### 外部依存障害（HTTP 502 等）
 
 | ErrorCode | AppError クラス | 意味 | 返す UC |
 |-----------|----------------|------|---------|
 | `LLM_GATEWAY_ERROR` | `LlmGatewayError` | LLM 呼び出し失敗・空応答 | `SendChatMessage`（将来: `Classify` / `Invoke`） |
+| `VIDEO_METADATA_GATEWAY_ERROR` | `VideoMetadataGatewayError` | 動画メタデータ API 障害かつキャッシュ hit なし | interfaces 層 `GetLearningSnapshotController`（`VideoDurationResolver`） |
 
 ### AppError に含めないもの
 
@@ -147,9 +149,11 @@ application/
 | `LEARNING_SESSION_NOT_FOUND` | - | - | - | - | - | - | ○ |
 | `EXPORT_DATA_INTEGRITY` | - | - | - | - | - | - | ○ |
 | `EXPORT_FILTER_REQUIRED` | - | - | - | - | - | - | ○ |
+| `VIDEO_METADATA_GATEWAY_ERROR` | - | - | - | ○³ | - | - | - |
 
 ¹ `StartOrGetLearningSession` を compose した場合に伝播  
-² `StartOrGetTutorSession` を compose した場合に伝播
+² `StartOrGetTutorSession` を compose した場合に伝播  
+³ interfaces 層 `GetLearningSnapshotController` が `VideoDurationResolver` 失敗時に `present_error` で返す（`VALIDATION_ERROR` / `VIDEO_METADATA_GATEWAY_ERROR`。Application UC は `Ok` のまま）
 
 ### エラーにしない正常系
 
