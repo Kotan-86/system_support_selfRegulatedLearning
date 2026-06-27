@@ -4,7 +4,7 @@
 
 - [application-usecase.md](./application-usecase.md) で Use Case / Port / DTO は定義済み。次は **外側との変換**（ingress / egress）を `app/main.py` から切り出し、Controller → Use Case → Presenter → ViewModel の流れを確立する
 - LAD は生ログ返却ではなく、**操作集計・動画 2 分区間集計・小テスト（問題文付き）・学習者プロファイル**を返す新契約に置き換える（破壊的変更・合意済み）
-- 学習者タイプ分類ルールは未確定のため、**Classifier は Port + Stub** とし、Metrics / Catalog / Presenter の設計を先に固める
+- LAD 学習者タイプ判定は **ViewingBehaviorMetrics の派生指標**と **RuleBasedLearnerTypeClassifier** で確定する。動画総尺は **VideoDurationResolver** Port（Infrastructure 実装）で解決する
 
 ## スコープ
 
@@ -17,7 +17,7 @@
 | ingress 規約 | 外部フィールド名 → Application DTO への正規化 |
 | LAD 表示要件 | 4 表示ブロックと ViewModel フィールドの 1:1 対応 |
 | 2 分バケット定義 | 動画区間集計の割当ルール |
-| 学習者タイプ | 静的文（Catalog）と動的指標（`learning_behaviors`）の分離。Classifier ルールは **TBD・Stub** |
+| 学習者タイプ | 静的文（Catalog）と動的指標（`learning_behaviors`）の分離。**RuleBasedLearnerTypeClassifier** ルールと **VideoDurationResolver** Port |
 
 ### 本仕様に含めない（別仕様・別 PR）
 
@@ -25,7 +25,7 @@
 - `AppError` / `Result` の定義（[application-error-handling.md](./application-error-handling.md)）
 - Port の Infrastructure 実装（`db/` Mapper、Repository）
 - Flask ルート配線・`jsonify`（Phase 7。Infrastructure 完了後）
-- `LearnerTypeClassifier` の本番ルール実装（Phase 8）
+- `VideoDurationResolver` の Infrastructure 実装詳細（YouTube API・キャッシュ。Port 契約は本仕様）
 - Research Export の interfaces 層
 - DB スキーマ変更
 
@@ -104,8 +104,12 @@ interfaces/
     view_models/
     services/
     ports/
+      learner_type_classifier.py
+      video_duration_resolver.py
     catalog/
     classifiers/
+      stub_learner_type_classifier.py
+      rule_based_learner_type_classifier.py
   tutoring/
     controllers/
     presenters/
@@ -124,8 +128,9 @@ tests/
 | Controller | 外部入力の正規化、Request DTO 組み立て、Use Case 呼び出し、Presenter への委譲 | レスポンス JSON の詳細組み立て、`repository.save` |
 | Presenter | `Result` / Response → ViewModel、集計・結合・静的 Catalog 参照 | ビジネスオーケストレーション、永続化 |
 | ViewModel | クライアント契約の型（フレームワーク非依存・シリアライズ可能） | Use Case / Entity の直接露出 |
-| `ViewingBehaviorMetrics` | `viewing_events` から操作カウント・2 分バケット集計 | 学習者タイプ判定 |
-| `LearnerTypeClassifier` | 集計結果 → `type_code \| None` | 研究テキストの保持 |
+| `ViewingBehaviorMetrics` | `viewing_events` と動画総尺から操作カウント・2 分バケット・派生指標を集計 | 学習者タイプ判定（Classifier へ委譲） |
+| `LearnerTypeClassifier` | 集計結果 → `type_code \| None`（RuleBased は常に 4 いずれか） | 研究テキストの保持 |
+| `VideoDurationResolver` | `Lecture`（主に `video_url`）→ 動画総尺（秒） | Use Case オーケストレーション |
 | `LearnerTypeCatalog` | `type_code` → 特徴・動機づけ・成績（静的文） | 視聴ログの解析 |
 
 ### import 禁止
@@ -208,6 +213,8 @@ tests/
 | `ConflictError` | `DUPLICATE_LEARNING_SESSION` 等 | `conflict` |
 | `ValidationError` | 各種 | `validation` |
 | `LlmGatewayError` | `LLM_GATEWAY_ERROR` | `gateway` |
+| `ValidationError`（尺 `<= 0` / video ID 解決不可） | `VALIDATION_ERROR` 等 | `validation` |
+| `VideoMetadataGatewayError` | `VIDEO_METADATA_GATEWAY_ERROR` | `gateway` |
 
 ---
 
@@ -259,7 +266,7 @@ tests/
 
 | フィールド | 型 | 由来 | 説明 |
 |-----------|-----|------|------|
-| `type_code` | `str \| None` | Classifier | `advanced` / `diligent` / `indifferent` / `persistent`。未判定時 `None` |
+| `type_code` | `str \| None` | Classifier | `advanced` / `diligent` / `indifferent` / `persistent`。RuleBased 使用時は常に 4 いずれか。Stub 使用時は `None` |
 | `type_name` | `str \| None` | Catalog | 表示用タイプ名。`type_code` が `None` なら `None` |
 | `learning_behaviors` | `list[LearningBehaviorViewModel]` | **動的**（Metrics） | 視聴行動の数値付き指標（操作回数等） |
 | `characteristics` | `str \| None` | **静的**（Catalog） | タイプの特徴文 |
@@ -292,7 +299,41 @@ Application 層は空 `LearningSnapshot` を **正常系**として返す（HTTP
 
 ---
 
-## 2 分バケット定義（`ViewingBehaviorMetrics`）
+## `ViewingBehaviorMetrics`
+
+`viewing_events` から LAD 表示用の集計と学習者タイプ判定用の派生指標を生成する。配置: `interfaces/learning/services/viewing_behavior_metrics.py`。
+
+### 生成
+
+| 項目 | 規約 |
+|------|------|
+| ファクトリ | `ViewingBehaviorMetrics.from_events(events, *, video_duration_sec: int)` |
+| 必須引数 | `video_duration_sec` — 動画総尺（秒）。`<= 0` の場合は `ValueError`（Controller 前段の `VideoDurationResolver` でも弾く二重防御） |
+| 入力イベント | `LearningSnapshot.viewing_events`（または同等の `ViewingEvent` 列） |
+
+### フィールド（既存）
+
+| フィールド | 説明 |
+|-----------|------|
+| `action_counts` | 操作種類別件数（全体） |
+| `video_segments` | 120 秒区間ごとの `action_counts` |
+
+### フィールド（派生指標・Classifier 入力）
+
+| フィールド | 定義 |
+|-----------|------|
+| `video_duration_sec` | 動画総尺（秒）。`<= 0` は生成不可 |
+| `back_cumulative_sec` | `backward_skip` / `backward_seek` の `abs(position_delta)` 合計 |
+| `back_cumulative_time_ratio` | `back_cumulative_sec / video_duration_sec` |
+| `forward_ops_per_10min` | `(forward_skip + forward_seek) * 600 / video_duration_sec` |
+| `back_ops_per_10min` | `(backward_skip + backward_seek) * 600 / video_duration_sec` |
+| `pause_ops_per_10min` | `pause * 600 / video_duration_sec` |
+
+短い動画でも 10 分換算する（例: 300 秒動画・`pause` 3 回 → `pause_ops_per_10min == 6`）。
+
+`position_delta == 0` の `backward_skip` / `backward_seek` は **操作回数に数える**が、累積秒数には **0 を加算**する。
+
+### 2 分バケット定義
 
 動画区間集計は **発生時点の `video_position`** で 1 バケットに割り当てる。
 
@@ -311,17 +352,30 @@ Application 層は空 `LearningSnapshot` を **正常系**として返す（HTTP
 
 ## 学習者タイプ（Classifier / Catalog）
 
-### Classifier（TBD・Stub）
+### Classifier
 
-| 項目 | 現時点の規約 |
-|------|-------------|
+| 項目 | 規約 |
+|------|------|
 | インターフェース | `LearnerTypeClassifier`（Protocol） |
-| 入力 | `ViewingBehaviorMetrics`（または同等の集計結果） |
-| 出力 | `type_code: str \| None` |
-| 本番ルール | **未確定（TBD）**。Phase 8 で `RuleBasedLearnerTypeClassifier` と閾値仕様を追記する |
-| Phase 2 実装 | `StubLearnerTypeClassifier`（常に `None`、またはテスト用固定値） |
+| 入力 | `ViewingBehaviorMetrics` |
+| 出力 | `type_code: str \| None`（Protocol 上。本番 `RuleBasedLearnerTypeClassifier` は常に 4 いずれかを返し `None` を返さない） |
+| 本番実装 | `RuleBasedLearnerTypeClassifier`（`interfaces/learning/classifiers/rule_based_learner_type_classifier.py`） |
+| テスト用 | `StubLearnerTypeClassifier`（常に `None`、またはテスト用固定値） |
 
 Classifier は研究テキストを保持しない。判定ロジックのみを担う。
+
+#### 判定ルール（優先順・排他）
+
+`RuleBasedLearnerTypeClassifier` は次の順で **最初に一致した 1 タイプ**を返す。
+
+| 優先 | type_code | 条件 |
+|------|-----------|------|
+| 1 | `indifferent` | `back_cumulative_time_ratio >= 0.18` |
+| 2 | `advanced` | `forward_ops_per_10min >= 6` **かつ** `back_ops_per_10min >= 3` **かつ** `back_cumulative_time_ratio < 0.18` |
+| 3 | `diligent` | 1・2 に該当せず **かつ** `pause_ops_per_10min >= 6` |
+| 4 | `persistent` | 上記以外（空イベント含む） |
+
+閾値（`0.18`, `6`, `3`）は Classifier 実装内の定数とする。
 
 ### Catalog（静的文）
 
@@ -345,6 +399,39 @@ Classifier は研究テキストを保持しない。判定ロジックのみを
 | 判定 | Classifier | `type_code` |
 
 `StubLearnerTypeClassifier` 使用時（`type_code=None`）でも **`learning_behaviors` は数値付きで生成される**。`type_code` が指定された場合のみ Catalog の静的文が `learner_profile` に載る。
+
+---
+
+## VideoDurationResolver
+
+LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture` から解決する Port。Application 層は本 Port を **知らない**（Controller → Presenter 配線のみ）。
+
+| 項目 | 規約 |
+|------|------|
+| Port | `interfaces/learning/ports/video_duration_resolver.py` |
+| メソッド | `resolve(self, lecture: Lecture) -> Result[int, AppError]` |
+| 入力 | `Lecture`（主に `video_url`） |
+| 成功時 | `duration_sec > 0` を返す |
+| 失敗時 | `ValidationError` — 尺 `<= 0`、または `video_url` から video ID を解決できない |
+| 失敗時 | `VideoMetadataGatewayError` — 外部 API 障害かつキャッシュ hit なし（[application-error-handling.md](./application-error-handling.md)） |
+| Infrastructure 実装 | YouTube Data API Adapter（Pattern B・キャッシュ）。詳細は infrastructure 実装 PR |
+
+### GetLearningSnapshotController での利用
+
+| 手順 | 処理 |
+|------|------|
+| 1 | Use Case 成功後、`lecture` を取得済み |
+| 2 | `duration_result = video_duration_resolver.resolve(lecture)` |
+| 3 | `Err` の場合 | `ErrorPresenter` で ErrorViewModel を返す |
+| 4 | `Ok(duration_sec)` の場合 | `LadDashboardPresenter.present(..., video_duration_sec=duration_sec)` |
+
+### LadDashboardPresenter での利用
+
+| 項目 | 規約 |
+|------|------|
+| `present` 引数 | `video_duration_sec: int`（キーワード専用） |
+| デフォルト Classifier | `RuleBasedLearnerTypeClassifier`（テストでは Stub 注入可） |
+| 内部 | `ViewingBehaviorMetrics.from_events(..., video_duration_sec=...)` → `classifier.classify(metrics)` |
 
 ---
 
@@ -422,7 +509,9 @@ Classifier は研究テキストを保持しない。判定ロジックのみを
 
 - [ ] LAD 4 表示ブロック（全体集計・2 分区間集計・小テスト表・プロファイル）と `LadDashboardViewModel` フィールドが 1:1 で対応している
 - [ ] 2 分バケットは `segment_start_sec = (video_position // 120) * 120` で定義されている
-- [ ] 学習者タイプの Classifier ルールは **TBD・Stub** と明記されている
+- [ ] `ViewingBehaviorMetrics` の派生指標（10 分換算・巻き戻し累積比率）が定義されている
+- [ ] `RuleBasedLearnerTypeClassifier` の 4 タイプ判定ルール（優先順・排他）が定義されている
+- [ ] `VideoDurationResolver` Port と Controller / Presenter 配線が定義されている
 - [ ] 静的文（Catalog）と動的指標（`learning_behaviors`）が分離されている
 - [ ] 空 Snapshot は成功 ViewModel（404 相当にしない）と定義されている
 - [ ] `interfaces/` が Flask / SQLite / vertexai を import しないことが実装計画の受入基準に含まれている

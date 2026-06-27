@@ -19,7 +19,12 @@ NOT_FOUND_ERROR_CODES: frozenset[ErrorCode] = frozenset(
     }
 )
 
-GATEWAY_ERROR_CODES: frozenset[ErrorCode] = frozenset({ErrorCode.LLM_GATEWAY_ERROR})
+GATEWAY_ERROR_CODES: frozenset[ErrorCode] = frozenset(
+    {
+        ErrorCode.LLM_GATEWAY_ERROR,
+        ErrorCode.VIDEO_METADATA_GATEWAY_ERROR,
+    }
+)
 
 
 def status_kind_for_error_code(code: ErrorCode) -> StatusKind:

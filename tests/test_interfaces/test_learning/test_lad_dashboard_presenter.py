@@ -24,6 +24,7 @@ from interfaces.learning.presenters.lad_dashboard_presenter import LadDashboardP
 from domain.learning.learning_snapshot import LearningSnapshot
 
 FIXED_NOW = datetime(2026, 6, 21, 12, 0, 0, tzinfo=timezone.utc)
+VIDEO_DURATION_SEC = 600
 
 
 def _lecture() -> Lecture:
@@ -53,8 +54,8 @@ def _lecture() -> Lecture:
 
 def _presenter(*, type_code: str | None = None) -> LadDashboardPresenter:
     return LadDashboardPresenter(
-        classifier=StubLearnerTypeClassifier(fixed_type_code=type_code),
         catalog=StaticLearnerTypeCatalog(),
+        classifier=StubLearnerTypeClassifier(fixed_type_code=type_code),
     )
 
 
@@ -79,7 +80,7 @@ class TestLadDashboardPresenter:
             content_updated_at=None,
         )
 
-        vm = presenter.present(response, _lecture())
+        vm = presenter.present(response, _lecture(), video_duration_sec=VIDEO_DURATION_SEC)
 
         assert vm.action_counts["play"] == 0
         assert vm.video_segments == ()
@@ -124,7 +125,7 @@ class TestLadDashboardPresenter:
             content_updated_at=FIXED_NOW,
         )
 
-        vm = presenter.present(response, _lecture())
+        vm = presenter.present(response, _lecture(), video_duration_sec=VIDEO_DURATION_SEC)
 
         assert vm.action_counts["play"] == 1
         assert vm.action_counts["pause"] == 1
@@ -156,7 +157,7 @@ class TestLadDashboardPresenter:
             content_updated_at=FIXED_NOW,
         )
 
-        vm = presenter.present(response, _lecture())
+        vm = presenter.present(response, _lecture(), video_duration_sec=VIDEO_DURATION_SEC)
 
         assert vm.score == 1
         assert len(vm.quiz_results) == 2
@@ -173,7 +174,7 @@ class TestLadDashboardPresenter:
             content_updated_at=None,
         )
 
-        vm = presenter.present(response, _lecture())
+        vm = presenter.present(response, _lecture(), video_duration_sec=VIDEO_DURATION_SEC)
 
         assert vm.learner_profile is not None
         assert vm.learner_profile.type_code == "advanced"
@@ -181,3 +182,35 @@ class TestLadDashboardPresenter:
         assert vm.learner_profile.characteristics is not None
         assert vm.learner_profile.motivation is not None
         assert vm.learner_profile.performance is not None
+
+    def test_rule_based_classifier_classifies_diligent_from_viewing_events(self) -> None:
+        presenter = LadDashboardPresenter(catalog=StaticLearnerTypeCatalog())
+        events = tuple(
+            ViewingEvent.create(
+                id=ViewingEventId(f"pause-{index}"),
+                occurred_at=FIXED_NOW,
+                video_position=10 * index,
+                action=ViewingAction.PAUSE,
+                position_delta=0,
+            )
+            for index in range(6)
+        )
+        snapshot = LearningSnapshot(
+            session_id=LearningSessionId("session-1"),
+            learner_id=LearnerId("learner-1"),
+            lecture_id=LectureId("lecture-1"),
+            viewing_events=events,
+            latest_quiz_attempt=None,
+            quiz_answers=(),
+        )
+        response = GetLearningSnapshotResponse(
+            snapshot=snapshot,
+            content_updated_at=FIXED_NOW,
+        )
+
+        vm = presenter.present(response, _lecture(), video_duration_sec=VIDEO_DURATION_SEC)
+
+        assert vm.learner_profile is not None
+        assert vm.learner_profile.type_code == "diligent"
+        assert vm.learner_profile.type_name == "Diligent"
+        assert vm.learner_profile.characteristics is not None

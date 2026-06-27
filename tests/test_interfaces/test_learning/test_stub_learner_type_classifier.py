@@ -13,12 +13,12 @@ class TestStubLearnerTypeClassifier:
 
     def test_default_returns_none(self) -> None:
         classifier = StubLearnerTypeClassifier()
-        metrics = ViewingBehaviorMetrics.from_events(())
+        metrics = ViewingBehaviorMetrics.from_events((), video_duration_sec=600)
 
         assert classifier.classify(metrics) is None
 
     def test_fixed_type_code_returns_configured_value(self) -> None:
         classifier = StubLearnerTypeClassifier(fixed_type_code="diligent")
-        metrics = ViewingBehaviorMetrics.from_events(())
+        metrics = ViewingBehaviorMetrics.from_events((), video_duration_sec=600)
 
         assert classifier.classify(metrics) == "diligent"

@@ -15,6 +15,7 @@ from application.learning.use_cases.get_learning_snapshot import (
 
 from interfaces.common.error_presenter import present_error
 from interfaces.common.ingress import parse_learner_id, parse_lecture_id
+from interfaces.learning.ports.video_duration_resolver import VideoDurationResolver
 from interfaces.learning.presenters.lad_dashboard_presenter import LadDashboardPresenter
 from interfaces.learning.view_models.errors import ErrorViewModel
 from interfaces.learning.view_models.lad_dashboard import LadDashboardViewModel
@@ -28,10 +29,12 @@ class GetLearningSnapshotController:
         use_case: GetLearningSnapshotUseCase,
         presenter: LadDashboardPresenter,
         lecture_catalog: LectureCatalog,
+        video_duration_resolver: VideoDurationResolver,
     ) -> None:
         self._use_case = use_case
         self._presenter = presenter
         self._lecture_catalog = lecture_catalog
+        self._video_duration_resolver = video_duration_resolver
 
     def execute(
         self,
@@ -69,4 +72,12 @@ class GetLearningSnapshotController:
                 )
             )
 
-        return self._presenter.present(result.value, lecture)
+        duration_result = self._video_duration_resolver.resolve(lecture)
+        if duration_result.is_err:
+            return present_error(duration_result.error)
+
+        return self._presenter.present(
+            result.value,
+            lecture,
+            video_duration_sec=duration_result.value,
+        )
