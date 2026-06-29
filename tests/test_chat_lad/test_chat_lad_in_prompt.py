@@ -40,8 +40,6 @@ class TestChatLadInPrompt:
         視聴ログ・小テストを登録したのち、その participant_id で POST /chat すると、
         渡されたプロンプトに学習データ（スコア 4/5 や視聴・小テストに相当する記述）が含まれる。
         """
-        if chat_lad_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         client = chat_lad_client
         client.post(
             "/api/viewing-log",

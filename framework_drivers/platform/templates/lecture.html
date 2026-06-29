@@ -19,9 +19,15 @@
     <p>このページには <code>?participant_id=</code> クエリパラメータが必須です。</p>
     <p>例: <code>/lecture?participant_id=1</code></p>
   </div>
+  {% elif lecture_error %}
+  <div class="error-box">
+    <h3>講義を表示できません</h3>
+    <p>{{ lecture_error }}</p>
+  </div>
   {% else %}
   <h3>講義動画</h3>
   <p>参加者 ID: <strong>{{ participant_id }}</strong></p>
+  <p>講義 ID: <strong>{{ lecture_id }}</strong></p>
   <div id="player"></div>
   <div id="time">0:00:00</div>
   <input type="range" id="seekbar" min="0" max="100" value="0">

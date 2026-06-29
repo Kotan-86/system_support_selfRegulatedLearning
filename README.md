@@ -6,7 +6,7 @@ LLM チューター（Vertex AI Gemini）と対話履歴の SQLite 永続化。
 
 ```bash
 uv sync
-uv run flask --app app.main run
+uv run flask --app framework_drivers.platform.main run
 ```
 
 ## 環境変数（Gemini Enterprise Agent Platform / 旧 Vertex AI）

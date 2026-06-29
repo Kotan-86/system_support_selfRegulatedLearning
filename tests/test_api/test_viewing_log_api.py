@@ -25,8 +25,6 @@ class TestPostViewingLog:
         self, phase2_client
     ) -> None:
         """必須項目を満たす JSON を送ると 201 を返す。"""
-        if phase2_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         r = phase2_client.post(
             "/api/viewing-log",
             json=_valid_viewing_log_payload(),
@@ -40,8 +38,6 @@ class TestPostViewingLog:
         self, phase2_client
     ) -> None:
         """current_time / duration の小数は 0 方向へ切り捨てて保存する。"""
-        if phase2_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         payload = {
             "participant_id": "truncate-test",
             "time_stamp": "2026-02-23T11:18:42",

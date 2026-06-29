@@ -40,8 +40,6 @@ class TestChatLadIntegration:
         POST /api/viewing-log → POST /api/quiz-attempts → POST /chat(participant_id="1")
         の順で実行し、LLM に渡されたプロンプトに視聴ログまたは小テスト結果が含まれる。
         """
-        if chat_lad_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         client = chat_lad_client
         r1 = client.post(
             "/api/viewing-log",
@@ -76,8 +74,6 @@ class TestChatLadIntegration:
 
     def test_chat_without_participant_id_returns_400(self, chat_lad_client) -> None:
         """POST /chat で message のみ（session_id も participant_id も無し）だと 400。"""
-        if chat_lad_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         r = chat_lad_client.post(
             "/chat",
             json={"message": "こんにちは"},

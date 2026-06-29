@@ -5,6 +5,7 @@
 - [application-usecase.md](./application-usecase.md) で Use Case / Port / DTO は定義済み。次は **外側との変換**（ingress / egress）を `app/main.py` から切り出し、Controller → Use Case → Presenter → ViewModel の流れを確立する
 - LAD は生ログ返却ではなく、**操作集計・動画 2 分区間集計・小テスト（問題文付き）・学習者プロファイル**を返す新契約に置き換える（破壊的変更・合意済み）
 - LAD 学習者タイプ判定は **ViewingBehaviorMetrics の派生指標**と **RuleBasedLearnerTypeClassifier** で確定する。動画総尺は **VideoDurationResolver** Port（Infrastructure 実装）で解決する
+- 近い実験は **3 講義 × 1 学習者**（`participant_id` 1/2/3 で `lecture-1/2/3` を自動解決）。`lecture_id` 未送信 API の ingress 規約を本仕様で確定する
 
 ## スコープ
 
@@ -98,6 +99,7 @@ interfaces/
     ingress.py
     error_presenter.py
     default_lecture.py
+    learner_lecture_mapping.py
   learning/
     controllers/
     presenters/
@@ -147,7 +149,7 @@ tests/
 | 依存 | コンストラクタ注入（対応 Use Case、Presenter、ingress ヘルパ） |
 | 入口 | 外部入力（dict / プリミティブ）を受け、ViewModel またはエラー ViewModel を返す |
 | 検証 | 空 `participant_id` 等の ingress 段階の拒否は Controller で行ってよい |
-| `lecture_id` 未送信 | [default_lecture](#default_lecture) で `LectureId` を解決する |
+| `lecture_id` 未送信 | [default_lecture](#default_lecture) で `participant_id` から `LectureId` を解決する |
 
 ---
 
@@ -170,7 +172,7 @@ tests/
 | 外部 | 内部 | 備考 |
 |------|------|------|
 | `participant_id` | `LearnerId` | 空文字は Controller で拒否可 |
-| `lecture_id`（未送信時） | `LectureId` | `default_lecture` で近い実験の固定講義を解決 |
+| `lecture_id`（未送信時） | `LectureId` | [default_lecture](#default_lecture) で `participant_id` から講義を解決 |
 | `time_stamp` | `occurred_at` | 視聴ログ |
 | `current_time` | `video_position` | `application.common.viewing_seconds` で整数秒へ（小数切り捨て） |
 | `duration` | `position_delta` | 同上 |
@@ -184,13 +186,38 @@ tests/
 
 ## default_lecture
 
-近い実験では API に `lecture_id` が未導入のため、interfaces 層が **1 講義固定**の `LectureId` を解決する。
+近い実験ではクライアントが `lecture_id` を送信しないため、interfaces 層が **`participant_id` から `LectureId` を自動解決**する。1 参加者 1 講義 1 `LearningSession`（`UNIQUE (learner_id, lecture_id)` は既存のまま）。URL に `lecture_id` は不要。
+
+### 解決優先順位
+
+| 優先 | 条件 | 結果 |
+|------|------|------|
+| 1 | クエリ / JSON body に **`lecture_id` が明示**されている | `parse_lecture_id` で検証（マップ・default は使用しない） |
+| 2 | `participant_id` が近い実験マップに命中 | 対応する `LectureId` |
+| 3 | 上記以外 | `resolve_default_lecture_id()` → **`lecture-1`**（後方互換） |
+
+### 近い実験: participant_id → lecture_id 固定マップ
+
+| participant_id | lecture_id | YouTube 動画 ID（参考） |
+|----------------|------------|------------------------|
+| `1` | `lecture-1` | `Y2HC0I8cTAI` |
+| `2` | `lecture-2` | `1MuwwFipX9o` |
+| `3` | `lecture-3` | `Sa06YB2oXyw` |
+
+マップ外の `participant_id`（単体テスト用 `learner-1` 等）は **優先 3** により **`lecture-1` にフォールバック**する。既存テストは原則そのまま通過する。
+
+### 実装配置
 
 | 項目 | 規約 |
 |------|------|
-| 解決元 | 環境変数または定数（実装計画 Phase 1 で確定） |
-| 利用箇所 | `GetLearningSnapshot` / Write Controller / `SendChatMessage` の ingress |
-| 将来 | クエリパラメータ `lecture_id` へ拡張可能とする |
+| マップ定数 | `interfaces/common/learner_lecture_mapping.py` — `NEAR_TERM_PARTICIPANT_LECTURE_MAP` |
+| 解決関数 | `resolve_lecture_id_for_participant(participant_id, lecture_id=None)` |
+| ingress ラッパ | `interfaces/common/ingress.py` — `parse_lecture_id_for_participant(...)` |
+| フォールバック | `interfaces/common/default_lecture.py` — `resolve_default_lecture_id()`（既定 `lecture-1`。環境変数 `DEFAULT_LECTURE_ID` で上書き可） |
+
+### 利用箇所
+
+`GetLearningSnapshot` / `GetLastUpdated` / Write Controller（`RecordViewingEvent` / `RecordQuizAttempt`）/ `SendChatMessage` の ingress。`lecture_id` 未送信時は上記解決順を適用する。
 
 ---
 
@@ -501,13 +528,41 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 | 入力 | `LearningSnapshot`, `tuple[Message, ...]`, `user_message`, `Lecture` |
 | 出力 | LLM 向けプロンプト文字列 |
 | 依存 | `LearningSnapshot` + `Lecture` のみ（Tutoring が Learning Entity を直接 import しない） |
-| 移行元 | `app/main.py` の `_format_*` / `_build_lecture_transcript` |
+| プロンプトテンプレート | `interfaces/tutoring/prompts.py` の `SYSTEM_PROMPT` |
+| SRT ユーティリティ | `interfaces/tutoring/srt.py`（`app/srt.py` から移行） |
+
+### コンテキストデータ（5 フィールド）
+
+`DefaultChatPromptBuilder.build()` は `SYSTEM_PROMPT` 末尾のプレースホルダに以下を注入する。
+
+| プレースホルダ | ラベル | データ源 |
+|--------------|--------|---------|
+| `{history}` | 会話履歴 | `messages` |
+| `{user_message}` | ユーザーの直近の発話 | リクエスト本文 |
+| `{lecture_log}` | LADデータ（視聴ログ等） | `LearningSnapshot.viewing_events` |
+| `{quiz_result}` | テスト結果 | `LearningSnapshot.quiz_answers` + `Lecture.quiz_definition` |
+| `{lecture_transcript}` | 講義字幕 | `LearningSnapshot.lecture_transcript_excerpts` または SRT（`Lecture.srt_path` / `LECTURE_SRT_PATH`） |
+
+データが無い場合は `(なし)` または `(履歴なし)` を注入する。
+
+### 小テスト結果の注入形式
+
+`{quiz_result}` にはスコア（あれば）に加え、設問ごとに以下を含める。
+
+- 問題文
+- 選択肢（`quiz_definition` の `choices`）
+- 学習者の解答
+- 正解選択肢（`quiz_definition` の `correct_answer`）
+- 正解フラグ（正解なら `1`、不正解なら `0`）
+
+変更理由: 解釈フェーズ用プロンプトへの切り替えと、`app/` 移行完了に伴う依存関係の整理。
 
 ---
 
 ## 受入基準（本仕様）
 
-- [ ] LAD 4 表示ブロック（全体集計・2 分区間集計・小テスト表・プロファイル）と `LadDashboardViewModel` フィールドが 1:1 で対応している
+- [ ] `participant_id` → `lecture_id` 固定マップ（1/2/3）とフォールバック（`lecture-1`）が [default_lecture](#default_lecture) に定義されている
+- [ ] 明示 `lecture_id` がマップより優先される解決順が定義されている
 - [ ] 2 分バケットは `segment_start_sec = (video_position // 120) * 120` で定義されている
 - [ ] `ViewingBehaviorMetrics` の派生指標（10 分換算・巻き戻し累積比率）が定義されている
 - [ ] `RuleBasedLearnerTypeClassifier` の 4 タイプ判定ルール（優先順・排他）が定義されている

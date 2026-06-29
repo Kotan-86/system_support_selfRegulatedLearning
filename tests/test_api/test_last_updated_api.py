@@ -13,8 +13,6 @@ class TestGetLastUpdated:
 
     def test_last_updated_returns_200_and_json(self, phase2_client) -> None:
         """GET /api/last-updated は 200 と JSON を返す。"""
-        if phase2_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         r = phase2_client.get("/api/last-updated")
         assert r.status_code == 200, (
             "GET /api/last-updated は 200 を返すこと"

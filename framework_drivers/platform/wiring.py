@@ -111,6 +111,14 @@ def init_databases() -> None:
     learning_conn.close()
 
 
+def reset_databases() -> None:
+    """tutor.db / learning.db を削除してから空の DB を再作成する。"""
+    for path in (get_tutor_db_path(), get_learning_db_path()):
+        if path.exists():
+            path.unlink()
+    init_databases()
+
+
 def build_video_duration_resolver() -> VideoDurationResolver:
     """本番用 VideoDurationResolver（YouTube Data API + キャッシュ）を構築する。"""
     return YoutubeVideoDurationResolver()

@@ -19,6 +19,9 @@ from domain.learning.viewing_event import ViewingAction
 from domain.shared.ids import LearnerId, LectureId, TutorSessionId
 
 from interfaces.common.default_lecture import resolve_default_lecture_id
+from interfaces.common.learner_lecture_mapping import (
+    resolve_lecture_id_for_participant,
+)
 
 
 def parse_learner_id(participant_id: str) -> Result[LearnerId, ValidationError]:
@@ -49,6 +52,14 @@ def parse_lecture_id(
         return ok(LectureId(normalized))
     except ValueError as exc:
         return err(ValidationError(str(exc)))
+
+
+def parse_lecture_id_for_participant(
+    participant_id: str,
+    lecture_id: str | None = None,
+) -> Result[LectureId, ValidationError]:
+    """participant_id と optional lecture_id から LectureId を解決する。"""
+    return resolve_lecture_id_for_participant(participant_id, lecture_id)
 
 
 def parse_video_position(value: Any) -> Result[int, ValidationError]:

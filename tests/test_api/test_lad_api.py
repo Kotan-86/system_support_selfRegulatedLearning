@@ -34,8 +34,6 @@ class TestGetParticipantsLad:
         self, phase2_client
     ) -> None:
         """空 Snapshot でも 200 と LadDashboardViewModel キーを返す。"""
-        if phase2_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         r = phase2_client.get("/api/participants/1/lad")
         assert r.status_code == 200, (
             "GET /api/participants/<id>/lad は 200 を返すこと"

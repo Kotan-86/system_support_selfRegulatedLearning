@@ -1,6 +1,7 @@
-"""
-講義動画の SRT 字幕をパースし、視聴ログの current_time に対応するテキストを抽出する。
-"""
+# 仕様: docs/spec/interfaces-layer.md#Tutoring-ACL-ChatPromptBuilder
+"""講義動画の SRT 字幕をパースし、視聴ログの current_time に対応するテキストを抽出する。"""
+from __future__ import annotations
+
 import re
 from pathlib import Path
 

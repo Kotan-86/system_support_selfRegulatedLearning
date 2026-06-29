@@ -14,8 +14,6 @@ class TestPostChatParticipantIdRequired:
         self, chat_lad_client
     ) -> None:
         """session_id も participant_id も送らないと 400 が返る。"""
-        if chat_lad_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         r = chat_lad_client.post(
             "/chat",
             json={"message": "こんにちは"},
@@ -32,8 +30,6 @@ class TestPostChatParticipantIdRequired:
         self, chat_lad_client
     ) -> None:
         """session_id を送らず participant_id を送ると 200 と session_id が返る。"""
-        if chat_lad_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         r = chat_lad_client.post(
             "/chat",
             json={"message": "はじめて", "participant_id": "1"},

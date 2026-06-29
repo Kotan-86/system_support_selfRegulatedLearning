@@ -3,7 +3,7 @@
 ## 変更理由（Why）
 
 - [interfaces-layer.md](./interfaces-layer.md) まで **Controller → Use Case → Presenter → ViewModel** の契約は確立済み。次は **Port の具象実装・HTTP 配線・フロント配信・外部連携** を Framework & Drivers 層として仕様化し、Looker Studio 手動 CSV 経由を廃止して **学習直後に LAD と AI が同一学習コンテキストを参照**できるようにする
-- [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md) は Flask + SQLite 2 DB・Form GAS 入力・Spreadsheet 非参照を決定済み。本仕様は **フロント技術選定** と **講義動画のホスティング方針の更新** を追記し、検討結果を1箇所に構造化する
+- [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md) は Flask + SQLite 2 DB・Spreadsheet 非参照を決定済み。本仕様は **フロント技術選定** と **講義動画のホスティング方針の更新**（GAS → Flask）・**3 講義カタログ** を追記し、検討結果を1箇所に構造化する
 - 第一目的は **人手介入なしでログを DB に記録し、LAD 表示と AI プロンプトに反映**することである。フレームワーク選定はこの目的から逆算する
 
 ## スコープ
@@ -16,9 +16,9 @@
 | 技術選定 | 講義動画・LAD+AI 統合画面・バックエンドランタイム・永続化・外部連携 |
 | 全体トポロジ | 参加者導線・Write / Read 経路・DB 参照範囲 |
 | Port → Adapter 対応表 | Application Port と Framework & Drivers 具象の 1:1 |
-| HTTP / ページ契約 | API ルート・HTML ページ・GAS 連携の残存範囲 |
+| HTTP / ページ契約 | API ルート・HTML ページ（Flask 配信） |
 | 環境・運用の What | 必須環境変数、デプロイ単位、永続化要件 |
-| ADR との差分 | 講義動画ホスティング（GAS → Flask 配信） |
+| ADR との差分 | 講義動画ホスティング（GAS → Flask 配信）・小テスト入力（GAS → Flask API）・3 講義 |
 
 ### 本仕様に含めない（別仕様・別 PR）
 
@@ -94,8 +94,8 @@ framework_drivers/
 | シームレス Write | 視聴ログ・小テスト送信後、人手（CSV アップロード等）を介さず DB に記録される |
 | 共有 Read | LAD UI と AI は **同一 `GetLearningSnapshot`**（[application-usecase.md#共有学習コンテキスト](./application-usecase.md)）を参照する |
 | 同一識別子 | 動画・小テスト・LAD・AI で **`participant_id` を共通**とする |
-| ingress 契約の安定 | 外部 JSON 形状（GAS 契約テスト）は維持し、ホスティング変更のみ許容する |
-| 近い実験の単純さ | 1 講義・Flask モノリス・SQLite 2 ファイルで完結する |
+| ingress 契約の安定 | 外部 JSON 形状（API 契約テスト）は維持し、ホスティング変更のみ許容する |
+| 近い実験の単純さ | **3 講義**（`participant_id` で自動解決）・Flask モノリス・SQLite 2 ファイルで完結する |
 
 ---
 
@@ -125,14 +125,16 @@ LAD の補助テキスト（振り返るポイント・操作名対訳等）は 
 
 FastAPI への変更、PostgreSQL への移行、マイクロサービス分割は **近い実験のスコープ外**とする。
 
-### 外部入力（残存）
+### 外部入力（近い実験）
 
 | 入力 | ホスティング | API |
 |------|-------------|-----|
-| 小テスト | **Google Form + GAS トリガー**（ADR 維持） | `POST /api/quiz-attempts` |
-| 視聴ログ | **Flask 配信の講義動画ページ**（ADR から更新） | `POST /api/viewing-log` |
+| 視聴ログ | **Flask 配信の講義動画ページ**（`GET /lecture`） | `POST /api/viewing-log` |
+| 小テスト | **Flask**（`POST /api/quiz-attempts`、手動 / API テスト / 将来 UI） | `POST /api/quiz-attempts` |
 
-小テスト用 GAS は `API_BASE_URL` スクリプトプロパティで Flask 公開 URL を指定する。Spreadsheet には書き込まない。
+講義動画・小テストの参加者導線は **Flask のみ**とする（`GET /lecture`、`POST /api/*`）。レガシー GAS 資産（`lecture_video_platform/`・`quiz_form/`）は廃止する。
+
+`lecture.html` の小テストリンク（外部 Google Form URL）は任意で維持してよいが、**システム上の記録経路は Flask API** とする。
 
 ---
 
@@ -142,9 +144,10 @@ FastAPI への変更、PostgreSQL への移行、マイクロサービス分割�
 |------|-------------------|----------------|
 | 講義動画ホスティング | GAS HtmlService | **Flask 配信**（Vanilla JS + YouTube IFrame API） |
 | 視聴ログ送信経路 | GAS `UrlFetchApp` → API | **ブラウザ同一オリジン `fetch`** → API |
-| 小テスト入力 | Google Form + GAS | **変更なし** |
+| 小テスト入力 | Google Form + GAS | **Flask API**（`POST /api/quiz-attempts`） |
 | バックエンド | Flask + SQLite 2 DB | **変更なし** |
 | LAD 表示 | DB 参照（UI 未定） | **自前 `/reflect` + ECharts**（Looker 廃止） |
+| 講義数 | 1 講義想定 | **3 講義**（`participant_id` 1/2/3 で自動解決） |
 
 視聴ログの **API payload 形状**（`participant_id`, `time_stamp`, `current_time`, `action`, `duration`）は ADR・GAS 契約テストと **同一**を維持する。
 
@@ -157,7 +160,6 @@ flowchart TB
     subgraph learner [学習者ブラウザ]
         lecture["/lecture\nVanilla + YouTube"]
         reflect["/reflect\nLAD ECharts + Chat"]
-        form[Google Form]
     end
 
     subgraph fd [framework_drivers]
@@ -169,7 +171,6 @@ flowchart TB
     subgraph external [外部]
         vertex[Vertex AI]
         youtube[YouTube Data API]
-        gas[Form GAS Trigger]
     end
 
     subgraph storage [SQLite]
@@ -178,8 +179,8 @@ flowchart TB
     end
 
     lecture -->|POST viewing-log| platform
+    lecture -->|POST quiz-attempts 任意| platform
     reflect -->|GET lad POST chat| platform
-    form --> gas -->|POST quiz-attempts| platform
     platform --> controllers[Controllers]
     controllers --> uc[Use Cases]
     uc --> fdDb
@@ -195,14 +196,23 @@ flowchart TB
 ## 参加者導線（近い実験）
 
 ```
-1. 参加者に participant_id を事前付与
-2. GET /lecture?participant_id={id}  … 動画視聴（ログ自動 POST）
-3. Google Form で小テスト（同一 participant_id を入力）
+1. 参加者に participant_id を事前付与（1 → lecture-1、2 → lecture-2、3 → lecture-3）
+2. GET /lecture?participant_id={id}  … 割当講義の動画視聴（ログ自動 POST）
+3. POST /api/quiz-attempts（Flask API・手動 / 将来 UI）で小テスト記録
 4. GET /reflect?participant_id={id}  … LAD + AI 振り返り（同一 Session）
 5. 2〜4 を講義内で自由に往復
 ```
 
-`participant_id` は **URL クエリ**で全ページに渡す。AI チャット初回の ID 入力プロンプトは **廃止**する。
+`participant_id` は **URL クエリ**で全ページに渡す。`lecture_id` は URL に含めない（サーバーが `participant_id` から解決）。AI チャット初回の ID 入力プロンプトは **廃止**する。
+
+### 実験時の URL 例
+
+| URL | 解決される講義 | YouTube 動画 ID |
+|-----|---------------|----------------|
+| `/lecture?participant_id=1` | `lecture-1` | `Y2HC0I8cTAI` |
+| `/lecture?participant_id=2` | `lecture-2` | `1MuwwFipX9o` |
+| `/lecture?participant_id=3` | `lecture-3` | `Sa06YB2oXyw` |
+| `/reflect?participant_id=2` | `lecture-2` | LAD / AI は lecture-2 の Session を参照 |
 
 ---
 
@@ -219,7 +229,7 @@ sequenceDiagram
     Video->>API: POST /api/viewing-log
     API->>DB: LearningSession 追記
 
-    Note over API,DB: Form GAS も同様に POST /api/quiz-attempts
+    Note over API,DB: 小テストも POST /api/quiz-attempts（Flask）
 
     LAD->>API: GET /api/participants/{id}/lad
     API->>DB: GetLearningSnapshot
@@ -244,7 +254,7 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 | Port | 具象（目標パス） | サブパッケージ | 永続化 / 外部 |
 |------|------------------|----------------|---------------|
 | `LearningSessionRepository` | `framework_drivers/db/learning/sqlite_learning_session_repository.py` | `db` | `learning.db` |
-| `LectureCatalog` | `framework_drivers/db/learning/static_lecture_catalog.py` 等 | `db` | 設定 / 定数 |
+| `LectureCatalog` | `framework_drivers/db/learning/static_lecture_catalog.py` | `db` | **3 講義**定数 + `lectures/{lecture-id}/subtitles.srt` |
 | `LearningSessionIdGenerator` 等 | `framework_drivers/db/learning/id_generators.py` | `db` | — |
 | `TutorSessionRepository` | `framework_drivers/db/tutoring/sqlite_tutor_session_repository.py` | `db` | `tutor.db` |
 | `TutorSessionIdGenerator` | `framework_drivers/db/tutoring/id_generators.py` | `db` | — |
@@ -252,6 +262,19 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 | `VideoDurationResolver` | `framework_drivers/external/youtube/youtube_video_duration_resolver.py` | `external` | YouTube API（キャッシュ付き） |
 
 移行期間中、ルート `db/learning_repository.py`・`db/repository.py` および `app/main.py` は旧実装として残る。**Flask 配線完了時に `framework_drivers/` 経由に統一**する。
+
+### `StaticLectureCatalog`（近い実験）
+
+| 項目 | 規約 |
+|------|------|
+| 保持件数 | **3 講義**（`lecture-1` / `lecture-2` / `lecture-3`） |
+| 解決 | `find_by_id(LectureId)` — 未知 ID は `None` |
+| 動画 URL | 講義 ID ごとの YouTube URL 定数（[application-usecase.md#LectureCatalog](./application-usecase.md#lecturecatalog)） |
+| SRT パス | `_PROJECT_ROOT / "lectures" / {lecture_id} / "subtitles.srt"` |
+| 小テスト | 3 講義共通プレースホルダ `QuizDefinition`（5 問）で開始可 |
+| 公開 API | `build_near_term_lectures()` — テスト・Composition Root から利用 |
+
+`GET /lecture` は `participant_id` → `lecture_id` 解決後、本 Catalog から動画 URL を取得する（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。
 
 ### 永続化方針（近い実験）
 
@@ -271,7 +294,7 @@ interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表
 | メソッド / パス | Controller | 主な呼び出し元 |
 |----------------|------------|----------------|
 | `POST /api/viewing-log` | `RecordViewingEventController` | `/lecture` |
-| `POST /api/quiz-attempts` | `RecordQuizAttemptController` | Form GAS |
+| `POST /api/quiz-attempts` | `RecordQuizAttemptController` | Flask API（`/lecture` 連携・手動・テスト） |
 | `GET /api/participants/{id}/lad` | `GetLearningSnapshotController` | `/reflect` LAD |
 | `GET /api/last-updated` | `GetLastUpdatedController` | `/reflect`（任意） |
 | `POST /chat` | `SendChatMessageController` | `/reflect` Chat |
@@ -301,7 +324,8 @@ framework_drivers/db + external 具象
 
 | 設定 | 解決元 |
 |------|--------|
-| `DEFAULT_LECTURE_ID` | 環境変数 or 定数（[interfaces/common/default_lecture.py](../../interfaces/common/default_lecture.py)） |
+| `participant_id` → `lecture_id` | [interfaces/common/learner_lecture_mapping.py](../../interfaces/common/learner_lecture_mapping.py)（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)） |
+| `DEFAULT_LECTURE_ID` | 環境変数 or 定数（マップ外フォールバック。既定 `lecture-1`） |
 | DB パス | `TUTOR_DB_PATH` / `LEARNING_DB_PATH` |
 | Vertex | `VERTEX_PROJECT_ID` / `VERTEX_LOCATION` / ADC |
 
@@ -313,13 +337,12 @@ framework_drivers/db + external 具象
 |------|------|------|
 | `TUTOR_DB_PATH` | 任意 | 対話 DB パス（未設定時 `db/data/tutor.db`） |
 | `LEARNING_DB_PATH` | 任意 | 学習 DB パス（未設定時 `db/data/learning.db`） |
-| `DEFAULT_LECTURE_ID` | 任意 | 近い実験の固定講義 ID |
+| `DEFAULT_LECTURE_ID` | 任意 | マップ外 `participant_id` のフォールバック講義 ID（既定 `lecture-1`） |
 | `VERTEX_PROJECT_ID` | AI 利用時 | Vertex AI プロジェクト |
 | `VERTEX_LOCATION` | AI 利用時 | Vertex AI リージョン |
 | `GOOGLE_APPLICATION_CREDENTIALS` | AI 利用時 | サービスアカウント JSON の**ファイルパス**（未設定時 ADC） |
-| `YOUTUBE_API_KEY` | 動画長取得時 | YouTube Data API キー（Phase 2 以降） |
-
-Form GAS の `API_BASE_URL` は **Flask 公開 URL のルート**（末尾スラッシュなし）とする。
+| `LECTURE_SRT_PATH` | 任意（**非推奨**） | 単一 SRT の後方互換 fallback。lecture 別パス（`lectures/{lecture-id}/subtitles.srt`）を優先する |
+| `YOUTUBE_API_KEY` | 動画長取得時 | YouTube Data API キー（LAD 区間チャート用） |
 
 ### ローカル秘密情報（What）
 
@@ -404,14 +427,16 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 |------|------|
 | `POST /api/viewing-logs` バッチ | 近い実験では単件 POST で開始。必要時に追加 |
 | API キー必須化 | ADR: 推奨だが必須ではない |
-| 複数講義 UI | `lecture_id` クエリ拡張で対応可能 |
+| 複数講義 UI | `participant_id` マップで 3 講義をカバー。将来は `lecture_id` クエリ拡張で対応可能 |
 | Research Export Infrastructure | 別コンテキスト |
 
 ---
 
 ## 受入基準（本仕様）
 
-- [ ] 講義動画・LAD+AI・バックエンドの技術選定が本ドキュメントに記載されている
+- [ ] `StaticLectureCatalog` が 3 講義（`lecture-1`〜`lecture-3`）と SRT パス規約を返すことが定義されている
+- [ ] 講義動画・小テストの導線が Flask（`/lecture`・`POST /api/*`）のみと明記されている
+- [ ] `participant_id` 1/2/3 と講義・動画の対応が導線として定義されている
 - [ ] ADR との差分（講義動画ホスティング）が明示されている
 - [ ] Port → Adapter 対応表が Application Port と 1:1 で対応している
 - [ ] `framework_drivers/` の platform / db / external 分界が定義されている

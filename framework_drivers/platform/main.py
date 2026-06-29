@@ -13,9 +13,10 @@ from flask import Flask, g, redirect, render_template, request, url_for
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 from framework_drivers.db.learning.sqlite_connection import connect_learning_db
-from framework_drivers.db.learning.static_lecture_catalog import build_near_term_lecture
+from framework_drivers.db.learning.static_lecture_catalog import StaticLectureCatalog
 from framework_drivers.db.tutoring.sqlite_connection import connect_tutor_db
 from framework_drivers.external.youtube.youtube_video_id import extract_youtube_video_id
+from interfaces.common.learner_lecture_mapping import resolve_lecture_id_for_participant
 from framework_drivers.platform.http_response import controller_result_to_flask_response
 from framework_drivers.platform.wiring import (
     build_get_last_updated_controller,
@@ -32,7 +33,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _PLATFORM_ROOT = Path(__file__).resolve().parent
 
 _DEFAULT_QUIZ_FORM_URL = "https://forms.gle/imt5HxuzNHnJkeW26"
-"""lecture_video_platform/lectureVideoPlatform.html と同一の Google Form URL。"""
+"""小テスト用 Google Form の既定 URL（`QUIZ_FORM_URL` で上書き可）。"""
 
 _REFLECT_FIXED_TEXT = {
     "reflection_intro": (
@@ -58,14 +59,34 @@ def _resolve_quiz_form_url() -> str:
     return os.environ.get("QUIZ_FORM_URL", _DEFAULT_QUIZ_FORM_URL).strip()
 
 
-def _resolve_lecture_youtube_video_id() -> str:
-    lecture = build_near_term_lecture()
+_STATIC_LECTURE_CATALOG = StaticLectureCatalog()
+
+
+def _resolve_youtube_video_id_for_participant(
+    participant_id: str,
+    *,
+    lecture_id: str | None = None,
+) -> tuple[str, str]:
+    """participant から講義 ID と YouTube video ID を解決する。
+
+    Raises:
+        ValueError: lecture_id 解決失敗、未知講義、または video URL が不正なとき。
+    """
+    resolve_result = resolve_lecture_id_for_participant(participant_id, lecture_id)
+    if resolve_result.is_err:
+        raise ValueError(str(resolve_result.error))
+
+    resolved_lecture_id = resolve_result.value
+    lecture = _STATIC_LECTURE_CATALOG.find_by_id(resolved_lecture_id)
+    if lecture is None:
+        raise ValueError(f"Unknown lecture_id: {resolved_lecture_id}")
+
     video_id = extract_youtube_video_id(lecture.video_url)
     if video_id is None:
-        raise RuntimeError(
-            "近い実験講義の video_url から YouTube video ID を解決できません"
+        raise ValueError(
+            f"lecture {resolved_lecture_id} の video_url から YouTube video ID を解決できません"
         )
-    return video_id
+    return str(resolved_lecture_id), video_id
 
 
 def create_app() -> Flask:
@@ -130,23 +151,46 @@ def create_app() -> Flask:
     def lecture():
         """GET /lecture: 講義動画ページ（participant_id クエリ必須）。"""
         participant_id = request.args.get("participant_id", "").strip()
+        quiz_form_url = _resolve_quiz_form_url()
         if not participant_id:
             return (
                 render_template(
                     "lecture.html",
                     missing_participant_id=True,
                     participant_id="",
+                    lecture_id="",
                     youtube_video_id="",
-                    quiz_form_url=_resolve_quiz_form_url(),
+                    lecture_error="",
+                    quiz_form_url=quiz_form_url,
                 ),
                 400,
+            )
+        try:
+            lecture_id, youtube_video_id = _resolve_youtube_video_id_for_participant(
+                participant_id,
+                lecture_id=request.args.get("lecture_id"),
+            )
+        except ValueError as exc:
+            return (
+                render_template(
+                    "lecture.html",
+                    missing_participant_id=False,
+                    participant_id=participant_id,
+                    lecture_id="",
+                    youtube_video_id="",
+                    lecture_error=str(exc),
+                    quiz_form_url=quiz_form_url,
+                ),
+                404,
             )
         return render_template(
             "lecture.html",
             missing_participant_id=False,
             participant_id=participant_id,
-            youtube_video_id=_resolve_lecture_youtube_video_id(),
-            quiz_form_url=_resolve_quiz_form_url(),
+            lecture_id=lecture_id,
+            youtube_video_id=youtube_video_id,
+            lecture_error="",
+            quiz_form_url=quiz_form_url,
         )
 
     @app.route("/chat", methods=["POST"])

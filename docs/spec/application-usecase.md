@@ -5,6 +5,7 @@
 - [domain-model.md](./domain-model.md) で Entity / 集約 / Domain Service を定義した。次に **アプリケーション層が担う手順（ユースケース）** を仕様化し、Interactor 実装と TDD の契約とする
 - 現行 Flask ルート（`app/main.py`）と Repository（`db/`）に散在するオーケストレーションを、**Use Case + Port** に集約する
 - 各ユースケース仕様は **コードに翻訳できる自然言語** とし、Request / Response / Port / `execute` 手順 / 受入基準を 1 見出しセットで記述する
+- 近い実験は **3 講義**の `LectureCatalog` と SRT 配置規約（`lectures/{lecture-id}/subtitles.srt`）を本仕様で確定する
 
 ## スコープ
 
@@ -98,9 +99,9 @@ tests/
 
 | 概念 | 責務 | 備考 |
 |------|------|------|
-| 動画再生 | 講義動画プラットフォーム（GAS + YouTube IFrame API） | バックエンドは動画バイナリを保持しない |
+| 動画再生 | 講義動画ページ（Flask `/lecture` + YouTube IFrame API） | バックエンドは動画バイナリを保持しない |
 | `Lecture`（ドメイン） | 講義**メタデータ**（title, videoUrl, srtPath, quizDefinition） | 動画 URL は参照用。実体は YouTube |
-| `LectureCatalog`（Port） | `lectureId` から `Lecture` メタデータを解決 | 実装は設定ファイル / DB / 外部 API のいずれか |
+| `LectureCatalog`（Port） | `lectureId` から `Lecture` メタデータを解決 | 近い実験は `StaticLectureCatalog`（3 講義） |
 
 **Session 確保・視聴記録**では `LectureCatalog` は不要。**小テスト記録・LAD・AI プロンプト**で必要。
 
@@ -146,6 +147,30 @@ tests/
 | メソッド | 入力 | 出力 | 備考 |
 |---------|------|------|------|
 | `find_by_id` | `LectureId` | `Lecture \| None` | メタデータ参照。動画本体は返さない |
+
+#### 近い実験: 3 講義カタログ
+
+`StaticLectureCatalog`（Framework & Drivers 層）は **3 件の `Lecture`** を保持する。`participant_id` と `lecture_id` の対応は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture) を参照。
+
+| lecture_id | video_url（YouTube） |
+|------------|---------------------|
+| `lecture-1` | `https://www.youtube.com/watch?v=Y2HC0I8cTAI` |
+| `lecture-2` | `https://www.youtube.com/watch?v=1MuwwFipX9o` |
+| `lecture-3` | `https://www.youtube.com/watch?v=Sa06YB2oXyw` |
+
+**小テスト設問（`QuizDefinition`）** は 3 講義共通のプレースホルダ（現行 5 問）で開始してよい。
+
+##### SRT（字幕）配置規約
+
+| 項目 | 規約 |
+|------|------|
+| 配置パス | **`lectures/{lecture-id}/subtitles.srt`**（リポジトリ直下） |
+| 例 | `lectures/lecture-1/subtitles.srt` |
+| `Lecture.srt_path` | 上記パスをプロジェクトルートから解決した結果 |
+| 環境変数 `LECTURE_SRT_PATH` | **非推奨**（lecture 別パスを優先）。単一 SRT の fallback は `ChatPromptBuilder` 側で後方互換のため維持してよい |
+| 未配置時 | 視聴ログ・LAD・Session は動作する。AI プロンプトの字幕セクションは `(なし)` となりうる |
+
+講義 ID・動画 URL・SRT の対応表は `lectures/README.md` に記載する。
 
 ### `LearningSessionIdGenerator`
 
@@ -300,7 +325,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 | フィールド | 型 | 必須 | 既存 API フィールド |
 |-----------|-----|------|-------------------|
 | `learner_id` | `LearnerId` | yes | `participant_id` |
-| `lecture_id` | `LectureId` | yes | （未導入。近い実験では固定値可） |
+| `lecture_id` | `LectureId` | yes | （未送信時は interfaces が `participant_id` から解決） |
 | `occurred_at` | `datetime` | yes | `time_stamp` |
 | `video_position` | `int` | yes | `current_time`（ingress で小数切り捨て） |
 | `action` | `ViewingAction` | yes | `action` |
@@ -363,7 +388,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 |------|-----|
 | ID | `RecordQuizAttempt` |
 | コンテキスト | Learning |
-| アクター | 学習者（Google Form 経由） |
+| アクター | 学習者（Flask API 経由） |
 | トリガー | 小テスト送信 1 回 |
 | Interactor | `RecordQuizAttemptUseCase` |
 
@@ -378,7 +403,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 | フィールド | 型 | 必須 | 既存 API フィールド |
 |-----------|-----|------|-------------------|
 | `learner_id` | `LearnerId` | yes | `participant_id` |
-| `lecture_id` | `LectureId` | yes | （未導入。近い実験では固定値可） |
+| `lecture_id` | `LectureId` | yes | （未送信時は interfaces が `participant_id` から解決） |
 | `attempted_at` | `datetime` | yes | `timestamp` / `created_at` |
 | `score_numerator` | `int` | yes | `score_numerator` |
 | `score_denominator` | `int` | yes | `score_denominator` |
@@ -758,7 +783,7 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 | `user_message` | `str` | yes | `message` | 学習者の発話 |
 | `tutor_session_id` | `TutorSessionId \| None` | no | `session_id` | 継続対話時。未指定なら初回 |
 | `learner_id` | `LearnerId` | 初回 yes | `participant_id` | |
-| `lecture_id` | `LectureId` | 初回 yes | （未導入・固定値可） | Snapshot 取得用 |
+| `lecture_id` | `LectureId` | 初回 yes | （未送信時は interfaces が `participant_id` から解決） | Snapshot 取得用 |
 | `sent_at` | `datetime` | yes | — | user / assistant Message の `created_at` |
 
 **初回 vs 継続**:
@@ -835,7 +860,7 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 | 既存 | 移行方針 |
 |------|---------|
-| `POST /chat` | `participant_id` → `learner_id`、`lecture_id` は近い実験では定数。`session_id` → `tutor_session_id` |
+| `POST /chat` | `participant_id` → `learner_id`、`lecture_id` は未送信時 interfaces が `participant_id` から解決。`session_id` → `tutor_session_id` |
 
 ---
 

@@ -28,8 +28,6 @@ class TestPostQuizAttempts:
         self, phase2_client
     ) -> None:
         """必須項目を満たす JSON を送ると 201 と attempt_id を返す。"""
-        if phase2_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         r = phase2_client.post(
             "/api/quiz-attempts",
             json=_valid_payload(),
@@ -46,8 +44,6 @@ class TestPostQuizAttempts:
         self, phase2_client
     ) -> None:
         """participant_id を欠くと 400 を返す。"""
-        if phase2_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
         payload = _valid_payload()
         del payload["participant_id"]
         r = phase2_client.post(

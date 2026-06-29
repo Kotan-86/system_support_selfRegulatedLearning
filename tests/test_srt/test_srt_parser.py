@@ -1,9 +1,11 @@
 """
 SRT パーサーと「秒 → 該当セグメント」の単体テスト。
 
-app.srt の parse_srt_file / get_segments_for_times が仕様どおり動くことを検証する。
+interfaces.tutoring.srt の parse_srt_file / get_segments_for_times が仕様どおり動くことを検証する。
 """
 import pytest
+
+from interfaces.tutoring.srt import get_segments_for_times, parse_srt_file
 
 
 # テスト用の最小 SRT（2ブロック）。00:00:14,639〜00:00:16,619 と 00:00:26,100〜00:00:27,000
@@ -22,7 +24,6 @@ class TestParseSrtFile:
 
     def test_returns_list_of_segments_with_start_sec_end_sec_text(self) -> None:
         """パース結果は start_sec, end_sec, text を持つ辞書のリストである。"""
-        from app.srt import parse_srt_file
         from pathlib import Path
         import tempfile
 
@@ -44,7 +45,6 @@ class TestParseSrtFile:
 
     def test_parses_timestamps_to_seconds(self) -> None:
         """SRT のタイムスタンプが秒（float）に変換されている。"""
-        from app.srt import parse_srt_file
         from pathlib import Path
         import tempfile
 
@@ -72,7 +72,6 @@ class TestGetSegmentsForTimes:
 
     def test_returns_text_for_times_within_segments(self) -> None:
         """current_time のリストに対応するセグメントのテキストが時系列で連結される。"""
-        from app.srt import parse_srt_file, get_segments_for_times
         from pathlib import Path
         import tempfile
 
@@ -90,7 +89,6 @@ class TestGetSegmentsForTimes:
 
     def test_returns_empty_or_none_when_no_segments(self) -> None:
         """セグメントが空のときは空文字または (なし) 相当。"""
-        from app.srt import get_segments_for_times
 
         result = get_segments_for_times([], [15, 30])
         assert result == "" or "(なし)" in result or result is None

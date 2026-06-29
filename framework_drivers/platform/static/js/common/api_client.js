@@ -1,11 +1,10 @@
 // 仕様: docs/spec/interfaces-layer.md#ingress-規約
 // 仕様: docs/spec/framework-drivers-layer.md#HTTP-契約
-// 仕様: lecture_video_platform/lectureVideoPlatform.gs buildViewingLogPayload
 (function (global) {
   "use strict";
 
   /**
-   * GAS buildViewingLogPayload と同一形状の JSON を組み立てる。
+   * POST /api/viewing-log 用の視聴ログ payload を組み立てる（API 契約形状）。
    */
   function buildViewingLogPayload(participantId, currentTime, action, duration) {
     return {

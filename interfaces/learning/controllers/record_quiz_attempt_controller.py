@@ -17,7 +17,7 @@ from interfaces.common.error_presenter import present_error
 from interfaces.common.ingress import (
     parse_attempted_at,
     parse_learner_id,
-    parse_lecture_id,
+    parse_lecture_id_for_participant,
     parse_quiz_answers,
     parse_required_int,
 )
@@ -31,7 +31,7 @@ from interfaces.learning.view_models.record_responses import (
 
 
 class RecordQuizAttemptController:
-    """GAS 小テスト payload を正規化し、UC 実行後に成功 ViewModel を返す。"""
+    """小テスト API payload を正規化し、UC 実行後に成功 ViewModel を返す。"""
 
     def __init__(
         self,
@@ -49,7 +49,10 @@ class RecordQuizAttemptController:
         if learner_result.is_err:
             return present_error(learner_result.error)
 
-        lecture_result = parse_lecture_id(payload.get("lecture_id"))
+        lecture_result = parse_lecture_id_for_participant(
+            str(payload.get("participant_id") or ""),
+            payload.get("lecture_id"),
+        )
         if lecture_result.is_err:
             return present_error(lecture_result.error)
 

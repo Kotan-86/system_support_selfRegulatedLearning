@@ -21,7 +21,7 @@ from tests.test_application.test_learning.test_record_viewing_event import _use_
 
 
 def _gas_viewing_log_payload(**overrides: object) -> dict[str, object]:
-    """GAS buildViewingLogPayload が送る想定の JSON と同一の形。"""
+    """POST /api/viewing-log の API 契約 JSON と同一の形。"""
     payload: dict[str, object] = {
         "participant_id": "1",
         "time_stamp": "2026-02-23T11:18:42.000Z",

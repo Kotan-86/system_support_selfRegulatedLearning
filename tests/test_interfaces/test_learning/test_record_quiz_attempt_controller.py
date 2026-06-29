@@ -24,7 +24,7 @@ from tests.test_application.test_learning.test_record_quiz_attempt import _use_c
 
 
 def _gas_quiz_attempt_payload(**overrides: object) -> dict[str, object]:
-    """GAS quizForm.gs が送る想定の JSON と同一の形。"""
+    """POST /api/quiz-attempts の API 契約 JSON と同一の形。"""
     payload: dict[str, object] = {
         "participant_id": "1",
         "timestamp": "2026-01-20T11:30:38",

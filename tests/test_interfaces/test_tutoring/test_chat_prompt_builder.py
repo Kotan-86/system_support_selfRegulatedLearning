@@ -25,7 +25,7 @@ from interfaces.tutoring.chat_prompt_builder import DefaultChatPromptBuilder
 
 FIXED_NOW = datetime(2026, 2, 23, 11, 18, 42, tzinfo=timezone.utc)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEMO_SRT = PROJECT_ROOT / "demoLectureVideoSub.srt"
+LECTURE_1_SRT = PROJECT_ROOT / "lectures" / "lecture-1" / "subtitles.srt"
 
 
 def _lecture(*, srt_path: str = "/path/to/missing.srt") -> Lecture:
@@ -38,8 +38,14 @@ def _lecture(*, srt_path: str = "/path/to/missing.srt") -> Lecture:
             questions=(
                 Question(
                     index=1,
-                    text="問1",
+                    text="問1の問題文",
                     choices=("A", "B"),
+                    correct_answer="A",
+                ),
+                Question(
+                    index=2,
+                    text="問2の問題文",
+                    choices=("A", "B", "C"),
                     correct_answer="A",
                 ),
             )
@@ -74,7 +80,7 @@ def _viewing_event(
 
 
 class TestDefaultChatPromptBuilder:
-    """app/main.py の _format_* 相当の振る舞いを LearningSnapshot で検証する。"""
+    """DefaultChatPromptBuilder の振る舞いを LearningSnapshot と Lecture で検証する。"""
 
     def test_empty_snapshot_uses_placeholders(self) -> None:
         builder = DefaultChatPromptBuilder()
@@ -138,8 +144,17 @@ class TestDefaultChatPromptBuilder:
         )
 
         assert "スコア: 4/5" in prompt
-        assert "問1: 正解" in prompt
-        assert "問2: 不正解" in prompt
+        assert "問1:" in prompt
+        assert "問題文: 問1の問題文" in prompt
+        assert "選択肢: A, B" in prompt
+        assert "学習者の解答: A" in prompt
+        assert "正解選択肢: A" in prompt
+        assert "正解フラグ: 1" in prompt
+        assert "問2:" in prompt
+        assert "問題文: 問2の問題文" in prompt
+        assert "選択肢: A, B, C" in prompt
+        assert "学習者の解答: B" in prompt
+        assert "正解フラグ: 0" in prompt
 
     def test_prompt_includes_message_history(self) -> None:
         messages = (
@@ -185,7 +200,9 @@ class TestDefaultChatPromptBuilder:
 
         assert "講義字幕: 線形代数の基礎\nベクトルとは" in prompt
 
-    @pytest.mark.skipif(not DEMO_SRT.exists(), reason="demoLectureVideoSub.srt が無い")
+    @pytest.mark.skipif(
+        not LECTURE_1_SRT.is_file(), reason="lectures/lecture-1/subtitles.srt が無い"
+    )
     def test_prompt_includes_srt_text_for_viewing_position(self) -> None:
         snapshot = LearningSnapshot(
             session_id=LearningSessionId("session-1"),
@@ -199,8 +216,8 @@ class TestDefaultChatPromptBuilder:
             snapshot,
             (),
             "このあたりの説明がわかりません",
-            _lecture(srt_path=str(DEMO_SRT)),
+            _lecture(srt_path=str(LECTURE_1_SRT)),
         )
 
         assert "講義字幕" in prompt
-        assert "線形代数" in prompt or "ベクトル" in prompt
+        assert "整数倍" in prompt

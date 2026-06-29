@@ -45,13 +45,9 @@ class TestLearningApiIntegration:
         3. GET /api/last-updated で最終更新時刻が返る
         4. GET /api/participants/1/lad で視聴ログ・小テスト結果が返る
         """
-        if phase2_client is None:
-            pytest.skip("app.main が未実装のためスキップ")
-
-        client = phase2_client
 
         # 1. 視聴ログ 1 件
-        r1 = client.post(
+        r1 = phase2_client.post(
             "/api/viewing-log",
             json=viewing_log_payload,
             content_type="application/json",
@@ -59,7 +55,7 @@ class TestLearningApiIntegration:
         assert r1.status_code == 201, "視聴ログ登録は 201"
 
         # 2. 小テスト 1 試行
-        r2 = client.post(
+        r2 = phase2_client.post(
             "/api/quiz-attempts",
             json=quiz_attempt_payload,
             content_type="application/json",
@@ -69,14 +65,14 @@ class TestLearningApiIntegration:
         assert data2 is not None and "attempt_id" in data2
 
         # 3. 最終更新時刻
-        r3 = client.get("/api/last-updated?participant_id=1")
+        r3 = phase2_client.get("/api/last-updated?participant_id=1")
         assert r3.status_code == 200
         data3 = r3.get_json()
         assert data3 is not None and "last_updated" in data3
         assert data3["last_updated"] is not None, "1 件以上登録済みなら last_updated が入る"
 
         # 4. LAD データ
-        r4 = client.get("/api/participants/1/lad")
+        r4 = phase2_client.get("/api/participants/1/lad")
         assert r4.status_code == 200
         data4 = r4.get_json()
         assert data4 is not None

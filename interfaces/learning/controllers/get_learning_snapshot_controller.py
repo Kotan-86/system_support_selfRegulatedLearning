@@ -14,7 +14,7 @@ from application.learning.use_cases.get_learning_snapshot import (
 )
 
 from interfaces.common.error_presenter import present_error
-from interfaces.common.ingress import parse_learner_id, parse_lecture_id
+from interfaces.common.ingress import parse_learner_id, parse_lecture_id_for_participant
 from interfaces.learning.ports.video_duration_resolver import VideoDurationResolver
 from interfaces.learning.presenters.lad_dashboard_presenter import LadDashboardPresenter
 from interfaces.learning.view_models.errors import ErrorViewModel
@@ -46,7 +46,7 @@ class GetLearningSnapshotController:
         if learner_result.is_err:
             return present_error(learner_result.error)
 
-        lecture_result = parse_lecture_id(lecture_id)
+        lecture_result = parse_lecture_id_for_participant(participant_id, lecture_id)
         if lecture_result.is_err:
             return present_error(lecture_result.error)
 

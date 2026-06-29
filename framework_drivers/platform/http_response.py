@@ -62,7 +62,7 @@ def controller_result_to_flask_response(
         return jsonify(last_updated_view_model_to_json_dict(result)), 200
 
     if isinstance(result, RecordViewingEventSuccessViewModel):
-        # 既存 GAS 契約: 成功時は空ボディ + 201
+        # API 契約: 成功時は空ボディ + 201
         return Response(status=201), 201
 
     if isinstance(result, RecordQuizAttemptSuccessViewModel):

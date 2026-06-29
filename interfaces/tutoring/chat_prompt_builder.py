@@ -1,17 +1,18 @@
 # 仕様: docs/spec/interfaces-layer.md#Tutoring-ACL-ChatPromptBuilder
-"""ChatPromptBuilder Port の具象実装（app/main.py の _format_* 移行先）。"""
+"""ChatPromptBuilder Port の具象実装。"""
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from app.srt import get_segments_for_times, parse_srt_file
 from application.tutoring.ports.chat_prompt_builder import ChatPromptBuilder
 from domain.learning.lecture import Lecture
 from domain.learning.learning_snapshot import LearningSnapshot
 from domain.tutoring.message import Message
 
+from interfaces.learning.services.quiz_result_rows import build_quiz_result_rows
 from interfaces.tutoring.prompts import SYSTEM_PROMPT
+from interfaces.tutoring.srt import get_segments_for_times, parse_srt_file
 
 _EMPTY_PLACEHOLDER = "(なし)"
 _HISTORY_EMPTY_PLACEHOLDER = "(履歴なし)"
@@ -43,8 +44,8 @@ def _format_lecture_log(snapshot: LearningSnapshot) -> str:
     return "\n".join(lines)
 
 
-def _format_quiz_result(snapshot: LearningSnapshot) -> str:
-    """最新小テストのスコアと各問正誤を列挙する。データが無い場合は "(なし)"。"""
+def _format_quiz_result(snapshot: LearningSnapshot, lecture: Lecture) -> str:
+    """最新小テストのスコアと各問詳細を列挙する。データが無い場合は "(なし)"。"""
     attempt = snapshot.latest_quiz_attempt
     answers = snapshot.quiz_answers
     if attempt is None and not answers:
@@ -55,9 +56,21 @@ def _format_quiz_result(snapshot: LearningSnapshot) -> str:
         parts.append(
             f"スコア: {attempt.score_numerator}/{attempt.score_denominator}"
         )
-    for answer in answers:
-        result = "正解" if answer.is_correct else "不正解"
-        parts.append(f"問{answer.question_index}: {result}")
+
+    questions_by_index = {
+        question.index: question for question in lecture.quiz_definition.questions
+    }
+    rows = build_quiz_result_rows(answers, lecture.quiz_definition)
+    for row in rows:
+        question = questions_by_index.get(row.question_index)
+        lines = [f"問{row.question_index}:", f"  問題文: {row.question_text}"]
+        if question is not None:
+            lines.append(f"  選択肢: {', '.join(question.choices)}")
+        lines.append(f"  学習者の解答: {row.selected_choice}")
+        if question is not None:
+            lines.append(f"  正解選択肢: {question.correct_answer}")
+        lines.append(f"  正解フラグ: {1 if row.is_correct else 0}")
+        parts.append("\n".join(lines))
 
     return "\n".join(parts) if parts else _EMPTY_PLACEHOLDER
 
@@ -110,7 +123,7 @@ class DefaultChatPromptBuilder(ChatPromptBuilder):
     ) -> str:
         history_str = _format_history(messages)
         lecture_log_str = _format_lecture_log(snapshot)
-        quiz_result_str = _format_quiz_result(snapshot)
+        quiz_result_str = _format_quiz_result(snapshot, lecture)
         lecture_transcript_str = _build_lecture_transcript(snapshot, lecture)
 
         return SYSTEM_PROMPT.format(

@@ -29,7 +29,7 @@
 | 近い実験 | 同一 `(learner_id, lecture_id)` の Session は **1 行まで** |
 | 再受験 | 同一 Session に **`quiz_attempts` 複数行**（LAD は最新 1 試行を Read） |
 | マイグレーション | **空 DB から新スキーマのみ**。既存データの移行は行わない |
-| 小テスト入力 | **Google Form + GAS** を維持（`POST /api/quiz-attempts` 契約は不変） |
+| 小テスト入力 | **`POST /api/quiz-attempts`（Flask）**（API 契約は不変） |
 
 ---
 
@@ -42,7 +42,7 @@
 | 3 | **`ViewingEventId` / `QuizAttemptId`** | DB の **INTEGER `id` を `str()` で文字列化**してドメイン ID とする（INSERT 後の `lastrowid` を Mapper が VO 化） |
 | 4 | **マイグレーション** | **空 DB から新スキーマのみ** |
 | 5 | **実験開始前のスキーマ確定** | ADR「実験後は変更しない」に従い、**実験開始前に本仕様を確定**する |
-| 6 | **小テスト入力** | **Google Form 維持** |
+| 6 | **小テスト入力** | **`POST /api/quiz-attempts`（Flask）** |
 | 7 | **`sessions.learning_session_id` 追加** | **Learning Repository 実装と同時**（Phase 0〜1。Tutoring Phase 3 まで待たない） |
 
 ### ID 生成（Mapper / Repository）
@@ -296,7 +296,7 @@ GAS / API が小数 `duration` を送った場合は ingress で先に整数化�
 | `RecordQuizAttempt` | 対象 Session 確保後、`quiz_attempts` + `quiz_attempt_answers` に INSERT → `QuizAttemptId = str(lastrowid)` |
 | `GetLearningSnapshot` | Session + 子を読み、`LearningSnapshotBuilder` へ |
 
-小テスト入力は **Google Form + GAS**（`quiz_form/quizForm.gs` → `POST /api/quiz-attempts`）。payload の `participant_id` は interfaces 層で `learner_id` に変換し、Repository が Session を特定してから INSERT する。
+小テスト入力は **`POST /api/quiz-attempts`（Flask）**。payload の `participant_id` は interfaces 層で `learner_id` に変換し、Repository が Session を特定してから INSERT する。
 
 ---
 
