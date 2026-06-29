@@ -204,7 +204,7 @@ flowchart LR
 
 | DB | コンテキスト | テーブル例 |
 |----|-------------|-----------|
-| 学習データ用 | Learning | viewing_logs, quiz_attempts |
+| 学習データ用 | Learning | learning_sessions, viewing_logs, quiz_attempts |
 | 対話用 | Tutoring | sessions, messages |
 | — | Research Export | 永続化なし（Export 時に結合） |
 
@@ -253,7 +253,7 @@ LearningSnapshot（Read Model・Entity ではない）
 
 **備考**
 
-- インフラ層・既存 API では `participant_id` として永続化してよい
+- HTTP API では `participant_id` として受け取り、`learning_sessions.learner_id` として永続化する（[framework-drivers-persistence.md](./framework-drivers-persistence.md)）
 
 ---
 
@@ -497,8 +497,8 @@ TutorSession（Aggregate Root）
 
 **インフラマッピング**
 
-- 既存 `messages` テーブル（session_id, role, content, created_at）と対応
-- 既存 `sessions` テーブルは TutorSession に対応（Phase 6 で `learning_session_id` 列を追加）
+- 既存 `sessions` テーブル（session_id, role, content, created_at）と対応
+- 既存 `sessions` テーブルは TutorSession に対応（`learning_session_id` 列 — [framework-drivers-persistence.md](./framework-drivers-persistence.md)）
 
 ---
 
@@ -553,8 +553,8 @@ Domain Service は状態を持たない。Entity / VO 単体では表現しに�
 
 | 現行 | ドメイン上の位置 |
 |------|------------------|
-| `db/schema.sql` sessions, messages | TutorSession, Message（LearningSession 未導入） |
-| `db/schema_learning.sql` viewing_logs, quiz_attempts | ViewingEvent, QuizAttempt（lecture_id / session_id 未導入） |
+| `db/schema.sql` sessions, messages | TutorSession, Message（`learning_session_id` で LearningSession 参照 — [framework-drivers-persistence.md](./framework-drivers-persistence.md)） |
+| `db/schema_learning.sql` learning_sessions, viewing_logs, quiz_attempts | LearningSession, ViewingEvent, QuizAttempt |
 | `get_lad_data_for_participant` | LearningSnapshotBuilder の出力に相当 |
 | `app/main.py` `_format_*` | Presenter 層（ドメイン外） |
 

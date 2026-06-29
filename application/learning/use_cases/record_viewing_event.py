@@ -20,6 +20,7 @@ from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
 from domain.learning.viewing_event import ViewingAction
+from domain.shared.ids import ViewingEventId
 
 
 def _validate_viewing_invariants(
@@ -68,18 +69,23 @@ def _validate_viewing_invariants(
     return ok(None)
 
 
+_PLACEHOLDER_VIEWING_EVENT_ID = ViewingEventId("0")
+"""SQLite Adapter 向け: INSERT 前の仮 ID（save 後に DB 確定 ID で置換される）。"""
+
+
 class RecordViewingEventUseCase:
     """動画操作 1 回を LearningSession 集約に追記する。"""
 
     def __init__(
         self,
         start_or_get: StartOrGetLearningSessionUseCase,
-        viewing_event_id_generator: ViewingEventIdGenerator,
         repository: LearningSessionRepository,
+        *,
+        viewing_event_id_generator: ViewingEventIdGenerator | None = None,
     ) -> None:
         self._start_or_get = start_or_get
-        self._viewing_event_id_generator = viewing_event_id_generator
         self._repository = repository
+        self._viewing_event_id_generator = viewing_event_id_generator
 
     def execute(
         self, request: RecordViewingEventRequest
@@ -106,7 +112,11 @@ class RecordViewingEventUseCase:
             return session_result  # type: ignore[return-value]
 
         session = session_result.value.session
-        event_id = self._viewing_event_id_generator.next_id()
+        event_id = (
+            self._viewing_event_id_generator.next_id()
+            if self._viewing_event_id_generator is not None
+            else _PLACEHOLDER_VIEWING_EVENT_ID
+        )
         updated = session.record_viewing_event(
             event_id=event_id,
             occurred_at=req.occurred_at,
@@ -114,10 +124,11 @@ class RecordViewingEventUseCase:
             action=req.action,
             position_delta=req.position_delta,
         )
-        self._repository.save(updated)
+        saved = self._repository.save(updated)
+        persisted_event = saved.viewing_events[-1]
         return ok(
             RecordViewingEventResponse(
-                event_id=event_id,
-                session_id=updated.id,
+                event_id=persisted_event.id,
+                session_id=saved.id,
             )
         )

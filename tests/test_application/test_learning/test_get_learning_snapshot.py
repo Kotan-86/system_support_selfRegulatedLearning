@@ -93,8 +93,8 @@ def _record_viewing_use_case(
             repository=repository,
             id_generator=FakeLearningSessionIdGenerator(),
         ),
-        viewing_event_id_generator=FakeViewingEventIdGenerator(),
         repository=repository,
+        viewing_event_id_generator=FakeViewingEventIdGenerator(),
     )
 
 
@@ -111,8 +111,8 @@ def _record_quiz_use_case(
         lecture_catalog=FakeLectureCatalog(
             lectures=lectures if lectures is not None else (_lecture(),)
         ),
-        quiz_attempt_id_generator=FakeQuizAttemptIdGenerator(),
         repository=repository,
+        quiz_attempt_id_generator=FakeQuizAttemptIdGenerator(),
     )
 
 

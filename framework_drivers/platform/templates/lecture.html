@@ -1,0 +1,45 @@
+{# 仕様: docs/spec/framework-drivers-layer.md#HTML-ページ #}
+{# 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-5-講義動画フロント #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>講義動画</title>
+  <style>
+    #player { pointer-events: auto; }
+    body { font-family: sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; }
+    .error-box { border: 1px solid #c62828; background: #ffebee; padding: 16px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  {% if missing_participant_id %}
+  <div class="error-box">
+    <h3>参加者 ID が必要です</h3>
+    <p>このページには <code>?participant_id=</code> クエリパラメータが必須です。</p>
+    <p>例: <code>/lecture?participant_id=1</code></p>
+  </div>
+  {% else %}
+  <h3>講義動画</h3>
+  <p>参加者 ID: <strong>{{ participant_id }}</strong></p>
+  <div id="player"></div>
+  <div id="time">0:00:00</div>
+  <input type="range" id="seekbar" min="0" max="100" value="0">
+  <br>
+  <button id="play_button" type="button" onclick="play()">再生</button>
+  <button id="pause_button" type="button" onclick="pause()">一時停止</button>
+  <button id="forward_skip_button" type="button" onclick="forwardSkip()">先送りスキップ</button>
+  <button id="backward_skip_button" type="button" onclick="backwardSkip()">巻き戻しスキップ</button>
+  <p>最初にこのページをリロードしてください。リロードしないまま始めると正常に動画再生ができない場合があります。</p>
+  <a href="{{ quiz_form_url }}" target="_blank" rel="noopener noreferrer">小テストに進む</a>
+
+  <script>
+    window.__LECTURE_VIDEO_ID__ = {{ youtube_video_id | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/common/participant_context.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/common/api_client.js') }}"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="{{ url_for('static', filename='js/lecture/player.js') }}"></script>
+  {% endif %}
+</body>
+</html>

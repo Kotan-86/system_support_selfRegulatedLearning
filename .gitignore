@@ -1,11 +1,17 @@
 # --- 絶対に含めてはいけないもの（認証情報・秘密） ---
 service_account.json
+**/service_account.json
+**/*-credentials.json
+**/*-service-account*.json
 .env
+.env.local
 .env.*
 !.env.example
 *.pem
 *.key
 run_app.ps1
+secrets/*
+!secrets/README.md
 
 # --- ローカルデータ（中に個人情報が入る可能性） ---
 db/data/*.db

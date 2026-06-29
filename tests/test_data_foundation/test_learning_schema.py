@@ -1,8 +1,9 @@
 """
 Phase 1 Step 1.3: 学習データ用 DB のスキーマを作成する
 
-学習用スキーマに viewing_logs, quiz_attempts, quiz_attempt_answers が定義され、
+学習用スキーマに learning_sessions, viewing_logs, quiz_attempts, quiz_attempt_answers が定義され、
 指定カラム（is_correct は INTEGER 0/1）があることを検証する。
+仕様: docs/spec/framework-drivers-persistence.md
 """
 import sqlite3
 from pathlib import Path
@@ -24,11 +25,23 @@ def _get_columns(conn: sqlite3.Connection, table: str) -> list[tuple[str, str, i
 
 
 class TestStep1_3LearningSchemaTablesExist:
-    """学習用スキーマで 3 テーブルが作成されること。"""
+    """学習用スキーマで 4 テーブルが作成されること。"""
 
     def test_learning_schema_file_exists(self, learning_schema_path: Path) -> None:
         """学習用スキーマファイルが存在する（前提）。"""
         assert learning_schema_path.exists(), "db/schema_learning.sql が存在すること"
+
+    def test_learning_sessions_table_exists(
+        self, learning_schema_path: Path
+    ) -> None:
+        """learning_sessions テーブルが作成される。"""
+        conn = sqlite3.connect(":memory:")
+        _execute_schema(conn, learning_schema_path)
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='learning_sessions'"
+        )
+        assert cur.fetchone() is not None, "learning_sessions テーブルが存在すること"
+        conn.close()
 
     def test_viewing_logs_table_exists(
         self, learning_schema_path: Path
@@ -67,13 +80,32 @@ class TestStep1_3LearningSchemaTablesExist:
         conn.close()
 
 
+class TestStep1_3LearningSessionsColumns:
+    """learning_sessions のカラム: id, learner_id, lecture_id, started_at。"""
+
+    def test_learning_sessions_has_required_columns(
+        self, learning_schema_path: Path
+    ) -> None:
+        """learning_sessions に id, learner_id, lecture_id, started_at がある。"""
+        if not learning_schema_path.exists():
+            pytest.skip("学習用スキーマが未作成のためスキップ")
+        conn = sqlite3.connect(":memory:")
+        _execute_schema(conn, learning_schema_path)
+        rows = _get_columns(conn, "learning_sessions")
+        conn.close()
+        names = [r[0] for r in rows]
+        required = ["id", "learner_id", "lecture_id", "started_at"]
+        for col in required:
+            assert col in names, f"learning_sessions に {col} カラムがあること"
+
+
 class TestStep1_3ViewingLogsColumns:
-    """viewing_logs のカラム: id, participant_id, time_stamp, current_time, action, duration。動画複数時は video_id。"""
+    """viewing_logs のカラム: id, learning_session_id, time_stamp, current_time, action, duration。"""
 
     def test_viewing_logs_has_required_columns(
         self, learning_schema_path: Path
     ) -> None:
-        """viewing_logs に id, participant_id, time_stamp, current_time, action, duration がある。"""
+        """viewing_logs に id, learning_session_id, time_stamp, current_time, action, duration がある。"""
         if not learning_schema_path.exists():
             pytest.skip("学習用スキーマが未作成のためスキップ")
         conn = sqlite3.connect(":memory:")
@@ -81,21 +113,26 @@ class TestStep1_3ViewingLogsColumns:
         rows = _get_columns(conn, "viewing_logs")
         conn.close()
         names = [r[0] for r in rows]
-        required = ["id", "participant_id", "time_stamp", "current_time", "action", "duration"]
+        required = [
+            "id",
+            "learning_session_id",
+            "time_stamp",
+            "current_time",
+            "action",
+            "duration",
+        ]
         for col in required:
             assert col in names, f"viewing_logs に {col} カラムがあること"
-        # 動画複数時は video_id を追加する想定（あれば検証）
-        if "video_id" in names:
-            assert True  # オプションで video_id があれば OK
+        assert "participant_id" not in names, "participant_id は learning_session_id に置換されていること"
 
 
 class TestStep1_3QuizAttemptsColumns:
-    """quiz_attempts のカラム: id, participant_id, created_at, score_numerator, score_denominator。"""
+    """quiz_attempts のカラム: id, learning_session_id, created_at, score_numerator, score_denominator。"""
 
     def test_quiz_attempts_has_required_columns(
         self, learning_schema_path: Path
     ) -> None:
-        """quiz_attempts に id, participant_id, created_at, score_numerator, score_denominator がある。"""
+        """quiz_attempts に id, learning_session_id, created_at, score_numerator, score_denominator がある。"""
         if not learning_schema_path.exists():
             pytest.skip("学習用スキーマが未作成のためスキップ")
         conn = sqlite3.connect(":memory:")
@@ -103,9 +140,16 @@ class TestStep1_3QuizAttemptsColumns:
         rows = _get_columns(conn, "quiz_attempts")
         conn.close()
         names = [r[0] for r in rows]
-        required = ["id", "participant_id", "created_at", "score_numerator", "score_denominator"]
+        required = [
+            "id",
+            "learning_session_id",
+            "created_at",
+            "score_numerator",
+            "score_denominator",
+        ]
         for col in required:
             assert col in names, f"quiz_attempts に {col} カラムがあること"
+        assert "participant_id" not in names, "participant_id は learning_session_id に置換されていること"
 
 
 class TestStep1_3QuizAttemptAnswersColumns:

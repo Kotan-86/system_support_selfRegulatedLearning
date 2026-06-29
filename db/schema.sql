@@ -7,7 +7,8 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    participant_id TEXT NOT NULL DEFAULT ''
+    participant_id TEXT NOT NULL DEFAULT '',
+    learning_session_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS messages (

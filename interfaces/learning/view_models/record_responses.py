@@ -16,4 +16,5 @@ class RecordViewingEventSuccessViewModel:
 class RecordQuizAttemptSuccessViewModel:
     """POST /api/quiz-attempts 成功時の ViewModel。"""
 
+    attempt_id: str
     ok: bool = True

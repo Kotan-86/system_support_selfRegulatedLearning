@@ -79,20 +79,36 @@ def env_tutor_db_path(monkeypatch):
 
 
 @pytest.fixture
-def app_client(env_tutor_db_path, tmp_path):
+def fake_llm_gateway():
+    """テスト用 Fake LlmGateway。"""
+    from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
+
+    return FakeLlmGateway(response="スタブ応答")
+
+
+@pytest.fixture
+def app_client(env_tutor_db_path, tmp_path, monkeypatch, fake_llm_gateway):
     """
     Flask アプリのテストクライアント。
-    TUTOR_DB_PATH を tmp_path に設定し、init_db 済みの DB を使う。
-    app.main が未実装のときは None を返し、各テストでスキップする。
+    TUTOR_DB_PATH / LEARNING_DB_PATH を tmp_path に設定し、LLM は Fake に差し替える。
     """
     env_tutor_db_path.setenv("TUTOR_DB_PATH", str(tmp_path / "tutor.db"))
-    try:
-        from app.main import app
-        from db import init_db
+    monkeypatch.setenv("LEARNING_DB_PATH", str(tmp_path / "learning.db"))
+    monkeypatch.setattr(
+        "framework_drivers.platform.wiring.build_llm_gateway",
+        lambda: fake_llm_gateway,
+    )
+    from tests.test_interfaces.fakes.fake_video_duration_resolver import (
+        FakeVideoDurationResolver,
+    )
 
-        init_db.init_db()
-        app.config["TESTING"] = True
-        return app.test_client()
-    except (ImportError, AttributeError):
-        return None
+    monkeypatch.setattr(
+        "framework_drivers.platform.wiring.build_video_duration_resolver",
+        lambda: FakeVideoDurationResolver(duration_sec=600),
+    )
+    from framework_drivers.platform.main import create_app
+
+    app = create_app()
+    app.config["TESTING"] = True
+    return app.test_client()
 

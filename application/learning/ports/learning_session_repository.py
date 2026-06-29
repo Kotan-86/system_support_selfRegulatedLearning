@@ -22,5 +22,5 @@ class LearningSessionRepository(ABC):
         """学習者に紐づく全 LearningSession を返す（重複チェック用）。"""
 
     @abstractmethod
-    def save(self, session: LearningSession) -> None:
-        """集約全体を upsert する。"""
+    def save(self, session: LearningSession) -> LearningSession:
+        """集約全体を upsert し、DB 確定後の集約を返す。"""

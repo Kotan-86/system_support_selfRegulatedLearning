@@ -1,0 +1,85 @@
+{# 仕様: docs/spec/framework-drivers-layer.md#HTML-ページ #}
+{# 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-6-LAD-AI-統合フロント #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>学習振り返り（LAD + AI）</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/reflect.css') }}">
+</head>
+<body>
+  {% if missing_participant_id %}
+  <div class="error-box">
+    <h3>参加者 ID が必要です</h3>
+    <p>このページには <code>?participant_id=</code> クエリパラメータが必須です。</p>
+    <p>例: <code>/reflect?participant_id=1</code></p>
+  </div>
+  {% else %}
+  <header class="reflect-header">
+    <h1>学習振り返り</h1>
+    <p class="participant-id">参加者 ID: <strong>{{ participant_id }}</strong></p>
+  </header>
+
+  <div class="reflect-layout">
+    <section class="lad-panel" id="lad-panel" aria-label="学習分析ダッシュボード">
+      <h2>学習記録（LAD）</h2>
+
+      <div class="lad-block" id="lad-block-action-counts">
+        <h3>操作種類別集計</h3>
+        <p class="lad-fixed-text">{{ reflection_intro }}</p>
+        <div id="action-counts-chart" class="chart-container"></div>
+      </div>
+
+      <div class="lad-block" id="lad-block-video-segments">
+        <h3>動画 2 分区間ごとの操作集計</h3>
+        <p class="lad-fixed-text">{{ segment_chart_hint }}</p>
+        <div id="video-segments-chart" class="chart-container"></div>
+      </div>
+
+      <div class="lad-block" id="lad-block-quiz">
+        <h3>小テスト結果</h3>
+        <p class="lad-fixed-text">{{ quiz_reflection_hint }}</p>
+        <div id="quiz-score" class="quiz-score"></div>
+        <table class="quiz-table" id="quiz-results-table">
+          <thead>
+            <tr>
+              <th>問題</th>
+              <th>選択回答</th>
+              <th>正誤</th>
+            </tr>
+          </thead>
+          <tbody id="quiz-results-body"></tbody>
+        </table>
+      </div>
+
+      <div class="lad-block" id="lad-block-profile">
+        <h3>学習者プロファイル</h3>
+        <p class="lad-fixed-text">{{ profile_reflection_hint }}</p>
+        <div id="learner-profile"></div>
+      </div>
+    </section>
+
+    <section class="chat-panel" aria-label="AI チューター">
+      <h2>AI チューター</h2>
+      <div id="chat-box"></div>
+      <form id="message-form">
+        <input type="text" id="message-input" placeholder="メッセージを入力..." autocomplete="off">
+        <button type="submit">送信</button>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    window.__REFLECT_PARTICIPANT_ID__ = {{ participant_id | tojson }};
+    window.__REFLECT_POLL_INTERVAL_MS__ = 5000;
+  </script>
+  <script src="{{ url_for('static', filename='js/common/participant_context.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/common/api_client.js') }}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script src="{{ url_for('static', filename='js/reflect/lad_panel.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/reflect/chat_panel.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/reflect/reflect_app.js') }}"></script>
+  {% endif %}
+</body>
+</html>

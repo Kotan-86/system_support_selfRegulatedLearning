@@ -4,8 +4,6 @@
 POST /chat で session_id が無いときは新規作成してレスポンスに含めること、
 session_id を送ったときはそのセッションを使うことを検証する。
 """
-from unittest.mock import patch
-
 import pytest
 
 
@@ -15,13 +13,11 @@ class TestAppStep2SessionIdCreation:
     def test_post_chat_without_session_id_returns_session_id(self, app_client) -> None:
         if app_client is None:
             pytest.skip("app.main が未実装のためスキップ")
-        with patch("app.main._call_llm") as mock_llm:
-            mock_llm.return_value = "スタブ応答"
-            r = app_client.post(
-                "/chat",
-                json={"message": "はじめてのメッセージ", "participant_id": "1"},
-                content_type="application/json",
-            )
+        r = app_client.post(
+            "/chat",
+            json={"message": "はじめてのメッセージ", "participant_id": "1"},
+            content_type="application/json",
+        )
         assert r.status_code == 200
         data = r.get_json()
         assert data is not None
@@ -37,24 +33,20 @@ class TestAppStep2SessionIdReuse:
     ) -> None:
         if app_client is None:
             pytest.skip("app.main が未実装のためスキップ")
-        with patch("app.main._call_llm") as mock_llm:
-            mock_llm.return_value = "スタブ応答"
-            # 1 回目: session_id なしで送り、返ってきた session_id を取得
-            r1 = app_client.post(
-                "/chat",
-                json={"message": "1回目", "participant_id": "1"},
-                content_type="application/json",
-            )
-            assert r1.status_code == 200
-            data1 = r1.get_json()
-            assert data1 is not None and "session_id" in data1
-            sid = data1["session_id"]
-            # 2 回目: 同じ session_id を付けて送る
-            r2 = app_client.post(
-                "/chat",
-                json={"message": "2回目", "session_id": sid},
-                content_type="application/json",
-            )
+        r1 = app_client.post(
+            "/chat",
+            json={"message": "1回目", "participant_id": "1"},
+            content_type="application/json",
+        )
+        assert r1.status_code == 200
+        data1 = r1.get_json()
+        assert data1 is not None and "session_id" in data1
+        sid = data1["session_id"]
+        r2 = app_client.post(
+            "/chat",
+            json={"message": "2回目", "session_id": sid, "participant_id": "1"},
+            content_type="application/json",
+        )
         assert r2.status_code == 200
         data2 = r2.get_json()
         assert data2 is not None

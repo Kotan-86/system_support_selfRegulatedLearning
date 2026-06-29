@@ -34,9 +34,10 @@ class InMemoryLearningSessionRepository(LearningSessionRepository):
             if session.learner_id == learner_id
         )
 
-    def save(self, session: LearningSession) -> None:
+    def save(self, session: LearningSession) -> LearningSession:
         self._sessions[session.id] = session
         self.save_count += 1
+        return session
 
     def all_sessions(self) -> tuple[LearningSession, ...]:
         """テスト用: 保存済み Session をすべて返す。"""

@@ -66,8 +66,9 @@ class _InconsistentRepository(LearningSessionRepository):
     def list_by_learner(self, learner_id: LearnerId) -> tuple[LearningSession, ...]:
         return (self._session,)
 
-    def save(self, session: LearningSession) -> None:
+    def save(self, session: LearningSession) -> LearningSession:
         self.save_count += 1
+        return session
 
 
 class TestStartOrGetLearningSessionAcceptance:

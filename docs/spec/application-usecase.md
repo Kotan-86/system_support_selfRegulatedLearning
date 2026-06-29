@@ -28,6 +28,7 @@
 - ドメインモデル: [domain-model.md](./domain-model.md)
 - ドメイン層実装計画: [domain-implementation-plan.md](./domain-implementation-plan.md)
 - アプリケーション層エラー処理（Result 型）: [application-error-handling.md](./application-error-handling.md)
+- 学習データ永続化（子 Entity ID 方針）: [framework-drivers-persistence.md](./framework-drivers-persistence.md)
 
 ---
 
@@ -113,7 +114,32 @@ tests/
 |---------|------|------|------|
 | `find_by_learner_and_lecture` | `LearnerId`, `LectureId` | `LearningSession \| None` | |
 | `list_by_learner` | `LearnerId` | `tuple[LearningSession, ...]` | Session 開始時の重複チェック用 |
-| `save` | `LearningSession` | `None` | 集約全体を永続化（upsert） |
+| `save` | `LearningSession` | `LearningSession` | 集約全体を永続化（upsert）し、**DB 確定後の集約**を返す（下記 [save 戻り値と子 Entity ID の確定](#learningsessionrepositorysave-戻り値と子-entity-id-の確定)） |
+
+#### `LearningSessionRepository.save` 戻り値と子 Entity ID の確定
+
+##### 変更理由（Why）
+
+- [framework-drivers-persistence.md#決定事項](./framework-drivers-persistence.md#決定事項) では、`ViewingEventId` / `QuizAttemptId` は SQLite の INTEGER `AUTOINCREMENT` 行を INSERT した **後** に `str(lastrowid)` で確定する
+- 現行の Use Case 手順は `ViewingEventIdGenerator` / `QuizAttemptIdGenerator` で **save 前** に ID を付与し、その値を API Response に載せている — SQLite Adapter の ID 方針と不整合になる
+- `POST /api/viewing-log` / `POST /api/quiz-attempts` の Response に返す `event_id` / `attempt_id` は、**永続化後の DB 上の ID と一致** しなければならない
+
+##### 仕様（What）
+
+| 項目 | 内容 |
+|------|------|
+| `save` 戻り値 | **`LearningSession`** — Adapter が永続化を完了した時点の集約（子 Entity ID を含む） |
+| `RecordViewingEvent` の `event_id` | **`save` 戻り値**の集約から、当該 `execute` で追記した `ViewingEvent` の ID を取得して Response に載せる |
+| `RecordQuizAttempt` の `attempt_id` | **`save` 戻り値**の集約から、当該 `execute` で追記した `QuizAttempt` の ID を取得して Response に載せる |
+| 子 ID の同定 | 当該 `execute` は子 Entity を **1 件のみ** 追記する。追記後の `viewing_events` / `quiz_attempts` の **末尾 1 件** を今回追記分とみなす |
+| `ViewingEventIdGenerator` / `QuizAttemptIdGenerator` | Port 契約は維持する。**SQLite 本番配線では Use Case に注入しない**（[framework-drivers-persistence.md#ID 生成（Mapper / Repository）](./framework-drivers-persistence.md#id-生成mapper--repository)）。Fake / InMemory 単体テストでは従来どおり Generator を差し替えてよい |
+
+##### 受入基準
+
+- [ ] `LearningSessionRepository.save` の戻り値型が `LearningSession` である
+- [ ] `RecordViewingEvent` / `RecordQuizAttempt` が Response の子 ID を **Generator の戻り値ではなく `save` 戻り値の集約** から取得する
+- [ ] SQLite 配線で `ViewingEventIdGenerator` / `QuizAttemptIdGenerator` が Use Case に注入されない
+- [ ] Fake / InMemory テストは Generator 差し替え可能なまま維持できる
 
 ### `LectureCatalog`
 
@@ -133,11 +159,15 @@ tests/
 |---------|------|------|
 | `next_id` | なし | `ViewingEventId` |
 
+**配線**: SQLite 本番 Adapter では Use Case に **注入しない**（ID は `save` 戻り値で確定）。Fake / InMemory テスト用。
+
 ### `QuizAttemptIdGenerator`
 
 | メソッド | 入力 | 出力 |
 |---------|------|------|
 | `next_id` | なし | `QuizAttemptId` |
+
+**配線**: SQLite 本番 Adapter では Use Case に **注入しない**（ID は `save` 戻り値で確定）。Fake / InMemory テスト用。
 
 ### `LearningSnapshotQuery`（Tutoring → Learning ACL）
 
@@ -222,8 +252,8 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 2. `existing is not None` なら `Response(session_id=existing.id, session=existing, outcome=RETRIEVED)` を return
 3. `new_id = id_generator.next_id()`
 4. `session = LearningSession.start(id=new_id, learner_id=request.learner_id, lecture_id=request.lecture_id, started_at=request.started_at, existing_sessions=repository.list_by_learner(request.learner_id))`
-5. `repository.save(session)`
-6. `Response(session_id=session.id, session=session, outcome=CREATED)` を return
+5. `persisted = repository.save(session)`
+6. `Response(session_id=persisted.id, session=persisted, outcome=CREATED)` を return
 
 ### 例外
 
@@ -288,16 +318,17 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 ### 依存
 
 - `StartOrGetLearningSessionUseCase`（compose）
-- `ViewingEventIdGenerator`
 - `LearningSessionRepository`
+
+（`ViewingEventIdGenerator` は SQLite 本番配線では注入しない。[save 戻り値と子 Entity ID の確定](#learningsessionrepositorysave-戻り値と子-entity-id-の確定) 参照）
 
 ### 手順 `execute`
 
 1. `session_response = start_or_get.execute(StartOrGetLearningSessionRequest(learner_id=..., lecture_id=..., started_at=request.occurred_at))`
-2. `event_id = viewing_event_id_generator.next_id()`
-3. `updated = session_response.session.record_viewing_event(event_id=event_id, occurred_at=request.occurred_at, video_position=request.video_position, action=request.action, position_delta=request.position_delta)`
-4. `repository.save(updated)`
-5. `Response(event_id=event_id, session_id=updated.id)` を return
+2. `updated = session_response.session.record_viewing_event(...)`（当該 UC 内で 1 件追記）
+3. `persisted = repository.save(updated)`
+4. `event_id = persisted.viewing_events` の **末尾 1 件**の ID
+5. `Response(event_id=event_id, session_id=persisted.id)` を return
 
 ### 例外
 
@@ -314,6 +345,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 - [ ] 2 件目以降 → 同一 Session に追記、`viewing_events` が 1 件増える
 - [ ] 不変条件違反 → `err(ValidationError)` を返し、`repository.save` は呼ばれない
 - [ ] `backward_skip` + 負の `position_delta` が受理される
+- [ ] Response の `event_id` が `save` 戻り値の集約に含まれる ID と一致する（Generator 戻り値に依存しない）
 
 ---
 
@@ -387,8 +419,9 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 - `StartOrGetLearningSessionUseCase`（compose）
 - `LectureCatalog`
-- `QuizAttemptIdGenerator`
 - `LearningSessionRepository`
+
+（`QuizAttemptIdGenerator` は SQLite 本番配線では注入しない。[save 戻り値と子 Entity ID の確定](#learningsessionrepositorysave-戻り値と子-entity-id-の確定) 参照）
 
 ### 手順 `execute`
 
@@ -396,10 +429,10 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 2. `lecture is None` なら **`err(LectureNotFoundError)`**（`LECTURE_NOT_FOUND`）で終了
 3. 各 `answer.question_index` が `lecture.quiz_definition` に存在することを検証（不存在なら **`err(ValidationError)`** / `UNKNOWN_QUESTION_INDEX`）
 4. `session_response = start_or_get.execute(...)`
-5. `attempt_id = quiz_attempt_id_generator.next_id()`
-6. `updated = session_response.session.record_quiz_attempt(attempt_id=..., attempted_at=..., score_numerator=..., score_denominator=..., answers=...)`
-7. `repository.save(updated)`
-8. `Response(attempt_id=attempt_id, session_id=updated.id)` を return
+5. `updated = session_response.session.record_quiz_attempt(...)`（当該 UC 内で 1 件追記）
+6. `persisted = repository.save(updated)`
+7. `attempt_id = persisted.quiz_attempts` の **末尾 1 件**の ID
+8. `Response(attempt_id=attempt_id, session_id=persisted.id)` を return
 
 ### 例外
 
@@ -419,6 +452,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 - [ ] カタログに無い `question_index` → 拒否
 - [ ] 5 問形式: `answers` 5 件・`question_index` 1〜5 で保存できる
 - [ ] `question_index=3`, `is_correct=false` が Snapshot の `quiz_answers` に含まれ、AI が第 3 問の不正解を特定できる
+- [ ] Response の `attempt_id` が `save` 戻り値の集約に含まれる ID と一致する（Generator 戻り値に依存しない）
 
 ---
 

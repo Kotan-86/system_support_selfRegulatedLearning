@@ -9,11 +9,19 @@ uv sync
 uv run flask --app app.main run
 ```
 
-## 環境変数（Vertex AI）
+## 環境変数（Gemini Enterprise Agent Platform / 旧 Vertex AI）
 
 - **GOOGLE_APPLICATION_CREDENTIALS** … サービスアカウント JSON のパス（未設定時は gcloud ADC を使用）
-- **VERTEX_PROJECT_ID** … 未設定時はデフォルトプロジェクトを使用
-- **VERTEX_LOCATION** … 未設定時は `us-east4`
+- **VERTEX_PROJECT_ID** … GCP プロジェクト ID（SA JSON の `project_id` と一致させる）
+- **VERTEX_LOCATION** … リージョン（例: `us-east4`）
+- **VERTEX_MODEL_NAME** … 任意（未設定時は Gateway のデフォルトモデル）
+
+GCP の API 有効化・課金・SA ロールは次で検証する:
+
+```bash
+set -a && source .env.local && set +a
+uv run python scripts/verify_gcp_agent_platform.py
+```
 
 ## テスト
 
