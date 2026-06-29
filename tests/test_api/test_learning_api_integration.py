@@ -69,7 +69,7 @@ class TestLearningApiIntegration:
         assert data2 is not None and "attempt_id" in data2
 
         # 3. 最終更新時刻
-        r3 = client.get("/api/last-updated")
+        r3 = client.get("/api/last-updated?participant_id=1")
         assert r3.status_code == 200
         data3 = r3.get_json()
         assert data3 is not None and "last_updated" in data3
@@ -80,12 +80,6 @@ class TestLearningApiIntegration:
         assert r4.status_code == 200
         data4 = r4.get_json()
         assert data4 is not None
-        assert "viewing_logs" in data4
-        assert len(data4["viewing_logs"]) == 1, "視聴ログが 1 件返る"
-        assert data4["viewing_logs"][0]["action"] == "play"
-        assert "latest_quiz_attempt" in data4
-        assert data4["latest_quiz_attempt"] is not None
-        assert data4["latest_quiz_attempt"]["score_numerator"] == 4
-        assert data4["latest_quiz_attempt"]["score_denominator"] == 5
-        assert "quiz_answers" in data4
-        assert len(data4["quiz_answers"]) == 2, "小テスト回答が 2 問分返る"
+        assert data4["action_counts"].get("play") == 1
+        assert data4["score"] == 4
+        assert len(data4["quiz_results"]) == 2, "小テスト回答が 2 問分返る"

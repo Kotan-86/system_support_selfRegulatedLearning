@@ -53,8 +53,8 @@ def _use_case(
             repository=repo,
             id_generator=FakeLearningSessionIdGenerator(),
         ),
-        viewing_event_id_generator=FakeViewingEventIdGenerator(),
         repository=repo,
+        viewing_event_id_generator=FakeViewingEventIdGenerator(),
     )
 
 

@@ -27,6 +27,7 @@ from application.learning.use_cases.start_or_get_learning_session import (
 )
 from domain.learning.quiz_attempt import QuizAnswer
 from domain.learning.quiz_definition import QuizDefinition
+from domain.shared.ids import QuizAttemptId
 
 
 def _valid_question_indexes(quiz_definition: QuizDefinition) -> frozenset[int]:
@@ -86,6 +87,10 @@ def _validate_quiz_invariants(
     return ok(None)
 
 
+_PLACEHOLDER_QUIZ_ATTEMPT_ID = QuizAttemptId("0")
+"""SQLite Adapter 向け: INSERT 前の仮 ID（save 後に DB 確定 ID で置換される）。"""
+
+
 class RecordQuizAttemptUseCase:
     """小テスト受験 1 回を LearningSession 集約に追記する。"""
 
@@ -93,13 +98,14 @@ class RecordQuizAttemptUseCase:
         self,
         start_or_get: StartOrGetLearningSessionUseCase,
         lecture_catalog: LectureCatalog,
-        quiz_attempt_id_generator: QuizAttemptIdGenerator,
         repository: LearningSessionRepository,
+        *,
+        quiz_attempt_id_generator: QuizAttemptIdGenerator | None = None,
     ) -> None:
         self._start_or_get = start_or_get
         self._lecture_catalog = lecture_catalog
-        self._quiz_attempt_id_generator = quiz_attempt_id_generator
         self._repository = repository
+        self._quiz_attempt_id_generator = quiz_attempt_id_generator
 
     def execute(
         self, request: RecordQuizAttemptRequest
@@ -143,7 +149,11 @@ class RecordQuizAttemptUseCase:
             return session_result  # type: ignore[return-value]
 
         session = session_result.value.session
-        attempt_id = self._quiz_attempt_id_generator.next_id()
+        attempt_id = (
+            self._quiz_attempt_id_generator.next_id()
+            if self._quiz_attempt_id_generator is not None
+            else _PLACEHOLDER_QUIZ_ATTEMPT_ID
+        )
         updated = session.record_quiz_attempt(
             attempt_id=attempt_id,
             attempted_at=req.attempted_at,
@@ -151,10 +161,11 @@ class RecordQuizAttemptUseCase:
             score_denominator=req.score_denominator,
             answers=req.answers,
         )
-        self._repository.save(updated)
+        saved = self._repository.save(updated)
+        persisted_attempt = saved.quiz_attempts[-1]
         return ok(
             RecordQuizAttemptResponse(
-                attempt_id=attempt_id,
-                session_id=updated.id,
+                attempt_id=persisted_attempt.id,
+                session_id=saved.id,
             )
         )

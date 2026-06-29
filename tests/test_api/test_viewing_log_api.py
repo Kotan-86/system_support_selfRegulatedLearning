@@ -58,7 +58,6 @@ class TestPostViewingLog:
 
         lad = phase2_client.get("/api/participants/truncate-test/lad")
         assert lad.status_code == 200
-        logs = lad.get_json()["viewing_logs"]
-        assert len(logs) == 1
-        assert logs[0]["current_time"] == 90
-        assert logs[0]["duration"] == 10
+        data = lad.get_json()
+        assert data is not None
+        assert data["action_counts"].get("forward_seek") == 1

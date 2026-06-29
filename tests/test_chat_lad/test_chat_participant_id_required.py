@@ -4,8 +4,6 @@ Phase 3 Step 3.1: POST /chat で新規セッション時に participant_id 必�
 session_id を送らず participant_id も送らない場合 400、
 participant_id を送った場合 200 と session_id が返ることを検証する。
 """
-from unittest.mock import patch
-
 import pytest
 
 
@@ -36,13 +34,11 @@ class TestPostChatParticipantIdRequired:
         """session_id を送らず participant_id を送ると 200 と session_id が返る。"""
         if chat_lad_client is None:
             pytest.skip("app.main が未実装のためスキップ")
-        with patch("app.main._call_llm") as mock_llm:
-            mock_llm.return_value = "スタブ応答"
-            r = chat_lad_client.post(
-                "/chat",
-                json={"message": "はじめて", "participant_id": "1"},
-                content_type="application/json",
-            )
+        r = chat_lad_client.post(
+            "/chat",
+            json={"message": "はじめて", "participant_id": "1"},
+            content_type="application/json",
+        )
         assert r.status_code == 200
         data = r.get_json()
         assert data is not None

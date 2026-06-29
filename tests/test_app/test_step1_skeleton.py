@@ -4,8 +4,6 @@
 app.main に Flask アプリがあり、GET / と POST /chat が動作することを検証する。
 LAD 未使用・履歴は空のままでよい。
 """
-from unittest.mock import patch
-
 import pytest
 
 
@@ -23,13 +21,14 @@ class TestAppStep1ModuleExists:
 
 
 class TestAppStep1GetRoot:
-    """GET / が 200 を返す。"""
+    """GET / は /reflect へリダイレクトする（Phase 6）。"""
 
-    def test_get_root_returns_200(self, app_client) -> None:
+    def test_get_root_redirects_to_reflect(self, app_client) -> None:
         if app_client is None:
             pytest.skip("app.main が未実装のためスキップ")
         r = app_client.get("/")
-        assert r.status_code == 200, "GET / は 200 を返すこと"
+        assert r.status_code == 302, "GET / は /reflect へ 302 リダイレクトすること"
+        assert "/reflect" in r.headers.get("Location", "")
 
 
 class TestAppStep1PostChat:
@@ -41,16 +40,17 @@ class TestAppStep1PostChat:
         r = app_client.post("/chat", json={}, content_type="application/json")
         assert r.status_code in (400, 422), "message がないときは 4xx を返すこと"
 
-    def test_post_chat_with_message_returns_json(self, app_client) -> None:
+    def test_post_chat_with_message_returns_json(
+        self, app_client, fake_llm_gateway
+    ) -> None:
         if app_client is None:
             pytest.skip("app.main が未実装のためスキップ")
-        with patch("app.main._call_llm") as mock_llm:
-            mock_llm.return_value = "スタブ応答"
-            r = app_client.post(
-                "/chat",
-                json={"message": "こんにちは", "participant_id": "1"},
-                content_type="application/json",
-            )
+        fake_llm_gateway.generate_calls.clear()
+        r = app_client.post(
+            "/chat",
+            json={"message": "こんにちは", "participant_id": "1"},
+            content_type="application/json",
+        )
         assert r.status_code == 200, "message があるときは 200 を返すこと"
         data = r.get_json()
         assert data is not None, "レスポンスは JSON であること"

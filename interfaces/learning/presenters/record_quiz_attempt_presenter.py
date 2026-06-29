@@ -13,6 +13,8 @@ class RecordQuizAttemptPresenter:
     """RecordQuizAttemptResponse を成功 ViewModel へ変換する。"""
 
     def present(
-        self, _response: RecordQuizAttemptResponse
+        self, response: RecordQuizAttemptResponse
     ) -> RecordQuizAttemptSuccessViewModel:
-        return RecordQuizAttemptSuccessViewModel()
+        return RecordQuizAttemptSuccessViewModel(
+            attempt_id=str(response.attempt_id),
+        )

@@ -1,7 +1,8 @@
 """
-Phase 1 Step 1.2: 対話用 DB のスキーマに participant_id を追加する
+Phase 1 Step 1.2: 対話用 DB のスキーマ
 
-sessions に participant_id (TEXT, NOT NULL) が存在することを検証する。
+sessions に participant_id, learning_session_id (TEXT, NOT NULL) が存在することを検証する。
+仕様: docs/spec/framework-drivers-persistence.md
 """
 import sqlite3
 from pathlib import Path
@@ -51,3 +52,27 @@ class TestStep1_2SessionsHasParticipantId:
         assert "id" in columns
         assert "created_at" in columns
         assert "participant_id" in columns
+
+
+class TestSessionsHasLearningSessionId:
+    """対話用スキーマの sessions に learning_session_id があること。"""
+
+    def test_sessions_has_learning_session_id_column(
+        self, tutor_schema_path: Path
+    ) -> None:
+        """sessions に learning_session_id カラムが定義されている。"""
+        if not tutor_schema_path.exists():
+            pytest.skip("db/schema.sql が未作成のためスキップ")
+        conn = sqlite3.connect(":memory:")
+        _execute_schema(conn, tutor_schema_path)
+        cur = conn.execute(
+            "SELECT name, type, [notnull] FROM pragma_table_info('sessions') ORDER BY cid"
+        )
+        rows = {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+        conn.close()
+        assert "learning_session_id" in rows, (
+            "sessions に learning_session_id カラムがあること"
+        )
+        col_type, notnull = rows["learning_session_id"]
+        assert notnull == 1, "learning_session_id は NOT NULL であること"
+        assert col_type.upper() == "TEXT", "learning_session_id は TEXT 型であること"

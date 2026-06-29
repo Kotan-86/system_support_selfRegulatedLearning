@@ -96,8 +96,8 @@ def _use_case(
             id_generator=FakeLearningSessionIdGenerator(),
         ),
         lecture_catalog=catalog,
-        quiz_attempt_id_generator=FakeQuizAttemptIdGenerator(),
         repository=repo,
+        quiz_attempt_id_generator=FakeQuizAttemptIdGenerator(),
     )
 
 
