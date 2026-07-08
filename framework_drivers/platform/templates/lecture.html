@@ -10,6 +10,15 @@
     #player { pointer-events: auto; }
     body { font-family: sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; }
     .error-box { border: 1px solid #c62828; background: #ffebee; padding: 16px; border-radius: 8px; }
+    #quiz-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e0e0e0; }
+    .quiz-question { margin-bottom: 1.25rem; padding: 0; border: none; }
+    .quiz-question legend { font-weight: bold; margin-bottom: 0.5rem; }
+    .quiz-choice { display: block; margin: 0.35rem 0; }
+    #quiz-error { color: #c62828; margin-top: 0.75rem; }
+    #quiz-error[hidden] { display: none; }
+    #quiz-result { margin-top: 1rem; padding: 16px; border: 1px solid #2e7d32; background: #e8f5e9; border-radius: 8px; }
+    #quiz-result[hidden] { display: none; }
+    #quiz-form[disabled] .quiz-choice input { pointer-events: none; }
   </style>
 </head>
 <body>
@@ -37,15 +46,45 @@
   <button id="forward_skip_button" type="button" onclick="forwardSkip()">先送りスキップ</button>
   <button id="backward_skip_button" type="button" onclick="backwardSkip()">巻き戻しスキップ</button>
   <p>最初にこのページをリロードしてください。リロードしないまま始めると正常に動画再生ができない場合があります。</p>
-  <a href="{{ quiz_form_url }}" target="_blank" rel="noopener noreferrer">小テストに進む</a>
+
+  <section id="quiz-section">
+    <h3>{{ quiz_title }}</h3>
+    <p>{{ quiz_description }}</p>
+    <form id="quiz-form">
+      {% for question in quiz_questions %}
+      <fieldset class="quiz-question">
+        <legend>問{{ question.index }}. {{ question.text }}</legend>
+        {% for choice in question.choices %}
+        <label class="quiz-choice">
+          <input
+            type="radio"
+            name="q{{ question.index }}"
+            value="{{ choice }}"
+            required
+          >
+          {{ choice }}
+        </label>
+        {% endfor %}
+      </fieldset>
+      {% endfor %}
+    </form>
+    <button type="submit" form="quiz-form" id="quiz-submit">送信</button>
+    <div id="quiz-error" hidden role="alert"></div>
+    <div id="quiz-result" hidden>
+      <p>小テストの回答を送信しました。お疲れさまでした。</p>
+      <p><a id="quiz-reflect-link" href="/reflect?participant_id={{ participant_id }}">振り返り画面へ進む</a></p>
+    </div>
+  </section>
 
   <script>
     window.__LECTURE_VIDEO_ID__ = {{ youtube_video_id | tojson }};
+    window.__QUIZ_ANSWER_KEY__ = {{ quiz_answer_key | tojson }};
   </script>
   <script src="{{ url_for('static', filename='js/common/participant_context.js') }}"></script>
   <script src="{{ url_for('static', filename='js/common/api_client.js') }}"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="{{ url_for('static', filename='js/lecture/player.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/lecture/quiz.js') }}"></script>
   {% endif %}
 </body>
 </html>

@@ -1,0 +1,23 @@
+# 仕様: docs/spec/domain-model.md#Tutoring-VO（DialogueMove）
+# 仕様: interfaces/tutoring/prompts.py#Coach-Moves
+"""Coach Dialogue Move の Value Object。"""
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class DialogueMove(StrEnum):
+    """チューターが 1 ターンで選択する応答行為（Coach Move）。"""
+
+    ORIENT_SHARED_REVIEW = "ORIENT_SHARED_REVIEW"
+    OPEN_DISSONANCE = "OPEN_DISSONANCE"
+    ELICIT_REASON = "ELICIT_REASON"
+    TASK_STANDARD_CHECK = "TASK_STANDARD_CHECK"
+    UNCERTAINTY_DECOMPOSITION = "UNCERTAINTY_DECOMPOSITION"
+    REPAIR_OVERLOAD = "REPAIR_OVERLOAD"
+    DATA_CHECK = "DATA_CHECK"
+    REVOICE_LEARNER_INTERPRETATION = "REVOICE_LEARNER_INTERPRETATION"
+    HYPOTHESIS_OFFER = "HYPOTHESIS_OFFER"
+    WAIT_MINIMAL_RESPONSE = "WAIT_MINIMAL_RESPONSE"
+    TERM_OR_RUBRIC_CHECK = "TERM_OR_RUBRIC_CHECK"
+    JOINT_EVIDENCE_CHECK = "JOINT_EVIDENCE_CHECK"

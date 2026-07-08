@@ -19,7 +19,8 @@ from application.learning.use_cases.get_learning_snapshot import GetLearningSnap
 from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
-from application.tutoring.dto.send_chat_message import SendChatMessageRequest
+from application.tutoring.use_cases.run_tutoring_pipeline import RunTutoringPipelineUseCase
+from application.tutoring.use_cases.send_chat_message import SendChatMessageRequest
 from application.tutoring.use_cases.send_chat_message import SendChatMessageUseCase
 from application.tutoring.use_cases.start_or_get_tutor_session import (
     StartOrGetTutorSessionUseCase,
@@ -39,9 +40,16 @@ from framework_drivers.db.tutoring.sqlite_tutor_session_repository import (
     SqliteTutorSessionRepository,
 )
 from interfaces.common.default_lecture import DEFAULT_LECTURE_ID_VALUE
-from interfaces.tutoring.chat_prompt_builder import DefaultChatPromptBuilder
 from tests.test_application.fakes.tutoring.fake_id_generators import FakeMessageIdGenerator
-from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
+from tests.test_application.fakes.tutoring.fake_interface_model_gateway import (
+    FakeInterfaceModelGateway,
+)
+from tests.test_application.fakes.tutoring.fake_pedagogical_model_gateway import (
+    FakePedagogicalModelGateway,
+)
+from tests.test_application.fakes.tutoring.fake_student_model_gateway import (
+    FakeStudentModelGateway,
+)
 
 FIXED_NOW = datetime(2026, 6, 21, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -76,14 +84,23 @@ def _quiz_answers() -> tuple[QuizAnswer, ...]:
 def _send_chat_use_case(
     learning_repository: SqliteLearningSessionRepository,
     tutor_repository: SqliteTutorSessionRepository,
-    llm_gateway: FakeLlmGateway,
-) -> SendChatMessageUseCase:
+    *,
+    student: FakeStudentModelGateway | None = None,
+    interface: FakeInterfaceModelGateway | None = None,
+) -> tuple[SendChatMessageUseCase, FakeStudentModelGateway, FakeInterfaceModelGateway]:
     lecture_catalog = StaticLectureCatalog()
     snapshot_uc = GetLearningSnapshotUseCase(
         repository=learning_repository,
         lecture_catalog=lecture_catalog,
     )
-    return SendChatMessageUseCase(
+    student_gateway = student or FakeStudentModelGateway()
+    interface_gateway = interface or FakeInterfaceModelGateway(response="stub")
+    pipeline = RunTutoringPipelineUseCase(
+        student_model=student_gateway,
+        pedagogical_model=FakePedagogicalModelGateway(),
+        interface_model=interface_gateway,
+    )
+    use_case = SendChatMessageUseCase(
         start_or_get_learning=StartOrGetLearningSessionUseCase(
             repository=learning_repository,
             id_generator=UuidLearningSessionIdGenerator(),
@@ -93,12 +110,12 @@ def _send_chat_use_case(
             id_generator=UuidTutorSessionIdGenerator(),
         ),
         learning_snapshot_query=GetLearningSnapshotQuery(snapshot_uc),
-        chat_prompt_builder=DefaultChatPromptBuilder(),
-        llm_gateway=llm_gateway,
+        run_tutoring_pipeline=pipeline,
         repository=tutor_repository,
         message_id_generator=FakeMessageIdGenerator(),
         lecture_catalog=lecture_catalog,
     )
+    return use_case, student_gateway, interface_gateway
 
 
 class TestChatLadSqliteTutorRepositoryPath:
@@ -108,8 +125,7 @@ class TestChatLadSqliteTutorRepositoryPath:
         self, sqlite_tutoring_stack
     ) -> None:
         _, tutor_conn, learning_repo, tutor_repo = sqlite_tutoring_stack
-        llm = FakeLlmGateway(response="stub")
-        use_case = _send_chat_use_case(learning_repo, tutor_repo, llm)
+        use_case, _, _ = _send_chat_use_case(learning_repo, tutor_repo)
 
         result = use_case.execute(
             SendChatMessageRequest(
@@ -138,7 +154,7 @@ class TestChatLadSqliteTutorRepositoryPath:
         assert learning_row is not None
         assert str(learning_row.id) == row["learning_session_id"]
 
-    def test_register_lad_then_chat_prompt_contains_learning_data(
+    def test_register_lad_then_chat_passes_learning_snapshot_to_student_model(
         self, sqlite_tutoring_stack
     ) -> None:
         _, _, learning_repo, tutor_repo = sqlite_tutoring_stack
@@ -183,8 +199,7 @@ class TestChatLadSqliteTutorRepositoryPath:
             )
         )
 
-        llm = FakeLlmGateway(response="stub")
-        use_case = _send_chat_use_case(learning_repo, tutor_repo, llm)
+        use_case, student, _ = _send_chat_use_case(learning_repo, tutor_repo)
         result = use_case.execute(
             SendChatMessageRequest(
                 user_message="小テストの問2がわかりません",
@@ -195,8 +210,8 @@ class TestChatLadSqliteTutorRepositoryPath:
         )
 
         assert isinstance(result, Ok)
-        assert len(llm.generate_calls) == 1
-        prompt = llm.generate_calls[0]
-        assert (
-            "4" in prompt and "5" in prompt
-        ) or "play" in prompt.lower() or "視聴" in prompt or "小テスト" in prompt
+        assert len(student.interpret_calls) == 1
+        snapshot = student.interpret_calls[0].snapshot
+        assert len(snapshot.quiz_answers) == 2
+        assert snapshot.quiz_answers[1].question_index == 2
+        assert snapshot.quiz_answers[1].is_correct is False

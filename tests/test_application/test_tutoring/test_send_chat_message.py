@@ -24,7 +24,8 @@ from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
 from application.tutoring.dto.send_chat_message import SendChatMessageRequest
-from application.tutoring.ports.llm_gateway import LlmGateway
+from application.tutoring.ports.pedagogical_model_gateway import PedagogicalModelGateway
+from application.tutoring.use_cases.run_tutoring_pipeline import RunTutoringPipelineUseCase
 from application.tutoring.use_cases.send_chat_message import (
     FIRST_MESSAGE_CANNED_RESPONSE,
     SendChatMessageUseCase,
@@ -44,11 +45,16 @@ from tests.test_application.fakes.learning.fake_lecture_catalog import FakeLectu
 from tests.test_application.fakes.learning.in_memory_learning_session_repository import (
     InMemoryLearningSessionRepository,
 )
-from tests.test_application.fakes.tutoring.fake_chat_prompt_builder import (
-    FakeChatPromptBuilder,
-)
 from tests.test_application.fakes.tutoring.fake_id_generators import FakeMessageIdGenerator
-from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
+from tests.test_application.fakes.tutoring.fake_interface_model_gateway import (
+    FakeInterfaceModelGateway,
+)
+from tests.test_application.fakes.tutoring.fake_pedagogical_model_gateway import (
+    FakePedagogicalModelGateway,
+)
+from tests.test_application.fakes.tutoring.fake_student_model_gateway import (
+    FakeStudentModelGateway,
+)
 from tests.test_application.fakes.tutoring.in_memory_tutor_session_repository import (
     InMemoryTutorSessionRepository,
 )
@@ -106,11 +112,37 @@ def _request(
     )
 
 
-class _FailingLlmGateway(LlmGateway):
-    """LLM 呼び出し失敗をシミュレートする Fake。"""
+class _FailingPedagogicalModelGateway(PedagogicalModelGateway):
+    """Stage 2 失敗をシミュレートする Fake。"""
 
-    def generate(self, prompt: str) -> str:
+    def select_move(self, interpretation, *, turn_context):
         raise LlmGatewayError("LLM gateway failed in test")
+
+
+def _run_pipeline(
+    *,
+    student_model: FakeStudentModelGateway | None = None,
+    pedagogical_model: FakePedagogicalModelGateway | None = None,
+    interface_model: FakeInterfaceModelGateway | None = None,
+) -> tuple[
+    RunTutoringPipelineUseCase,
+    FakeStudentModelGateway,
+    FakePedagogicalModelGateway,
+    FakeInterfaceModelGateway,
+]:
+    student = student_model or FakeStudentModelGateway()
+    pedagogical = pedagogical_model or FakePedagogicalModelGateway()
+    interface = interface_model or FakeInterfaceModelGateway()
+    return (
+        RunTutoringPipelineUseCase(
+            student_model=student,
+            pedagogical_model=pedagogical,
+            interface_model=interface,
+        ),
+        student,
+        pedagogical,
+        interface,
+    )
 
 
 def _send_chat_use_case(
@@ -118,14 +150,20 @@ def _send_chat_use_case(
     learning_repository: InMemoryLearningSessionRepository | None = None,
     tutor_repository: InMemoryTutorSessionRepository | None = None,
     lecture_catalog: FakeLectureCatalog | None = None,
-    chat_prompt_builder: FakeChatPromptBuilder | None = None,
-    llm_gateway: FakeLlmGateway | LlmGateway | None = None,
+    student_model: FakeStudentModelGateway | None = None,
+    pedagogical_model: FakePedagogicalModelGateway | None = None,
+    interface_model: FakeInterfaceModelGateway | None = None,
     message_id_generator: FakeMessageIdGenerator | None = None,
 ) -> SendChatMessageUseCase:
     learning_repo = learning_repository or InMemoryLearningSessionRepository()
     tutor_repo = tutor_repository or InMemoryTutorSessionRepository()
     catalog = lecture_catalog or FakeLectureCatalog(lectures=(_lecture(),))
     snapshot_uc = _get_snapshot_use_case(repository=learning_repo)
+    pipeline, _, _, _ = _run_pipeline(
+        student_model=student_model,
+        pedagogical_model=pedagogical_model,
+        interface_model=interface_model,
+    )
 
     return SendChatMessageUseCase(
         start_or_get_learning=StartOrGetLearningSessionUseCase(
@@ -134,8 +172,7 @@ def _send_chat_use_case(
         ),
         start_or_get_tutor=_start_or_get_tutor_use_case(repository=tutor_repo),
         learning_snapshot_query=GetLearningSnapshotQuery(snapshot_uc),
-        chat_prompt_builder=chat_prompt_builder or FakeChatPromptBuilder(),
-        llm_gateway=llm_gateway or FakeLlmGateway(),
+        run_tutoring_pipeline=pipeline,
         repository=tutor_repo,
         message_id_generator=message_id_generator or FakeMessageIdGenerator(),
         lecture_catalog=catalog,
@@ -148,11 +185,15 @@ class TestSendChatMessageFirstCompose:
     def test_first_message_composes_sessions_and_returns_tutor_session_id(self) -> None:
         learning_repo = InMemoryLearningSessionRepository()
         tutor_repo = InMemoryTutorSessionRepository()
-        llm = FakeLlmGateway(response="assistant reply")
+        interface = FakeInterfaceModelGateway(response="assistant reply")
+        student = FakeStudentModelGateway()
+        pedagogical = FakePedagogicalModelGateway()
         use_case = _send_chat_use_case(
             learning_repository=learning_repo,
             tutor_repository=tutor_repo,
-            llm_gateway=llm,
+            student_model=student,
+            pedagogical_model=pedagogical,
+            interface_model=interface,
         )
 
         result = use_case.execute(_request(user_message="初回メッセージ"))
@@ -166,7 +207,9 @@ class TestSendChatMessageFirstCompose:
         assert tutor_repo.save_count == 2
         assert len(learning_repo.all_sessions()) == 1
         assert len(tutor_repo.all_sessions()) == 1
-        assert llm.generate_calls == ["fake-prompt"]
+        assert len(student.interpret_calls) == 1
+        assert len(pedagogical.select_move_calls) == 1
+        assert len(interface.generate_calls) == 1
 
 
 class TestSendChatMessageContinuation:
@@ -175,15 +218,15 @@ class TestSendChatMessageContinuation:
     def test_second_message_appends_to_existing_tutor_session(self) -> None:
         learning_repo = InMemoryLearningSessionRepository()
         tutor_repo = InMemoryTutorSessionRepository()
-        llm = FakeLlmGateway(response="first reply")
+        interface = FakeInterfaceModelGateway(response="first reply")
         use_case = _send_chat_use_case(
             learning_repository=learning_repo,
             tutor_repository=tutor_repo,
-            llm_gateway=llm,
+            interface_model=interface,
         )
 
         first = use_case.execute(_request(user_message="1通目"))
-        llm.set_response("second reply")
+        interface.set_response("second reply")
         assert isinstance(first, Ok)
 
         second = use_case.execute(
@@ -210,9 +253,9 @@ class TestSendChatMessageContinuation:
 
 
 class TestSendChatMessageSnapshotIntegration:
-    """LearningSnapshotQuery 経由で LAD 同契約の Snapshot がプロンプト入力になる。"""
+    """LearningSnapshotQuery 経由で LAD 同契約の Snapshot が Stage 1 に渡る。"""
 
-    def test_snapshot_quiz_answers_are_passed_to_chat_prompt_builder(self) -> None:
+    def test_snapshot_quiz_answers_are_passed_to_student_model(self) -> None:
         learning_repo = InMemoryLearningSessionRepository()
         record_quiz = _record_quiz_use_case(learning_repo)
         record_result = record_quiz.execute(
@@ -227,17 +270,17 @@ class TestSendChatMessageSnapshotIntegration:
         )
         assert isinstance(record_result, Ok)
 
-        builder = FakeChatPromptBuilder()
+        student = FakeStudentModelGateway()
         use_case = _send_chat_use_case(
             learning_repository=learning_repo,
-            chat_prompt_builder=builder,
+            student_model=student,
         )
 
         result = use_case.execute(_request(user_message="小テストについて"))
 
         assert isinstance(result, Ok)
-        assert len(builder.build_calls) == 1
-        snapshot = builder.build_calls[0].snapshot
+        assert len(student.interpret_calls) == 1
+        snapshot = student.interpret_calls[0].snapshot
         assert isinstance(snapshot, LearningSnapshot)
         assert len(snapshot.quiz_answers) == 5
         assert snapshot.quiz_answers[2].question_index == 3
@@ -245,24 +288,27 @@ class TestSendChatMessageSnapshotIntegration:
 
 
 class TestSendChatMessageDigitsOnlyFirstMessage:
-    """初回・半角数字のみのとき定型文を返し LLM を呼ばない。"""
+    """初回・半角数字のみのとき定型文を返しパイプラインを呼ばない。"""
 
     def test_digits_only_first_message_returns_canned_response_without_llm(self) -> None:
         tutor_repo = InMemoryTutorSessionRepository()
-        llm = FakeLlmGateway()
-        builder = FakeChatPromptBuilder()
+        student = FakeStudentModelGateway()
+        pedagogical = FakePedagogicalModelGateway()
+        interface = FakeInterfaceModelGateway()
         use_case = _send_chat_use_case(
             tutor_repository=tutor_repo,
-            llm_gateway=llm,
-            chat_prompt_builder=builder,
+            student_model=student,
+            pedagogical_model=pedagogical,
+            interface_model=interface,
         )
 
         result = use_case.execute(_request(user_message="12345"))
 
         assert isinstance(result, Ok)
         assert result.value.assistant_content == FIRST_MESSAGE_CANNED_RESPONSE
-        assert llm.generate_calls == []
-        assert builder.build_calls == []
+        assert student.interpret_calls == []
+        assert pedagogical.select_move_calls == []
+        assert interface.generate_calls == []
         assert tutor_repo.save_count == 2
 
         saved = tutor_repo.all_sessions()[0]
@@ -270,14 +316,18 @@ class TestSendChatMessageDigitsOnlyFirstMessage:
         assert saved.messages[0].content == "12345"
         assert saved.messages[1].content == FIRST_MESSAGE_CANNED_RESPONSE
 
-    def test_second_digits_only_message_still_calls_llm(self) -> None:
-        llm = FakeLlmGateway(response="llm reply")
-        use_case = _send_chat_use_case(llm_gateway=llm)
+    def test_second_digits_only_message_still_calls_pipeline(self) -> None:
+        interface = FakeInterfaceModelGateway(response="llm reply")
+        student = FakeStudentModelGateway()
+        use_case = _send_chat_use_case(
+            interface_model=interface,
+            student_model=student,
+        )
 
         first = use_case.execute(_request(user_message="1"))
         assert isinstance(first, Ok)
 
-        llm.set_response("second llm reply")
+        interface.set_response("second llm reply")
         second = use_case.execute(
             _request(
                 user_message="2",
@@ -287,7 +337,7 @@ class TestSendChatMessageDigitsOnlyFirstMessage:
 
         assert isinstance(second, Ok)
         assert second.value.assistant_content == "second llm reply"
-        assert len(llm.generate_calls) == 1
+        assert len(student.interpret_calls) == 1
 
 
 class TestSendChatMessageErrors:
@@ -331,7 +381,7 @@ class TestSendChatMessageErrors:
         tutor_repo = InMemoryTutorSessionRepository()
         use_case = _send_chat_use_case(
             tutor_repository=tutor_repo,
-            llm_gateway=_FailingLlmGateway(),
+            pedagogical_model=_FailingPedagogicalModelGateway(),
         )
 
         result = use_case.execute(_request(user_message="LLM 失敗テスト"))

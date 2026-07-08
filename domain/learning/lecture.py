@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from domain.learning.lecture_outline import LectureOutline
 from domain.learning.quiz_definition import QuizDefinition
 from domain.shared.ids import LectureId
 
@@ -18,6 +19,7 @@ class Lecture:
     video_url: str
     srt_path: str
     quiz_definition: QuizDefinition
+    outline: LectureOutline = LectureOutline.empty()
 
     @classmethod
     def create(
@@ -28,6 +30,7 @@ class Lecture:
         video_url: str,
         srt_path: str,
         quiz_definition: QuizDefinition,
+        outline: LectureOutline | None = None,
     ) -> Lecture:
         if not video_url:
             raise ValueError("Lecture video_url must not be empty")
@@ -37,4 +40,5 @@ class Lecture:
             video_url=video_url,
             srt_path=srt_path,
             quiz_definition=quiz_definition,
+            outline=outline or LectureOutline.empty(),
         )

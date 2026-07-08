@@ -3,7 +3,7 @@
 """GetLearningSnapshot ユースケース。"""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from application.common.errors import AppError, LectureNotFoundError
 from application.common.result import Result, err, ok
@@ -34,6 +34,13 @@ def _empty_snapshot(*, learner_id: LearnerId, lecture_id: LectureId) -> Learning
     )
 
 
+def _as_utc_aware(value: datetime) -> datetime:
+    """比較用に UTC aware へ正規化する（legacy naive は UTC として扱う）。"""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _max_event_time(session: LearningSession) -> datetime | None:
     times: list[datetime] = []
     for event in session.viewing_events:
@@ -42,7 +49,7 @@ def _max_event_time(session: LearningSession) -> datetime | None:
         times.append(attempt.attempted_at)
     if not times:
         return None
-    return max(times)
+    return max(_as_utc_aware(t) for t in times)
 
 
 class GetLearningSnapshotUseCase:

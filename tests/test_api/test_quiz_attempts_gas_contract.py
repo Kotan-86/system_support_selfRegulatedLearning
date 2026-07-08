@@ -7,21 +7,26 @@ POST /api/quiz-attempts の API 契約テスト。
 
 import pytest
 
+from framework_drivers.db.learning.quiz_definitions import lecture_1
+
 
 def _gas_quiz_attempt_payload():
-    """POST /api/quiz-attempts の API 契約 JSON と同一の形（5 問・4 択）。"""
+    """POST /api/quiz-attempts の API 契約 JSON と同一の形（lecture-1 正答・5 問）。"""
+    quiz = lecture_1.build_quiz_definition()
+    answers = [
+        {
+            "question_index": question.index,
+            "selected_answer": question.correct_answer,
+            "is_correct": 1,
+        }
+        for question in quiz.questions
+    ]
     return {
         "participant_id": "1",
         "timestamp": "2026-01-20T11:30:38",
-        "score_numerator": 4,
+        "score_numerator": 5,
         "score_denominator": 5,
-        "answers": [
-            {"question_index": 1, "selected_answer": "統計学の視点：データの分布", "is_correct": 1},
-            {"question_index": 2, "selected_answer": "大きさと向き", "is_correct": 1},
-            {"question_index": 3, "selected_answer": "2次元", "is_correct": 1},
-            {"question_index": 4, "selected_answer": "1つのベクトルの終点を別のベクトルの始点に重ね、新たなベクトルを作る", "is_correct": 1},
-            {"question_index": 5, "selected_answer": "スケーリング", "is_correct": 0},
-        ],
+        "answers": answers,
     }
 
 

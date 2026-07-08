@@ -16,9 +16,11 @@ from interfaces.tutoring.controllers.send_chat_message_controller import (
 from interfaces.tutoring.presenters.chat_response_presenter import ChatResponsePresenter
 from interfaces.tutoring.view_models.chat_response import ChatResponseViewModel
 from tests.test_application.fakes.learning.fake_lecture_catalog import FakeLectureCatalog
-from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
+from tests.test_application.fakes.tutoring.fake_interface_model_gateway import (
+    FakeInterfaceModelGateway,
+)
 from tests.test_application.test_tutoring.test_send_chat_message import (
-    _FailingLlmGateway,
+    _FailingPedagogicalModelGateway,
     _send_chat_use_case,
 )
 
@@ -48,15 +50,17 @@ class TestSendChatMessageController:
     """Controller の ingress と UC 連携を検証する。"""
 
     def test_first_message_returns_chat_response_view_model(self) -> None:
-        llm = FakeLlmGateway(response="AI 応答です")
-        controller = _controller(_send_chat_use_case(llm_gateway=llm))
+        interface = FakeInterfaceModelGateway(response="AI 応答です")
+        controller = _controller(
+            _send_chat_use_case(interface_model=interface),
+        )
 
         result = controller.execute(_chat_payload(), sent_at=FIXED_NOW)
 
         assert isinstance(result, ChatResponseViewModel)
         assert result.response == "AI 応答です"
         assert result.session_id
-        assert len(llm.generate_calls) == 1
+        assert len(interface.generate_calls) == 1
 
     def test_digits_only_first_message_returns_canned_response(self) -> None:
         controller = _controller(_send_chat_use_case())
@@ -71,8 +75,8 @@ class TestSendChatMessageController:
         assert result.session_id
 
     def test_continuation_with_session_id_returns_chat_response_view_model(self) -> None:
-        llm = FakeLlmGateway(response="継続応答")
-        use_case = _send_chat_use_case(llm_gateway=llm)
+        interface = FakeInterfaceModelGateway(response="継続応答")
+        use_case = _send_chat_use_case(interface_model=interface)
         controller = _controller(use_case)
         first = controller.execute(
             _chat_payload(message="初回"),
@@ -149,7 +153,9 @@ class TestSendChatMessageController:
 
     def test_llm_failure_returns_gateway_error_view_model(self) -> None:
         controller = _controller(
-            _send_chat_use_case(llm_gateway=_FailingLlmGateway())
+            _send_chat_use_case(
+                pedagogical_model=_FailingPedagogicalModelGateway(),
+            )
         )
 
         result = controller.execute(_chat_payload(), sent_at=FIXED_NOW)

@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from application.common.errors import (
     AppError,
     LectureNotFoundError,
-    LlmGatewayError,
     TutorSessionNotFoundError,
 )
 from application.common.result import Result, err, ok
@@ -27,16 +27,19 @@ from application.tutoring.dto.send_chat_message import (
 from application.tutoring.dto.start_or_get_tutor_session import (
     StartOrGetTutorSessionRequest,
 )
-from application.tutoring.ports.chat_prompt_builder import ChatPromptBuilder
+from application.tutoring.dto.tutoring_pipeline import TutoringPipelineRequest
 from application.tutoring.ports.id_generators import MessageIdGenerator
-from application.tutoring.ports.llm_gateway import LlmGateway
 from application.tutoring.ports.tutor_session_repository import TutorSessionRepository
+from application.tutoring.use_cases.run_tutoring_pipeline import RunTutoringPipelineUseCase
 from application.tutoring.use_cases.start_or_get_tutor_session import (
     StartOrGetTutorSessionUseCase,
 )
 from domain.learning.lecture import Lecture
 from domain.learning.learning_snapshot import LearningSnapshot
-from domain.tutoring.message import MessageRole
+from domain.tutoring.dialogue_move import DialogueMove
+from domain.tutoring.interpretation_state import InterpretationStateCard
+from domain.tutoring.learner_utterance_type import LearnerUtteranceType
+from domain.tutoring.message import Message, MessageRole
 from domain.tutoring.tutor_session import TutorSession
 
 FIRST_MESSAGE_CANNED_RESPONSE = (
@@ -44,6 +47,16 @@ FIRST_MESSAGE_CANNED_RESPONSE = (
 )
 
 _DIGITS_ONLY_PATTERN = re.compile(r"^[0-9]+$")
+
+
+@dataclass(frozen=True)
+class _AssistantTurn:
+    """1 ターン分の assistant 応答とパイプラインメタデータ。"""
+
+    content: str
+    utterance_type: LearnerUtteranceType | None = None
+    dialogue_move: DialogueMove | None = None
+    interpretation_state: InterpretationStateCard | None = None
 
 
 class SendChatMessageUseCase:
@@ -54,8 +67,7 @@ class SendChatMessageUseCase:
         start_or_get_learning: StartOrGetLearningSessionUseCase,
         start_or_get_tutor: StartOrGetTutorSessionUseCase,
         learning_snapshot_query: LearningSnapshotQuery,
-        chat_prompt_builder: ChatPromptBuilder,
-        llm_gateway: LlmGateway,
+        run_tutoring_pipeline: RunTutoringPipelineUseCase,
         repository: TutorSessionRepository,
         message_id_generator: MessageIdGenerator,
         lecture_catalog: LectureCatalog,
@@ -63,8 +75,7 @@ class SendChatMessageUseCase:
         self._start_or_get_learning = start_or_get_learning
         self._start_or_get_tutor = start_or_get_tutor
         self._learning_snapshot_query = learning_snapshot_query
-        self._chat_prompt_builder = chat_prompt_builder
-        self._llm_gateway = llm_gateway
+        self._run_tutoring_pipeline = run_tutoring_pipeline
         self._repository = repository
         self._message_id_generator = message_id_generator
         self._lecture_catalog = lecture_catalog
@@ -94,7 +105,7 @@ class SendChatMessageUseCase:
                 )
             )
 
-        assistant_result = self._generate_assistant_content(
+        assistant_result = self._generate_assistant_turn(
             user_message=req.user_message,
             tutor_session=tutor_session,
             snapshot=snapshot_result.value,
@@ -103,6 +114,7 @@ class SendChatMessageUseCase:
         if assistant_result.is_err:
             return assistant_result  # type: ignore[return-value]
 
+        assistant_turn = assistant_result.value
         user_msg_id = self._message_id_generator.next_id()
         asst_msg_id = self._message_id_generator.next_id()
         updated = (
@@ -114,15 +126,18 @@ class SendChatMessageUseCase:
             ).append_message(
                 message_id=asst_msg_id,
                 role=MessageRole.ASSISTANT,
-                content=assistant_result.value,
+                content=assistant_turn.content,
                 created_at=req.sent_at,
+                utterance_type=assistant_turn.utterance_type,
+                dialogue_move=assistant_turn.dialogue_move,
+                interpretation_state=assistant_turn.interpretation_state,
             )
         )
         self._repository.save(updated)
         return ok(
             SendChatMessageResponse(
                 tutor_session_id=updated.id,
-                assistant_content=assistant_result.value,
+                assistant_content=assistant_turn.content,
                 user_message_id=user_msg_id,
                 assistant_message_id=asst_msg_id,
             )
@@ -174,34 +189,48 @@ class SendChatMessageUseCase:
             return err(error)
         return ok(snapshot)
 
-    def _generate_assistant_content(
+    def _generate_assistant_turn(
         self,
         *,
         user_message: str,
         tutor_session: TutorSession,
         snapshot: LearningSnapshot,
         lecture: Lecture,
-    ) -> Result[str, AppError]:
+    ) -> Result[_AssistantTurn, AppError]:
         if (
             not tutor_session.messages
             and _DIGITS_ONLY_PATTERN.match(user_message.strip())
         ):
-            return ok(FIRST_MESSAGE_CANNED_RESPONSE)
+            return ok(_AssistantTurn(content=FIRST_MESSAGE_CANNED_RESPONSE))
 
-        prompt = self._chat_prompt_builder.build(
-            snapshot,
-            tutor_session.messages,
-            user_message,
-            lecture,
+        pipeline_result = self._run_tutoring_pipeline.execute(
+            TutoringPipelineRequest(
+                snapshot=snapshot,
+                messages=tutor_session.messages,
+                user_message=user_message,
+                lecture=lecture,
+                previous_state_card=_latest_assistant_state_card(tutor_session.messages),
+            )
         )
-        try:
-            content = self._llm_gateway.generate(prompt)
-        except LlmGatewayError as error:
-            return err(error)
-        except Exception as exc:
-            return err(LlmGatewayError(f"LLM gateway failed: {exc}"))
+        if pipeline_result.is_err:
+            return pipeline_result  # type: ignore[return-value]
 
-        if not content:
-            return err(LlmGatewayError("LLM gateway returned empty response"))
+        pipeline = pipeline_result.value
+        return ok(
+            _AssistantTurn(
+                content=pipeline.assistant_text,
+                utterance_type=pipeline.interpretation.utterance_type,
+                dialogue_move=pipeline.decision.dialogue_move,
+                interpretation_state=pipeline.interpretation.state_card,
+            )
+        )
 
-        return ok(content)
+
+def _latest_assistant_state_card(
+    messages: tuple[Message, ...],
+) -> InterpretationStateCard | None:
+    """直前 assistant Message の State Card を返す（なければ None）。"""
+    for message in reversed(messages):
+        if message.role is MessageRole.ASSISTANT:
+            return message.interpretation_state
+    return None

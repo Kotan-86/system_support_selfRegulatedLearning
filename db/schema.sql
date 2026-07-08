@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    utterance_type TEXT,
+    dialogue_move TEXT,
+    interpretation_state TEXT,
     FOREIGN KEY (session_id) REFERENCES sessions(id)
 );
 

@@ -181,3 +181,10 @@ class TestFakeLlmGateway:
         gateway = FakeLlmGateway()
         gateway.set_response("new reply")
         assert gateway.generate("any") == "new reply"
+
+    def test_generate_json_returns_configured_dict_and_records_prompt(self) -> None:
+        payload = {"dialogue_move": "JOINT_EVIDENCE_CHECK"}
+        gateway = FakeLlmGateway(json_response=payload)
+        result = gateway.generate_json("json prompt", schema_hint="hint")
+        assert result == payload
+        assert gateway.generate_json_calls == [("json prompt", "hint")]

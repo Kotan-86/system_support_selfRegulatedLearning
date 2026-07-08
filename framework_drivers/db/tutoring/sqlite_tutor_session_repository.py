@@ -83,8 +83,11 @@ class SqliteTutorSessionRepository(TutorSessionRepository):
         for message in session.messages[len(current.messages) :]:
             self._conn.execute(
                 """
-                INSERT INTO messages (session_id, role, content, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO messages (
+                    session_id, role, content, created_at,
+                    utterance_type, dialogue_move, interpretation_state
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 message_to_insert_params(message, session.id),
             )
@@ -105,7 +108,8 @@ class SqliteTutorSessionRepository(TutorSessionRepository):
 
         message_rows = self._conn.execute(
             """
-            SELECT id, session_id, role, content, created_at
+            SELECT id, session_id, role, content, created_at,
+                   utterance_type, dialogue_move, interpretation_state
             FROM messages
             WHERE session_id = ?
             ORDER BY created_at ASC, id ASC
