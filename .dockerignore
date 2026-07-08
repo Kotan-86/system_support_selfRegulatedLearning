@@ -1,8 +1,31 @@
+# Git / Python 仮想環境
+.git/
+.venv/
+**/__pycache__/
+.pytest_cache/
+
+# 秘密情報（仕様: docs/spec/framework-drivers-layer.md#ローカル秘密情報what）
 secrets/
+*.json
 .env
 .env.*
 !.env.example
-.git/
-.venv/
+
+# ローカル DB（コンテナ内で再初期化）
 db/data/*.db
-**/__pycache__/
+
+# テスト・開発用スクリプト・ドキュメント
+tests/
+scripts/
+docs/
+.cursor/
+
+# レガシー資産（ランタイム不要）
+lecture_video_platform/
+quiz_form/
+infrastructure/
+app/
+Arcitecture/
+
+# その他開発用
+node_modules/

@@ -16,6 +16,7 @@ from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
 from application.tutoring.ports.llm_gateway import LlmGateway
+from application.tutoring.use_cases.run_tutoring_pipeline import RunTutoringPipelineUseCase
 from application.tutoring.use_cases.send_chat_message import SendChatMessageUseCase
 from application.tutoring.use_cases.start_or_get_tutor_session import (
     StartOrGetTutorSessionUseCase,
@@ -31,6 +32,15 @@ from framework_drivers.db.tutoring.id_generators import (
 )
 from framework_drivers.db.tutoring.sqlite_tutor_session_repository import (
     SqliteTutorSessionRepository,
+)
+from framework_drivers.external.vertex.llm_interface_model_gateway import (
+    LlmInterfaceModelGateway,
+)
+from framework_drivers.external.vertex.llm_pedagogical_model_gateway import (
+    LlmPedagogicalModelGateway,
+)
+from framework_drivers.external.vertex.llm_student_model_gateway import (
+    LlmStudentModelGateway,
 )
 from framework_drivers.external.vertex.vertex_llm_gateway import VertexLlmGateway
 from framework_drivers.external.youtube.youtube_video_duration_resolver import (
@@ -61,7 +71,6 @@ from interfaces.learning.presenters.record_quiz_attempt_presenter import (
 from interfaces.learning.presenters.record_viewing_event_presenter import (
     RecordViewingEventPresenter,
 )
-from interfaces.tutoring.chat_prompt_builder import DefaultChatPromptBuilder
 from interfaces.tutoring.controllers.send_chat_message_controller import (
     SendChatMessageController,
 )
@@ -224,6 +233,18 @@ def build_record_quiz_attempt_controller(
     )
 
 
+def build_run_tutoring_pipeline(
+    llm_gateway: LlmGateway | None = None,
+) -> RunTutoringPipelineUseCase:
+    """本番用 ITS 3 段パイプラインを構築する。"""
+    gateway = llm_gateway if llm_gateway is not None else build_llm_gateway()
+    return RunTutoringPipelineUseCase(
+        student_model=LlmStudentModelGateway(gateway),
+        pedagogical_model=LlmPedagogicalModelGateway(gateway),
+        interface_model=LlmInterfaceModelGateway(gateway),
+    )
+
+
 def build_send_chat_message_controller(
     *,
     learning_connection: sqlite3.Connection,
@@ -244,8 +265,7 @@ def build_send_chat_message_controller(
             id_generator=UuidTutorSessionIdGenerator(),
         ),
         learning_snapshot_query=GetLearningSnapshotQuery(snapshot_use_case),
-        chat_prompt_builder=DefaultChatPromptBuilder(),
-        llm_gateway=gateway,
+        run_tutoring_pipeline=build_run_tutoring_pipeline(gateway),
         repository=tutor_repository,
         message_id_generator=UuidMessageIdGenerator(),
         lecture_catalog=lecture_catalog,

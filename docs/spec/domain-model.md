@@ -33,12 +33,12 @@
 
 ### コンテキスト一覧
 
-| コンテキスト | 英名 | コアドメイン | 主な責務 |
-|-------------|------|-------------|---------|
-| 学習記録 | Learning | はい | 講義定義・視聴・小テスト・1 講義あたり 1 Session の学習過程を記録 |
-| AI 振り返り支援 | Tutoring | はい | 1 LearningSession スコープの LLM 対話で暫定的な解釈の外化を支援 |
-| 研究データ出力 | Research Export | いいえ（支援） | 参加者・講義横断の分析用データを Read 中心で出力 |
-| （共有） | Shared Kernel | — | 全コンテキストが合意する識別子・参加者参照 |
+| コンテキスト    | 英名            | コアドメイン   | 主な責務                                                          |
+| --------------- | --------------- | -------------- | ----------------------------------------------------------------- |
+| 学習記録        | Learning        | はい           | 講義定義・視聴・小テスト・1 講義あたり 1 Session の学習過程を記録 |
+| AI 振り返り支援 | Tutoring        | はい           | 1 LearningSession スコープの LLM 対話で暫定的な解釈の外化を支援   |
+| 研究データ出力  | Research Export | いいえ（支援） | 参加者・講義横断の分析用データを Read 中心で出力                  |
+| （共有）        | Shared Kernel   | —              | 全コンテキストが合意する識別子・参加者参照                        |
 
 **LAD（学習分析ダッシュボード）** は独立したコンテキストではない。Learning コンテキストの **Read Model（LearningSnapshot）** を UI が表示する。
 
@@ -50,12 +50,12 @@
 
 **ユビキタス言語**
 
-| 用語 | 意味 |
-|------|------|
+| 用語           | 意味                                                      |
+| -------------- | --------------------------------------------------------- |
 | 学習セッション | 1 学習者 × 1 講義 × 1 試行の学習記録（`LearningSession`） |
-| 視聴イベント | 動画操作 1 回分の記録（`ViewingEvent`） |
-| 小テスト受験 | 1 回の受験と得点（`QuizAttempt`） |
-| 講義 | 動画・字幕・小テスト定義の単位（`Lecture`） |
+| 視聴イベント   | 動画操作 1 回分の記録（`ViewingEvent`）                   |
+| 小テスト受験   | 1 回の受験と得点（`QuizAttempt`）                         |
+| 講義           | 動画・字幕・小テスト定義の単位（`Lecture`）               |
 
 **所有する概念**
 
@@ -88,11 +88,11 @@
 
 **ユビキタス言語**
 
-| 用語 | 意味 |
-|------|------|
-| チューターセッション | 1 `LearningSession` に紐づく AI 振り返り対話（`TutorSession`） |
-| メッセージ | user / assistant の 1 発話（`Message`） |
-| 暫定的な解釈 | 学習者が違和感・選択理由・教材証拠・学習過程を結びつけて言語化した状態（研究 RQ の成果指標） |
+| 用語                 | 意味                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| チューターセッション | 1 `LearningSession` に紐づく AI 振り返り対話（`TutorSession`）                               |
+| メッセージ           | user / assistant の 1 発話（`Message`）                                                      |
+| 暫定的な解釈         | 学習者が違和感・選択理由・教材証拠・学習過程を結びつけて言語化した状態（研究 RQ の成果指標） |
 
 **所有する概念**
 
@@ -124,9 +124,9 @@
 
 **ユビキタス言語**
 
-| 用語 | 意味 |
-|------|------|
-| エクスポート | 分析用 TSV/JSON 等への一括出力 |
+| 用語           | 意味                                                              |
+| -------------- | ----------------------------------------------------------------- |
+| エクスポート   | 分析用 TSV/JSON 等への一括出力                                    |
 | プログラム参加 | 同一参加者の複数講義 Session を束ねる文脈（`ParticipantProgram`） |
 
 **所有する概念**
@@ -149,12 +149,12 @@
 
 全コンテキストが **同一の識別子** を使う最小集合。実装は `domain/shared/` に置く。
 
-| 概念 | 役割 |
-|------|------|
-| `Learner` / `LearnerId` | 参加者の同一性（既存 API: `participant_id`） |
-| `LectureId` | 講義の参照 |
-| `LearningSessionId` | 1 試行の学習記録の参照（Tutoring・Export の外部キー） |
-| 各種 ID Value Object | 空文字拒否等の共通不変条件 |
+| 概念                    | 役割                                                  |
+| ----------------------- | ----------------------------------------------------- |
+| `Learner` / `LearnerId` | 参加者の同一性（既存 API: `participant_id`）          |
+| `LectureId`             | 講義の参照                                            |
+| `LearningSessionId`     | 1 試行の学習記録の参照（Tutoring・Export の外部キー） |
+| 各種 ID Value Object    | 空文字拒否等の共通不変条件                            |
 
 Shared Kernel は **振る舞いを持たない識別子と参加者参照** に限定する。`LearningSession` 集約のルールは Learning が所有する。
 
@@ -193,20 +193,20 @@ flowchart LR
   TC -->|"Read Repository"| RE
 ```
 
-| 関係 | パターン | 説明 |
-|------|---------|------|
-| Learning → Tutoring | Open Host Service + Published Language | `LearningSnapshot` のみを公開 API とする |
-| Tutoring ← Learning | Customer + ACL | プロンプト構築は Tutoring 側 Presenter が担当。Learning の Entity を直接 import しない |
-| Research Export ← Learning / Tutoring | Conformist（Read） | 既存 Repository を Read 専用で参照。Export 用 DTO は Export コンテキストで定義 |
-| 全コンテキスト | Shared Kernel | ID 型と `Learner` 参照を共有 |
+| 関係                                  | パターン                               | 説明                                                                                   |
+| ------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
+| Learning → Tutoring                   | Open Host Service + Published Language | `LearningSnapshot` のみを公開 API とする                                               |
+| Tutoring ← Learning                   | Customer + ACL                         | プロンプト構築は Tutoring 側 Presenter が担当。Learning の Entity を直接 import しない |
+| Research Export ← Learning / Tutoring | Conformist（Read）                     | 既存 Repository を Read 専用で参照。Export 用 DTO は Export コンテキストで定義         |
+| 全コンテキスト                        | Shared Kernel                          | ID 型と `Learner` 参照を共有                                                           |
 
 **インフラ上の DB 分割**（ADR 準拠）とコンテキストの対応:
 
-| DB | コンテキスト | テーブル例 |
-|----|-------------|-----------|
-| 学習データ用 | Learning | learning_sessions, viewing_logs, quiz_attempts |
-| 対話用 | Tutoring | sessions, messages |
-| — | Research Export | 永続化なし（Export 時に結合） |
+| DB           | コンテキスト    | テーブル例                                     |
+| ------------ | --------------- | ---------------------------------------------- |
+| 学習データ用 | Learning        | learning_sessions, viewing_logs, quiz_attempts |
+| 対話用       | Tutoring        | sessions, messages                             |
+| —            | Research Export | 永続化なし（Export 時に結合）                  |
 
 ---
 
@@ -242,9 +242,9 @@ LearningSnapshot（Read Model・Entity ではない）
 
 ### Learner（学習者）— Shared Kernel
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | LearnerId | 学習者を一意に識別 |
+| フィールド | 型        | 説明               |
+| ---------- | --------- | ------------------ |
+| id         | LearnerId | 学習者を一意に識別 |
 
 **不変条件**
 
@@ -259,13 +259,14 @@ LearningSnapshot（Read Model・Entity ではない）
 
 ### Lecture（講義）
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | LectureId | 講義を一意に識別 |
-| title | str | 表示・エクスポート用 |
-| videoUrl | str | 動画 URL |
-| srtPath | str | 講義字幕ファイルへのパス |
-| quizDefinition | QuizDefinition | 小テスト定義 |
+| フィールド     | 型             | 説明                                                                      |
+| -------------- | -------------- | ------------------------------------------------------------------------- |
+| id             | LectureId      | 講義を一意に識別                                                          |
+| title          | str            | 表示・エクスポート用                                                      |
+| videoUrl       | str            | 動画 URL                                                                  |
+| srtPath        | str            | 講義字幕ファイルへのパス                                                  |
+| quizDefinition | QuizDefinition | 小テスト定義                                                              |
+| outline        | LectureOutline | 講義構造メタデータ（ITS Domain Model / 知識ベース）。未設定時は空 Outline |
 
 **不変条件**
 
@@ -276,6 +277,55 @@ LearningSnapshot（Read Model・Entity ではない）
 **備考**
 
 - LAD 学習者タイプ判定時、interfaces 層の `VideoDurationResolver`（Infrastructure 実装）が `videoUrl` を参照して動画総尺を解決する（解決方法の How は infrastructure 実装に委ねる）
+- `outline` は ITS チューターのプロンプトに注入する静的知識。近い実験では `framework_drivers/db/learning/lecture_outlines/` から注入する
+
+---
+
+### LectureOutline（ITS Domain Model / 知識ベース）
+
+講義動画の章構成・動画内演習・小テスト採点意図を表す Value Object 群。LLM 呼び出しは行わない。
+
+#### LectureSection
+
+| フィールド | 型          | 説明                             |
+| ---------- | ----------- | -------------------------------- |
+| id         | str         | セクション識別子（講義内で一意） |
+| title      | str         | セクション名                     |
+| startSec   | int         | 動画内開始位置（秒）             |
+| endSec     | int \| None | 動画内終了位置（秒・任意）       |
+| summary    | str \| None | 概要（任意）                     |
+
+#### InVideoExercise
+
+| フィールド       | 型          | 説明                       |
+| ---------------- | ----------- | -------------------------- |
+| id               | str         | 演習識別子（講義内で一意） |
+| title            | str         | 演習名                     |
+| timestampSec     | int         | 動画内タイムスタンプ（秒） |
+| description      | str         | 演習の説明                 |
+| relatedSectionId | str \| None | 関連セクション ID（任意）  |
+
+#### QuizRubricNote
+
+| フィールド    | 型  | 説明                                        |
+| ------------- | --- | ------------------------------------------- |
+| questionIndex | int | 設問番号（Lecture.quizDefinition への参照） |
+| note          | str | 採点意図・よくある誤解                      |
+
+#### LectureOutline
+
+| フィールド       | 型                | 説明                                   |
+| ---------------- | ----------------- | -------------------------------------- |
+| sections         | LectureSection[]  | 講義セクション一覧                     |
+| inVideoExercises | InVideoExercise[] | 動画内演習一覧                         |
+| quizRubricNotes  | QuizRubricNote[]  | 小テスト採点意図（任意・デフォルト空） |
+
+**不変条件**
+
+- `LectureSection.id` / `InVideoExercise.id` は同一 `LectureOutline` 内でそれぞれ一意
+- `startSec` / `timestampSec` は 0 以上
+- `endSec` が指定される場合、`endSec > startSec`
+- 空 Outline（`sections`・`inVideoExercises`・`quizRubricNotes` すべて空）は後方互換のデフォルトとして許容する
 
 ---
 
@@ -283,12 +333,12 @@ LearningSnapshot（Read Model・Entity ではない）
 
 1 学習者 × 1 講義 × 1 試行（1 来室・1 実験単位）の学習記録。
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | LearningSessionId | セッション ID |
-| learnerId | LearnerId | 学習者 |
-| lectureId | LectureId | 講義 |
-| startedAt | datetime | 開始日時 |
+| フィールド           | 型                           | 説明                   |
+| -------------------- | ---------------------------- | ---------------------- |
+| id                   | LearningSessionId            | セッション ID          |
+| learnerId            | LearnerId                    | 学習者                 |
+| lectureId            | LectureId                    | 講義                   |
+| startedAt            | datetime                     | 開始日時               |
 | participantProgramId | ParticipantProgramId \| None | 長期プログラム（任意） |
 
 **不変条件**
@@ -314,12 +364,12 @@ LearningSnapshot（Read Model・Entity ではない）
 
 15 講義など、同一参加者の長期研究文脈を束ねる。
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | ParticipantProgramId | プログラム参加 ID |
-| learnerId | LearnerId | 学習者 |
-| programId | ProgramId | コース定義 ID |
-| startedAt | datetime | 参加開始 |
+| フィールド | 型                   | 説明              |
+| ---------- | -------------------- | ----------------- |
+| id         | ParticipantProgramId | プログラム参加 ID |
+| learnerId  | LearnerId            | 学習者            |
+| programId  | ProgramId            | コース定義 ID     |
+| startedAt  | datetime             | 参加開始          |
 
 **不変条件**
 
@@ -336,13 +386,13 @@ LearningSnapshot（Read Model・Entity ではない）
 
 ### ViewingEvent（視聴イベント）
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | ViewingEventId | イベント ID |
-| occurredAt | datetime | 操作が記録された壁時計時刻 |
-| videoPosition | int | 動画内位置（秒） |
-| action | ViewingAction | 操作種別 |
-| positionDelta | int | 前位置からの変位（秒・符号付き整数） |
+| フィールド    | 型             | 説明                                 |
+| ------------- | -------------- | ------------------------------------ |
+| id            | ViewingEventId | イベント ID                          |
+| occurredAt    | datetime       | 操作が記録された壁時計時刻           |
+| videoPosition | int            | 動画内位置（秒）                     |
+| action        | ViewingAction  | 操作種別                             |
+| positionDelta | int            | 前位置からの変位（秒・符号付き整数） |
 
 **ViewingAction（列挙）**
 
@@ -364,24 +414,24 @@ LearningSnapshot（Read Model・Entity ではない）
 
 **インフラマッピング**
 
-| ドメイン | 既存 DB / API |
-|----------|---------------|
-| occurredAt | time_stamp |
-| videoPosition | current_time |
-| action | action |
-| positionDelta | duration |
+| ドメイン      | 既存 DB / API |
+| ------------- | ------------- |
+| occurredAt    | time_stamp    |
+| videoPosition | current_time  |
+| action        | action        |
+| positionDelta | duration      |
 
 ---
 
 ### QuizAttempt（小テスト受験）
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | QuizAttemptId | 受験 ID |
-| attemptedAt | datetime | 受験日時 |
-| scoreNumerator | int | 得点 |
-| scoreDenominator | int | 満点 |
-| answers | QuizAnswer[] | 各問の回答 |
+| フィールド       | 型            | 説明       |
+| ---------------- | ------------- | ---------- |
+| id               | QuizAttemptId | 受験 ID    |
+| attemptedAt      | datetime      | 受験日時   |
+| scoreNumerator   | int           | 得点       |
+| scoreDenominator | int           | 満点       |
+| answers          | QuizAnswer[]  | 各問の回答 |
 
 **不変条件**
 
@@ -394,11 +444,11 @@ LearningSnapshot（Read Model・Entity ではない）
 
 ### QuizAnswer（小テスト回答）
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| questionIndex | int | 設問番号（Lecture.quizDefinition への参照） |
-| selectedAnswer | str | 学習者の選択 |
-| isCorrect | bool | 正誤 |
+| フィールド     | 型   | 説明                                        |
+| -------------- | ---- | ------------------------------------------- |
+| questionIndex  | int  | 設問番号（Lecture.quizDefinition への参照） |
+| selectedAnswer | str  | 学習者の選択                                |
+| isCorrect      | bool | 正誤                                        |
 
 **不変条件**
 
@@ -412,15 +462,15 @@ LearningSnapshot（Read Model・Entity ではない）
 
 LAD 表示および Tutoring への **Published Language**。**Entity ではない**。
 
-| フィールド | 説明 |
-|-----------|------|
-| sessionId | 対象 LearningSession |
-| learnerId | 学習者 |
-| lectureId | 講義 |
-| viewingEvents | 時系列の視聴イベント |
-| latestQuizAttempt | 最新の QuizAttempt（なければ null） |
-| quizAnswers | latestQuizAttempt に紐づく回答 |
-| lectureTranscriptExcerpts | 視聴位置に対応する字幕抜粋（任意） |
+| フィールド                | 説明                                |
+| ------------------------- | ----------------------------------- |
+| sessionId                 | 対象 LearningSession                |
+| learnerId                 | 学習者                              |
+| lectureId                 | 講義                                |
+| viewingEvents             | 時系列の視聴イベント                |
+| latestQuizAttempt         | 最新の QuizAttempt（なければ null） |
+| quizAnswers               | latestQuizAttempt に紐づく回答      |
+| lectureTranscriptExcerpts | 視聴位置に対応する字幕抜粋（任意）  |
 
 **不変条件（意味的）**
 
@@ -435,11 +485,15 @@ LAD 表示および Tutoring への **Published Language**。**Entity ではな�
 
 ### Value Object（Learning）
 
-| 名前 | 説明 | 不変条件 |
-|------|------|----------|
-| ViewingAction | 視聴操作 | 列挙値のみ |
-| QuizDefinition | 小テスト定義 | questions が 1 件以上 |
-| Question | 設問 | index 一意、text 非空 |
+| 名前            | 説明                                   | 不変条件                             |
+| --------------- | -------------------------------------- | ------------------------------------ |
+| ViewingAction   | 視聴操作                               | 列挙値のみ                           |
+| QuizDefinition  | 小テスト定義                           | questions が 1 件以上                |
+| Question        | 設問                                   | index 一意、text 非空                |
+| LectureOutline  | 講義構造メタデータ（ITS Domain Model） | section / exercise id 一意、秒数非負 |
+| LectureSection  | 講義セクション                         | id・title 非空                       |
+| InVideoExercise | 動画内演習                             | id・title・description 非空          |
+| QuizRubricNote  | 小テスト採点意図                       | questionIndex >= 1、note 非空        |
 
 識別子（`LectureId`, `LearningSessionId` 等）は Shared Kernel を参照する。
 
@@ -447,8 +501,8 @@ LAD 表示および Tutoring への **Published Language**。**Entity ではな�
 
 ### Domain Service（Learning）
 
-| 名前 | 責務 |
-|------|------|
+| 名前                    | 責務                                                          |
+| ----------------------- | ------------------------------------------------------------- |
 | LearningSnapshotBuilder | LearningSession と Lecture から LearningSnapshot を組み立てる |
 
 ---
@@ -467,11 +521,11 @@ TutorSession（Aggregate Root）
 
 ### TutorSession（AI 振り返り）
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | TutorSessionId | 対話セッション ID |
+| フィールド        | 型                | 説明                                  |
+| ----------------- | ----------------- | ------------------------------------- |
+| id                | TutorSessionId    | 対話セッション ID                     |
 | learningSessionId | LearningSessionId | 紐づく学習セッション（Shared Kernel） |
-| startedAt | datetime | 開始日時 |
+| startedAt         | datetime          | 開始日時                              |
 
 **不変条件**
 
@@ -482,38 +536,70 @@ TutorSession（Aggregate Root）
 
 ### Message（対話メッセージ）
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| id | MessageId | メッセージ ID |
-| role | MessageRole | `user` または `assistant` |
-| content | str | 発話内容 |
-| createdAt | datetime | 作成日時 |
+| フィールド          | 型                                | 説明                                                            |
+| ------------------- | --------------------------------- | --------------------------------------------------------------- |
+| id                  | MessageId                         | メッセージ ID                                                   |
+| role                | MessageRole                       | `user` または `assistant`                                       |
+| content             | str                               | 発話内容                                                        |
+| createdAt           | datetime                          | 作成日時                                                        |
+| utteranceType       | `LearnerUtteranceType \| None`    | 当ターンの user 発話分類（assistant のみ。研究ログ用）          |
+| dialogueMove        | `DialogueMove \| None`            | 当ターンに選択した Coach Move（assistant のみ）                 |
+| interpretationState | `InterpretationStateCard \| None` | 当ターン時点の State Card（assistant のみ。ターン間引き継ぎ用） |
 
 **不変条件**
 
 - `role` は `user` または `assistant` のみ
 - `content` は空文字でない
 - 1 Message は 1 発話（user と assistant を 1 行にペアリングしない）
+- `utteranceType` / `dialogueMove` / `interpretationState` は **assistant Message のみ** に付与する。user Message では常に `None`
+- 初回ターン・半角数字のみ定型文など LLM 未呼び出し時は assistant の付帯メタデータはすべて `None`
+
+**State Card ターン間引き継ぎ**
+
+- 2 ターン目以降の ITS Student Model 入力には、直前 assistant Message の `interpretationState` を渡す
+- 初回ターンまたは直前 assistant に State Card が無い場合は `InterpretationStateCard.empty()` 相当で開始する
 
 **インフラマッピング**
 
-- 既存 `sessions` テーブル（session_id, role, content, created_at）と対応
+- 既存 `messages` テーブル（`session_id`, `role`, `content`, `created_at`）に加え、`utterance_type` / `dialogue_move` / `interpretation_state`（JSON）列で付帯メタデータを永続化する（[framework-drivers-persistence.md](./framework-drivers-persistence.md)）
 - 既存 `sessions` テーブルは TutorSession に対応（`learning_session_id` 列 — [framework-drivers-persistence.md](./framework-drivers-persistence.md)）
 
 ---
 
-### Value Object（Tutoring）
+### Tutoring Value Object（ITS パイプライン）
 
-| 名前 | 説明 | 不変条件 |
-|------|------|----------|
+| 名前                          | 説明                                              | 不変条件                                   |
+| ----------------------------- | ------------------------------------------------- | ------------------------------------------ |
+| `MessageRole`                 | 発話者                                            | `user` \| `assistant`                      |
+| `InterpretationFieldStatus`   | State Card 各軸の確信度                           | `confirmed` \| `hypothesized` \| `unknown` |
+| `InterpretationField`         | State Card の 1 軸（status + note）               | —                                          |
+| `InterpretationStateCard`     | 8 軸の学習者解釈状態カード                        | 8 軸すべて必須。`empty()` は全軸 `unknown` |
+| `LearnerUtteranceType`        | 学習者発話分類（5 種）                            | `FACT_REQUEST` 等                          |
+| `DialogueMove`                | Coach Move（13 種）                               | プロンプト定義と列挙が一致すること         |
+| `ResponseBudget`              | 発話予算（max_sentences, max_questions）          | 正の整数                                   |
+| `DialogueMoveDecision`        | Pedagogical Model 出力（Move + budget + 指示）    | `interface_instructions` は空でない        |
+| `LearnerInterpretationResult` | Student Model 出力（utterance_type + state_card） | —                                          |
+
+配置: `domain/tutoring/`。Application 層 DTO（`TutoringPipelineRequest` 等）とは分離する。
+
+**用語の区別**: 本節の ITS 4 部モデル名（Domain Model / Student Model 等）はクリーンアーキテクチャの層名とは別概念である（[application-usecase.md](./application-usecase.md) の ITS パイプライン参照）。
+
+---
+
+### Value Object（Tutoring）— 旧表（MessageRole のみ）
+
+| 名前        | 説明   | 不変条件              |
+| ----------- | ------ | --------------------- |
 | MessageRole | 発話者 | `user` \| `assistant` |
+
+（上記「Tutoring Value Object」節に VO 一覧を統合。本表は後方参照用に残す。）
 
 ---
 
 ### Domain Service（Tutoring）
 
-| 名前 | 責務 |
-|------|------|
+| 名前                     | 責務                                                |
+| ------------------------ | --------------------------------------------------- |
 | NearTermExperimentPolicy | 近い実験向け制約（例: TutorSession 1 本まで）の判定 |
 
 プロンプト文字列の組み立ては **interfaces 層の Presenter**（Anti-Corruption Layer）が担当し、入力は `LearningSnapshot` + `Message[]` とする。
@@ -535,10 +621,10 @@ TutorSession（Aggregate Root）
 
 ## Shared Kernel — Value Object
 
-| 名前 | 説明 | 不変条件 |
-|------|------|----------|
-| LearnerId | 学習者 ID | 空文字不可 |
-| LectureId | 講義 ID | 空文字不可 |
+| 名前              | 説明              | 不変条件   |
+| ----------------- | ----------------- | ---------- |
+| LearnerId         | 学習者 ID         | 空文字不可 |
+| LectureId         | 講義 ID           | 空文字不可 |
 | LearningSessionId | 学習セッション ID | 空文字不可 |
 
 ---
@@ -551,12 +637,12 @@ Domain Service は状態を持たない。Entity / VO 単体では表現しに�
 
 ## 既存システムとの対応
 
-| 現行 | ドメイン上の位置 |
-|------|------------------|
-| `db/schema.sql` sessions, messages | TutorSession, Message（`learning_session_id` で LearningSession 参照 — [framework-drivers-persistence.md](./framework-drivers-persistence.md)） |
-| `db/schema_learning.sql` learning_sessions, viewing_logs, quiz_attempts | LearningSession, ViewingEvent, QuizAttempt |
-| `get_lad_data_for_participant` | LearningSnapshotBuilder の出力に相当 |
-| `app/main.py` `_format_*` | Presenter 層（ドメイン外） |
+| 現行                                                                    | ドメイン上の位置                                                                                                                                |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `db/schema.sql` sessions, messages                                      | TutorSession, Message（`learning_session_id` で LearningSession 参照 — [framework-drivers-persistence.md](./framework-drivers-persistence.md)） |
+| `db/schema_learning.sql` learning_sessions, viewing_logs, quiz_attempts | LearningSession, ViewingEvent, QuizAttempt                                                                                                      |
+| `get_lad_data_for_participant`                                          | LearningSnapshotBuilder の出力に相当                                                                                                            |
+| `app/main.py` `_format_*`                                               | Presenter 層（ドメイン外）                                                                                                                      |
 
 ---
 
@@ -580,4 +666,6 @@ Domain Service は状態を持たない。Entity / VO 単体では表現しに�
 
 - [ ] TutorSession が `learningSessionId` で Learning を参照する
 - [ ] Message は role + content の 1 発話モデルである
+- [ ] assistant Message に `utteranceType` / `dialogueMove` / `interpretationState` を付帯できる（user は常に `None`）
+- [ ] 直前 assistant の `interpretationState` が次ターン Student Model 入力に引き継がれる
 - [ ] NearTermExperimentPolicy が TutorSession 1 本制約を Tutoring 側で enforce する

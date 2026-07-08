@@ -71,14 +71,17 @@
         .then(function (response) {
           hideLoading();
           if (!response.ok) {
-            return response.json().catch(function () {
-              return {};
-            }).then(function (errData) {
-              appendMessage(
-                "エラー: " + (errData.error || response.status),
-                "tutor-message"
-              );
-            });
+            return response
+              .json()
+              .catch(function () {
+                return {};
+              })
+              .then(function (errData) {
+                appendMessage(
+                  "エラー: " + (errData.error || response.status),
+                  "tutor-message",
+                );
+              });
           }
           return response.json().then(function (data) {
             if (data.session_id) {
@@ -106,7 +109,7 @@
     bindForm();
     appendMessage(
       "学習記録をもとに振り返りを始めましょう。メッセージを入力してください。",
-      "tutor-message"
+      "tutor-message",
     );
   }
 

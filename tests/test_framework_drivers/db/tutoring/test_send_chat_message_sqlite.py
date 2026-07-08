@@ -1,6 +1,6 @@
 # 仕様: docs/spec/application-usecase.md#SendChatMessage
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-3-Tutoring
-"""SendChatMessageUseCase と SQLite Repository / Fake LLM の統合テスト。"""
+"""SendChatMessageUseCase と SQLite Repository / Fake 3 Gateway の統合テスト。"""
 from __future__ import annotations
 
 import sqlite3
@@ -17,6 +17,7 @@ from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
 from application.tutoring.dto.send_chat_message import SendChatMessageRequest
+from application.tutoring.use_cases.run_tutoring_pipeline import RunTutoringPipelineUseCase
 from application.tutoring.use_cases.send_chat_message import (
     FIRST_MESSAGE_CANNED_RESPONSE,
     SendChatMessageUseCase,
@@ -39,9 +40,16 @@ from framework_drivers.db.tutoring.sqlite_tutor_session_repository import (
     SqliteTutorSessionRepository,
 )
 from interfaces.common.default_lecture import DEFAULT_LECTURE_ID_VALUE
-from interfaces.tutoring.chat_prompt_builder import DefaultChatPromptBuilder
 from tests.test_application.fakes.tutoring.fake_id_generators import FakeMessageIdGenerator
-from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
+from tests.test_application.fakes.tutoring.fake_interface_model_gateway import (
+    FakeInterfaceModelGateway,
+)
+from tests.test_application.fakes.tutoring.fake_pedagogical_model_gateway import (
+    FakePedagogicalModelGateway,
+)
+from tests.test_application.fakes.tutoring.fake_student_model_gateway import (
+    FakeStudentModelGateway,
+)
 from tests.test_framework_drivers.db.learning.test_record_learning_write_sqlite import (
     _five_answers,
     _quiz_use_case,
@@ -65,19 +73,58 @@ class _RecordingLearningSnapshotQuery(GetLearningSnapshotQuery):
         return super().get_by_learner_and_lecture(learner_id, lecture_id)
 
 
+def _pipeline_fakes(
+    *,
+    student: FakeStudentModelGateway | None = None,
+    pedagogical: FakePedagogicalModelGateway | None = None,
+    interface: FakeInterfaceModelGateway | None = None,
+) -> tuple[
+    RunTutoringPipelineUseCase,
+    FakeStudentModelGateway,
+    FakePedagogicalModelGateway,
+    FakeInterfaceModelGateway,
+]:
+    student_gateway = student or FakeStudentModelGateway()
+    pedagogical_gateway = pedagogical or FakePedagogicalModelGateway()
+    interface_gateway = interface or FakeInterfaceModelGateway()
+    return (
+        RunTutoringPipelineUseCase(
+            student_model=student_gateway,
+            pedagogical_model=pedagogical_gateway,
+            interface_model=interface_gateway,
+        ),
+        student_gateway,
+        pedagogical_gateway,
+        interface_gateway,
+    )
+
+
 def _send_chat_use_case(
     *,
     learning_repository: SqliteLearningSessionRepository,
     tutor_repository: SqliteTutorSessionRepository,
-    llm_gateway: FakeLlmGateway | None = None,
+    student: FakeStudentModelGateway | None = None,
+    pedagogical: FakePedagogicalModelGateway | None = None,
+    interface: FakeInterfaceModelGateway | None = None,
     snapshot_query: _RecordingLearningSnapshotQuery | None = None,
-) -> tuple[SendChatMessageUseCase, _RecordingLearningSnapshotQuery]:
+) -> tuple[
+    SendChatMessageUseCase,
+    _RecordingLearningSnapshotQuery,
+    FakeStudentModelGateway,
+    FakePedagogicalModelGateway,
+    FakeInterfaceModelGateway,
+]:
     lecture_catalog = StaticLectureCatalog()
     snapshot_uc = GetLearningSnapshotUseCase(
         repository=learning_repository,
         lecture_catalog=lecture_catalog,
     )
     query = snapshot_query or _RecordingLearningSnapshotQuery(snapshot_uc)
+    pipeline, student_gateway, pedagogical_gateway, interface_gateway = _pipeline_fakes(
+        student=student,
+        pedagogical=pedagogical,
+        interface=interface,
+    )
     use_case = SendChatMessageUseCase(
         start_or_get_learning=StartOrGetLearningSessionUseCase(
             repository=learning_repository,
@@ -88,13 +135,18 @@ def _send_chat_use_case(
             id_generator=UuidTutorSessionIdGenerator(),
         ),
         learning_snapshot_query=query,
-        chat_prompt_builder=DefaultChatPromptBuilder(),
-        llm_gateway=llm_gateway or FakeLlmGateway(response="assistant reply"),
+        run_tutoring_pipeline=pipeline,
         repository=tutor_repository,
         message_id_generator=FakeMessageIdGenerator(),
         lecture_catalog=lecture_catalog,
     )
-    return use_case, query
+    return (
+        use_case,
+        query,
+        student_gateway,
+        pedagogical_gateway,
+        interface_gateway,
+    )
 
 
 def _request(
@@ -115,7 +167,7 @@ def _request(
 
 
 class TestSendChatMessageWithSqliteRepositories:
-    """SendChatMessageUseCase + SQLite + Fake LLM の受入基準。"""
+    """SendChatMessageUseCase + SQLite + Fake 3 Gateway の受入基準。"""
 
     def test_first_message_composes_sessions_and_persists_messages(
         self,
@@ -124,11 +176,11 @@ class TestSendChatMessageWithSqliteRepositories:
         learning_db_conn: sqlite3.Connection,
         tutor_db_conn: sqlite3.Connection,
     ) -> None:
-        llm = FakeLlmGateway(response="sqlite assistant reply")
-        use_case, query = _send_chat_use_case(
+        interface = FakeInterfaceModelGateway(response="sqlite assistant reply")
+        use_case, query, student, pedagogical, _ = _send_chat_use_case(
             learning_repository=sqlite_learning_session_repository,
             tutor_repository=sqlite_tutor_session_repository,
-            llm_gateway=llm,
+            interface=interface,
         )
 
         result = use_case.execute(_request(user_message="初回メッセージ"))
@@ -136,7 +188,9 @@ class TestSendChatMessageWithSqliteRepositories:
         assert isinstance(result, Ok)
         assert result.value.assistant_content == "sqlite assistant reply"
         assert query.call_count == 1
-        assert len(llm.generate_calls) == 1
+        assert len(student.interpret_calls) == 1
+        assert len(pedagogical.select_move_calls) == 1
+        assert len(interface.generate_calls) == 1
 
         learning_count = learning_db_conn.execute(
             "SELECT COUNT(*) AS cnt FROM learning_sessions"
@@ -162,15 +216,15 @@ class TestSendChatMessageWithSqliteRepositories:
         sqlite_tutor_session_repository: SqliteTutorSessionRepository,
         tutor_db_conn: sqlite3.Connection,
     ) -> None:
-        llm = FakeLlmGateway(response="first reply")
-        use_case, query = _send_chat_use_case(
+        interface = FakeInterfaceModelGateway(response="first reply")
+        use_case, query, _, _, _ = _send_chat_use_case(
             learning_repository=sqlite_learning_session_repository,
             tutor_repository=sqlite_tutor_session_repository,
-            llm_gateway=llm,
+            interface=interface,
         )
 
         first = use_case.execute(_request(user_message="1通目"))
-        llm.set_response("second reply")
+        interface.set_response("second reply")
         assert isinstance(first, Ok)
 
         second = use_case.execute(
@@ -196,7 +250,7 @@ class TestSendChatMessageWithSqliteRepositories:
         assert saved.messages[2].content == "2通目"
         assert saved.messages[3].content == "second reply"
 
-    def test_snapshot_from_learning_db_is_used_before_llm(
+    def test_snapshot_from_learning_db_is_used_before_pipeline(
         self,
         sqlite_learning_session_repository: SqliteLearningSessionRepository,
         sqlite_tutor_session_repository: SqliteTutorSessionRepository,
@@ -224,32 +278,31 @@ class TestSendChatMessageWithSqliteRepositories:
             )
         )
 
-        llm = FakeLlmGateway(response="lad aware reply")
-        use_case, query = _send_chat_use_case(
+        interface = FakeInterfaceModelGateway(response="lad aware reply")
+        use_case, query, student, _, _ = _send_chat_use_case(
             learning_repository=sqlite_learning_session_repository,
             tutor_repository=sqlite_tutor_session_repository,
-            llm_gateway=llm,
+            interface=interface,
         )
 
         result = use_case.execute(_request(user_message="小テストの問2がわかりません"))
 
         assert isinstance(result, Ok)
         assert query.call_count == 1
-        assert len(llm.generate_calls) == 1
-        prompt = llm.generate_calls[0]
-        assert "4" in prompt and "5" in prompt
-        assert "play" in prompt.lower() or "視聴" in prompt
+        assert len(student.interpret_calls) == 1
+        snapshot = student.interpret_calls[0].snapshot
+        assert len(snapshot.quiz_answers) == 5
+        assert snapshot.quiz_answers[1].question_index == 2
+        assert snapshot.quiz_answers[1].is_correct is False
 
-    def test_digits_only_first_message_skips_llm_but_persists(
+    def test_digits_only_first_message_skips_pipeline_but_persists(
         self,
         sqlite_learning_session_repository: SqliteLearningSessionRepository,
         sqlite_tutor_session_repository: SqliteTutorSessionRepository,
     ) -> None:
-        llm = FakeLlmGateway()
-        use_case, query = _send_chat_use_case(
+        use_case, query, student, pedagogical, interface = _send_chat_use_case(
             learning_repository=sqlite_learning_session_repository,
             tutor_repository=sqlite_tutor_session_repository,
-            llm_gateway=llm,
         )
 
         result = use_case.execute(_request(user_message="12345"))
@@ -257,7 +310,9 @@ class TestSendChatMessageWithSqliteRepositories:
         assert isinstance(result, Ok)
         assert result.value.assistant_content == FIRST_MESSAGE_CANNED_RESPONSE
         assert query.call_count == 1
-        assert llm.generate_calls == []
+        assert student.interpret_calls == []
+        assert pedagogical.select_move_calls == []
+        assert interface.generate_calls == []
 
         saved = sqlite_tutor_session_repository.find_by_id(result.value.tutor_session_id)
         assert saved is not None

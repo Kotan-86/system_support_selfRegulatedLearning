@@ -11,3 +11,7 @@ class LlmGateway(ABC):
     @abstractmethod
     def generate(self, prompt: str) -> str:
         """LLM 応答テキストを返す。"""
+
+    @abstractmethod
+    def generate_json(self, prompt: str, schema_hint: str | None = None) -> dict:
+        """JSON オブジェクトを返す（Stage 1/2 用）。"""

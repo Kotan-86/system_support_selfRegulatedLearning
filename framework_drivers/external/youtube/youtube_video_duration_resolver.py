@@ -41,8 +41,16 @@ def parse_iso8601_duration(duration: str) -> int:
 
 
 def _default_http_get(url: str) -> bytes:
+    from framework_drivers.external.http_proxy_env import should_use_http_proxy
+
     request = urllib.request.Request(url, method="GET")
-    with urllib.request.urlopen(request, timeout=10) as response:
+    if should_use_http_proxy():
+        proxies = urllib.request.getproxies()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
+    else:
+        # 学外など: 環境変数・OS のプロキシ設定を無視して直接接続
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=10) as response:
         return response.read()
 
 

@@ -7,8 +7,19 @@ from pathlib import Path
 
 from application.learning.ports.lecture_catalog import LectureCatalog
 from domain.learning.lecture import Lecture
-from domain.learning.quiz_definition import Question, QuizDefinition
+from domain.learning.lecture_outline import LectureOutline
+from domain.learning.quiz_definition import QuizDefinition
 from domain.shared.ids import LectureId
+from framework_drivers.db.learning.lecture_outlines import (
+    lecture_1,
+    lecture_2,
+    lecture_3,
+)
+from framework_drivers.db.learning.quiz_definitions import (
+    lecture_1 as quiz_lecture_1,
+    lecture_2 as quiz_lecture_2,
+    lecture_3 as quiz_lecture_3,
+)
 from interfaces.common.default_lecture import DEFAULT_LECTURE_ID_VALUE
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -43,19 +54,30 @@ def _lecture_definition_for(lecture_id: str) -> tuple[str, str, str] | None:
     return None
 
 
-def _near_term_quiz_definition() -> QuizDefinition:
-    """Google Form 小テスト（問 1〜5）に対応する QuizDefinition。"""
-    return QuizDefinition(
-        questions=tuple(
-            Question(
-                index=index,
-                text=f"問{index}",
-                choices=("A", "B", "C", "D"),
-                correct_answer="A",
-            )
-            for index in range(1, 6)
-        )
-    )
+def _quiz_definition_for(lecture_id: str) -> QuizDefinition:
+    """講義 ID に対応する QuizDefinition を返す。"""
+    builders = {
+        "lecture-1": quiz_lecture_1.build_quiz_definition,
+        "lecture-2": quiz_lecture_2.build_quiz_definition,
+        "lecture-3": quiz_lecture_3.build_quiz_definition,
+    }
+    builder = builders.get(lecture_id)
+    if builder is None:
+        raise ValueError(f"Unknown near-term lecture_id: {lecture_id!r}")
+    return builder()
+
+
+def _lecture_outline_for(lecture_id: str) -> LectureOutline:
+    """講義 ID に対応する LectureOutline を返す。"""
+    builders = {
+        "lecture-1": lecture_1.build_lecture_outline,
+        "lecture-2": lecture_2.build_lecture_outline,
+        "lecture-3": lecture_3.build_lecture_outline,
+    }
+    builder = builders.get(lecture_id)
+    if builder is None:
+        raise ValueError(f"Unknown near-term lecture_id: {lecture_id!r}")
+    return builder()
 
 
 def build_near_term_lecture(*, lecture_id: str = DEFAULT_LECTURE_ID_VALUE) -> Lecture:
@@ -69,7 +91,8 @@ def build_near_term_lecture(*, lecture_id: str = DEFAULT_LECTURE_ID_VALUE) -> Le
         title=title,
         video_url=video_url,
         srt_path=_srt_path_for(lid),
-        quiz_definition=_near_term_quiz_definition(),
+        quiz_definition=_quiz_definition_for(lid),
+        outline=_lecture_outline_for(lid),
     )
 
 

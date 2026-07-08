@@ -11,11 +11,11 @@
 
 ### 本仕様に含める
 
-| 要素 | 説明 |
-|------|------|
+| 要素                             | 説明                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------- |
 | Learning コンテキストの Use Case | Session 確保・視聴記録・小テスト記録・**LAD と AI 共通の学習コンテキスト Read** |
-| Port（インターフェース契約） | Repository / Catalog / Query / IdGenerator |
-| Interactor 共通規約 | 命名・依存方向・層の責務分界 |
+| Port（インターフェース契約）     | Repository / Catalog / Query / IdGenerator                                      |
+| Interactor 共通規約              | 命名・依存方向・層の責務分界                                                    |
 
 ### 本仕様に含めない（別仕様・別 PR）
 
@@ -55,14 +55,14 @@ tests/
 
 ### Interactor
 
-| 項目 | 規約 |
-|------|------|
-| クラス名 | `{UseCaseId}UseCase`（例: `StartOrGetLearningSessionUseCase`） |
-| 入口 | `execute(self, request: XxxRequest) -> Result[XxxResponse, AppError]`（[application-error-handling.md](./application-error-handling.md)） |
-| 依存 | コンストラクタ注入（Port / 他 Use Case） |
-| import 禁止 | `flask`, `sqlite3`, `vertexai` |
-| ドメイン | `domain/` の Entity / Domain Service を呼んでよい |
-| Tutoring 境界 | Tutoring の Interactor は `domain.learning.learning_session` 等の Entity を import しない |
+| 項目          | 規約                                                                                                                                      |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| クラス名      | `{UseCaseId}UseCase`（例: `StartOrGetLearningSessionUseCase`）                                                                            |
+| 入口          | `execute(self, request: XxxRequest) -> Result[XxxResponse, AppError]`（[application-error-handling.md](./application-error-handling.md)） |
+| 依存          | コンストラクタ注入（Port / 他 Use Case）                                                                                                  |
+| import 禁止   | `flask`, `sqlite3`, `vertexai`                                                                                                            |
+| ドメイン      | `domain/` の Entity / Domain Service を呼んでよい                                                                                         |
+| Tutoring 境界 | Tutoring の Interactor は `domain.learning.learning_session` 等の Entity を import しない                                                 |
 
 ### DTO
 
@@ -75,15 +75,15 @@ tests/
 
 ユースケースの失敗は `Result` の `Err(AppError)` として返す（[application-error-handling.md](./application-error-handling.md)）。interfaces 層が HTTP ステータスへ変換する。
 
-| AppError | ErrorCode | 意味 | HTTP（interfaces） |
-|----------|-----------|------|-------------------|
-| `LectureNotFoundError` | `LECTURE_NOT_FOUND` | 講義カタログに `lecture_id` が無い | 404 |
-| `LearningSessionNotFoundError` | `LEARNING_SESSION_NOT_FOUND` | 指定 `learning_session_id` の Session が無い | 404 |
-| `TutorSessionNotFoundError` | `TUTOR_SESSION_NOT_FOUND` | 指定 `tutor_session_id` が無い | 404 |
-| `ConflictError` | `DUPLICATE_LEARNING_SESSION` | 同一 `(learner_id, lecture_id)` の Learning Session 重複 | 409 |
-| `ConflictError` | `TUTOR_SESSION_POLICY_VIOLATION` | 同一 `learning_session_id` の TutorSession 2 本目 | 409 |
-| `ValidationError` | （サブコード各種） | 入力・不変条件違反 | 400 |
-| `LlmGatewayError` | `LLM_GATEWAY_ERROR` | LLM 呼び出し失敗 | 502 等 |
+| AppError                       | ErrorCode                        | 意味                                                     | HTTP（interfaces） |
+| ------------------------------ | -------------------------------- | -------------------------------------------------------- | ------------------ |
+| `LectureNotFoundError`         | `LECTURE_NOT_FOUND`              | 講義カタログに `lecture_id` が無い                       | 404                |
+| `LearningSessionNotFoundError` | `LEARNING_SESSION_NOT_FOUND`     | 指定 `learning_session_id` の Session が無い             | 404                |
+| `TutorSessionNotFoundError`    | `TUTOR_SESSION_NOT_FOUND`        | 指定 `tutor_session_id` が無い                           | 404                |
+| `ConflictError`                | `DUPLICATE_LEARNING_SESSION`     | 同一 `(learner_id, lecture_id)` の Learning Session 重複 | 409                |
+| `ConflictError`                | `TUTOR_SESSION_POLICY_VIOLATION` | 同一 `learning_session_id` の TutorSession 2 本目        | 409                |
+| `ValidationError`              | （サブコード各種）               | 入力・不変条件違反                                       | 400                |
+| `LlmGatewayError`              | `LLM_GATEWAY_ERROR`              | LLM 呼び出し失敗                                         | 502 等             |
 
 **エラーにしない正常系**（`Ok` として扱う）: `GetLearningSnapshot` の Session 未作成 → 空 Snapshot（HTTP 200）。詳細は [application-error-handling.md#エラーにしない正常系](./application-error-handling.md#エラーにしない正常系)。
 
@@ -97,11 +97,11 @@ tests/
 
 ### 講義動画と Lecture の関係
 
-| 概念 | 責務 | 備考 |
-|------|------|------|
-| 動画再生 | 講義動画ページ（Flask `/lecture` + YouTube IFrame API） | バックエンドは動画バイナリを保持しない |
-| `Lecture`（ドメイン） | 講義**メタデータ**（title, videoUrl, srtPath, quizDefinition） | 動画 URL は参照用。実体は YouTube |
-| `LectureCatalog`（Port） | `lectureId` から `Lecture` メタデータを解決 | 近い実験は `StaticLectureCatalog`（3 講義） |
+| 概念                     | 責務                                                           | 備考                                        |
+| ------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
+| 動画再生                 | 講義動画ページ（Flask `/lecture` + YouTube IFrame API）        | バックエンドは動画バイナリを保持しない      |
+| `Lecture`（ドメイン）    | 講義**メタデータ**（title, videoUrl, srtPath, quizDefinition） | 動画 URL は参照用。実体は YouTube           |
+| `LectureCatalog`（Port） | `lectureId` から `Lecture` メタデータを解決                    | 近い実験は `StaticLectureCatalog`（3 講義） |
 
 **Session 確保・視聴記録**では `LectureCatalog` は不要。**小テスト記録・LAD・AI プロンプト**で必要。
 
@@ -111,11 +111,11 @@ tests/
 
 ### `LearningSessionRepository`
 
-| メソッド | 入力 | 出力 | 備考 |
-|---------|------|------|------|
-| `find_by_learner_and_lecture` | `LearnerId`, `LectureId` | `LearningSession \| None` | |
-| `list_by_learner` | `LearnerId` | `tuple[LearningSession, ...]` | Session 開始時の重複チェック用 |
-| `save` | `LearningSession` | `LearningSession` | 集約全体を永続化（upsert）し、**DB 確定後の集約**を返す（下記 [save 戻り値と子 Entity ID の確定](#learningsessionrepositorysave-戻り値と子-entity-id-の確定)） |
+| メソッド                      | 入力                     | 出力                          | 備考                                                                                                                                                           |
+| ----------------------------- | ------------------------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `find_by_learner_and_lecture` | `LearnerId`, `LectureId` | `LearningSession \| None`     |                                                                                                                                                                |
+| `list_by_learner`             | `LearnerId`              | `tuple[LearningSession, ...]` | Session 開始時の重複チェック用                                                                                                                                 |
+| `save`                        | `LearningSession`        | `LearningSession`             | 集約全体を永続化（upsert）し、**DB 確定後の集約**を返す（下記 [save 戻り値と子 Entity ID の確定](#learningsessionrepositorysave-戻り値と子-entity-id-の確定)） |
 
 #### `LearningSessionRepository.save` 戻り値と子 Entity ID の確定
 
@@ -127,12 +127,12 @@ tests/
 
 ##### 仕様（What）
 
-| 項目 | 内容 |
-|------|------|
-| `save` 戻り値 | **`LearningSession`** — Adapter が永続化を完了した時点の集約（子 Entity ID を含む） |
-| `RecordViewingEvent` の `event_id` | **`save` 戻り値**の集約から、当該 `execute` で追記した `ViewingEvent` の ID を取得して Response に載せる |
-| `RecordQuizAttempt` の `attempt_id` | **`save` 戻り値**の集約から、当該 `execute` で追記した `QuizAttempt` の ID を取得して Response に載せる |
-| 子 ID の同定 | 当該 `execute` は子 Entity を **1 件のみ** 追記する。追記後の `viewing_events` / `quiz_attempts` の **末尾 1 件** を今回追記分とみなす |
+| 項目                                                 | 内容                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `save` 戻り値                                        | **`LearningSession`** — Adapter が永続化を完了した時点の集約（子 Entity ID を含む）                                                                                                                                                                                        |
+| `RecordViewingEvent` の `event_id`                   | **`save` 戻り値**の集約から、当該 `execute` で追記した `ViewingEvent` の ID を取得して Response に載せる                                                                                                                                                                   |
+| `RecordQuizAttempt` の `attempt_id`                  | **`save` 戻り値**の集約から、当該 `execute` で追記した `QuizAttempt` の ID を取得して Response に載せる                                                                                                                                                                    |
+| 子 ID の同定                                         | 当該 `execute` は子 Entity を **1 件のみ** 追記する。追記後の `viewing_events` / `quiz_attempts` の **末尾 1 件** を今回追記分とみなす                                                                                                                                     |
 | `ViewingEventIdGenerator` / `QuizAttemptIdGenerator` | Port 契約は維持する。**SQLite 本番配線では Use Case に注入しない**（[framework-drivers-persistence.md#ID 生成（Mapper / Repository）](./framework-drivers-persistence.md#id-生成mapper--repository)）。Fake / InMemory 単体テストでは従来どおり Generator を差し替えてよい |
 
 ##### 受入基準
@@ -144,16 +144,16 @@ tests/
 
 ### `LectureCatalog`
 
-| メソッド | 入力 | 出力 | 備考 |
-|---------|------|------|------|
+| メソッド     | 入力        | 出力              | 備考                               |
+| ------------ | ----------- | ----------------- | ---------------------------------- |
 | `find_by_id` | `LectureId` | `Lecture \| None` | メタデータ参照。動画本体は返さない |
 
 #### 近い実験: 3 講義カタログ
 
 `StaticLectureCatalog`（Framework & Drivers 層）は **3 件の `Lecture`** を保持する。`participant_id` と `lecture_id` の対応は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture) を参照。
 
-| lecture_id | video_url（YouTube） |
-|------------|---------------------|
+| lecture_id  | video_url（YouTube）                          |
+| ----------- | --------------------------------------------- |
 | `lecture-1` | `https://www.youtube.com/watch?v=Y2HC0I8cTAI` |
 | `lecture-2` | `https://www.youtube.com/watch?v=1MuwwFipX9o` |
 | `lecture-3` | `https://www.youtube.com/watch?v=Sa06YB2oXyw` |
@@ -162,42 +162,42 @@ tests/
 
 ##### SRT（字幕）配置規約
 
-| 項目 | 規約 |
-|------|------|
-| 配置パス | **`lectures/{lecture-id}/subtitles.srt`**（リポジトリ直下） |
-| 例 | `lectures/lecture-1/subtitles.srt` |
-| `Lecture.srt_path` | 上記パスをプロジェクトルートから解決した結果 |
+| 項目                        | 規約                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 配置パス                    | **`lectures/{lecture-id}/subtitles.srt`**（リポジトリ直下）                                                    |
+| 例                          | `lectures/lecture-1/subtitles.srt`                                                                             |
+| `Lecture.srt_path`          | 上記パスをプロジェクトルートから解決した結果                                                                   |
 | 環境変数 `LECTURE_SRT_PATH` | **非推奨**（lecture 別パスを優先）。単一 SRT の fallback は `ChatPromptBuilder` 側で後方互換のため維持してよい |
-| 未配置時 | 視聴ログ・LAD・Session は動作する。AI プロンプトの字幕セクションは `(なし)` となりうる |
+| 未配置時                    | 視聴ログ・LAD・Session は動作する。AI プロンプトの字幕セクションは `(なし)` となりうる                         |
 
 講義 ID・動画 URL・SRT の対応表は `lectures/README.md` に記載する。
 
 ### `LearningSessionIdGenerator`
 
-| メソッド | 入力 | 出力 |
-|---------|------|------|
+| メソッド  | 入力 | 出力                |
+| --------- | ---- | ------------------- |
 | `next_id` | なし | `LearningSessionId` |
 
 ### `ViewingEventIdGenerator`
 
-| メソッド | 入力 | 出力 |
-|---------|------|------|
+| メソッド  | 入力 | 出力             |
+| --------- | ---- | ---------------- |
 | `next_id` | なし | `ViewingEventId` |
 
 **配線**: SQLite 本番 Adapter では Use Case に **注入しない**（ID は `save` 戻り値で確定）。Fake / InMemory テスト用。
 
 ### `QuizAttemptIdGenerator`
 
-| メソッド | 入力 | 出力 |
-|---------|------|------|
+| メソッド  | 入力 | 出力            |
+| --------- | ---- | --------------- |
 | `next_id` | なし | `QuizAttemptId` |
 
 **配線**: SQLite 本番 Adapter では Use Case に **注入しない**（ID は `save` 戻り値で確定）。Fake / InMemory テスト用。
 
 ### `LearningSnapshotQuery`（Tutoring → Learning ACL）
 
-| メソッド | 入力 | 出力 | 備考 |
-|---------|------|------|------|
+| メソッド                     | 入力                     | 出力               | 備考                                                 |
+| ---------------------------- | ------------------------ | ------------------ | ---------------------------------------------------- |
 | `get_by_learner_and_lecture` | `LearnerId`, `LectureId` | `LearningSnapshot` | 実体は `GetLearningSnapshotUseCase` と同一 Read 契約 |
 
 Tutoring は Learning Entity を import せず、この Port 経由で **LAD と同じ `LearningSnapshot`** を参照する。
@@ -208,15 +208,15 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ## ユースケース一覧
 
-| 優先 | ID | コンテキスト | 公開 / 内部 | 既存 API 対応 |
-|------|-----|-------------|------------|--------------|
-| 1 | `StartOrGetLearningSession` | Learning | 内部（compose 可） | — |
-| 2 | `RecordViewingEvent` | Learning | 公開 | `POST /api/viewing-log` |
-| 3 | `RecordQuizAttempt` | Learning | 公開 | `POST /api/quiz-attempts` |
-| 4 | `GetLearningSnapshot` | Learning | 公開 | `GET /api/participants/{id}/lad`、Tutoring（ACL 経由）、`GET /api/last-updated`（interfaces 層 Adapter） |
-| — | `StartOrGetTutorSession` | Tutoring | 内部（compose 可） | `POST /chat`（初回） |
-| — | `SendChatMessage` | Tutoring | 公開 | `POST /chat` |
-| — | `ExportResearchData` | Research Export | 公開 | 未実装（視聴ログ + 小テスト + 対話ログ） |
+| 優先 | ID                          | コンテキスト    | 公開 / 内部        | 既存 API 対応                                                                                            |
+| ---- | --------------------------- | --------------- | ------------------ | -------------------------------------------------------------------------------------------------------- |
+| 1    | `StartOrGetLearningSession` | Learning        | 内部（compose 可） | —                                                                                                        |
+| 2    | `RecordViewingEvent`        | Learning        | 公開               | `POST /api/viewing-log`                                                                                  |
+| 3    | `RecordQuizAttempt`         | Learning        | 公開               | `POST /api/quiz-attempts`                                                                                |
+| 4    | `GetLearningSnapshot`       | Learning        | 公開               | `GET /api/participants/{id}/lad`、Tutoring（ACL 経由）、`GET /api/last-updated`（interfaces 層 Adapter） |
+| —    | `StartOrGetTutorSession`    | Tutoring        | 内部（compose 可） | `POST /chat`（初回）                                                                                     |
+| —    | `SendChatMessage`           | Tutoring        | 公開               | `POST /chat`                                                                                             |
+| —    | `ExportResearchData`        | Research Export | 公開               | 未実装（視聴ログ + 小テスト + 対話ログ）                                                                 |
 
 ---
 
@@ -229,13 +229,13 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 仕様
 
-| 項目 | 値 |
-|------|-----|
-| ID | `StartOrGetLearningSession` |
-| コンテキスト | Learning |
-| アクター | 学習者（`learnerId` はログイン等で確定済み） |
-| トリガー | 学習記録ユースケースの内部から呼ばれる（単体 API として公開してもよい） |
-| Interactor | `StartOrGetLearningSessionUseCase` |
+| 項目         | 値                                                                      |
+| ------------ | ----------------------------------------------------------------------- |
+| ID           | `StartOrGetLearningSession`                                             |
+| コンテキスト | Learning                                                                |
+| アクター     | 学習者（`learnerId` はログイン等で確定済み）                            |
+| トリガー     | 学習記録ユースケースの内部から呼ばれる（単体 API として公開してもよい） |
+| Interactor   | `StartOrGetLearningSessionUseCase`                                      |
 
 ### 前提条件
 
@@ -252,19 +252,19 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 入力 `StartOrGetLearningSessionRequest`
 
-| フィールド | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
-| `learner_id` | `LearnerId` | yes | |
-| `lecture_id` | `LectureId` | yes | |
-| `started_at` | `datetime` | yes | 新規 start 時に `LearningSession.started_at` へ設定。get 時は未使用 |
+| フィールド   | 型          | 必須 | 説明                                                                |
+| ------------ | ----------- | ---- | ------------------------------------------------------------------- |
+| `learner_id` | `LearnerId` | yes  |                                                                     |
+| `lecture_id` | `LectureId` | yes  |                                                                     |
+| `started_at` | `datetime`  | yes  | 新規 start 時に `LearningSession.started_at` へ設定。get 時は未使用 |
 
 ### 出力 `StartOrGetLearningSessionResponse`
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| `session_id` | `LearningSessionId` | |
-| `session` | `LearningSession` | 呼び出し元が追記処理を続けるため、集約を返す |
-| `outcome` | `StartOrGetOutcome` | `CREATED` = 新規 start、`RETRIEVED` = 既存 get |
+| フィールド   | 型                  | 説明                                           |
+| ------------ | ------------------- | ---------------------------------------------- |
+| `session_id` | `LearningSessionId` |                                                |
+| `session`    | `LearningSession`   | 呼び出し元が追記処理を続けるため、集約を返す   |
+| `outcome`    | `StartOrGetOutcome` | `CREATED` = 新規 start、`RETRIEVED` = 既存 get |
 
 ### 依存 Port
 
@@ -284,8 +284,8 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 [application-error-handling.md#StartOrGetLearningSession](./application-error-handling.md#startorgetlearningsession)
 
-| 条件 | AppError | ErrorCode |
-|------|----------|-----------|
+| 条件                                             | AppError        | ErrorCode                    |
+| ------------------------------------------------ | --------------- | ---------------------------- |
 | 同一 `(learnerId, lectureId)` が既に存在（競合） | `ConflictError` | `DUPLICATE_LEARNING_SESSION` |
 
 ### 受入基準
@@ -306,13 +306,13 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 仕様
 
-| 項目 | 値 |
-|------|-----|
-| ID | `RecordViewingEvent` |
-| コンテキスト | Learning |
-| アクター | 学習者（講義動画プラットフォーム経由） |
-| トリガー | 動画操作 1 回（play / pause / skip / seek） |
-| Interactor | `RecordViewingEventUseCase` |
+| 項目         | 値                                          |
+| ------------ | ------------------------------------------- |
+| ID           | `RecordViewingEvent`                        |
+| コンテキスト | Learning                                    |
+| アクター     | 学習者（講義動画プラットフォーム経由）      |
+| トリガー     | 動画操作 1 回（play / pause / skip / seek） |
+| Interactor   | `RecordViewingEventUseCase`                 |
 
 ### 前提条件
 
@@ -322,22 +322,22 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 入力 `RecordViewingEventRequest`
 
-| フィールド | 型 | 必須 | 既存 API フィールド |
-|-----------|-----|------|-------------------|
-| `learner_id` | `LearnerId` | yes | `participant_id` |
-| `lecture_id` | `LectureId` | yes | （未送信時は interfaces が `participant_id` から解決） |
-| `occurred_at` | `datetime` | yes | `time_stamp` |
-| `video_position` | `int` | yes | `current_time`（ingress で小数切り捨て） |
-| `action` | `ViewingAction` | yes | `action` |
-| `position_delta` | `int` | yes | `duration`（ingress で小数切り捨て） |
+| フィールド       | 型              | 必須 | 既存 API フィールド                                    |
+| ---------------- | --------------- | ---- | ------------------------------------------------------ |
+| `learner_id`     | `LearnerId`     | yes  | `participant_id`                                       |
+| `lecture_id`     | `LectureId`     | yes  | （未送信時は interfaces が `participant_id` から解決） |
+| `occurred_at`    | `datetime`      | yes  | `time_stamp`                                           |
+| `video_position` | `int`           | yes  | `current_time`（ingress で小数切り捨て）               |
+| `action`         | `ViewingAction` | yes  | `action`                                               |
+| `position_delta` | `int`           | yes  | `duration`（ingress で小数切り捨て）                   |
 
 **ingress 正規化**: interfaces 層（現状は `POST /api/viewing-log`）は `application.common.viewing_seconds` で `current_time` / `duration` を整数秒へ変換する。小数は Python `int()` と同様に 0 方向へ切り捨てる。`NaN` / `Infinity` / 非数値文字列は `ValidationError`。
 
 ### 出力 `RecordViewingEventResponse`
 
-| フィールド | 型 |
-|-----------|-----|
-| `event_id` | `ViewingEventId` |
+| フィールド   | 型                  |
+| ------------ | ------------------- |
+| `event_id`   | `ViewingEventId`    |
 | `session_id` | `LearningSessionId` |
 
 ### 依存
@@ -359,10 +359,10 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 [application-error-handling.md#RecordViewingEvent](./application-error-handling.md#recordviewingevent)
 
-| 条件 | AppError | ErrorCode |
-|------|----------|-----------|
+| 条件                                      | AppError          | ErrorCode               |
+| ----------------------------------------- | ----------------- | ----------------------- |
 | `play` / `pause` で `position_delta != 0` | `ValidationError` | `INVALID_VIEWING_EVENT` |
-| skip / seek で符号が action と不一致 | `ValidationError` | `INVALID_VIEWING_EVENT` |
+| skip / seek で符号が action と不一致      | `ValidationError` | `INVALID_VIEWING_EVENT` |
 
 ### 受入基準
 
@@ -384,13 +384,13 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 仕様
 
-| 項目 | 値 |
-|------|-----|
-| ID | `RecordQuizAttempt` |
-| コンテキスト | Learning |
-| アクター | 学習者（Flask API 経由） |
-| トリガー | 小テスト送信 1 回 |
-| Interactor | `RecordQuizAttemptUseCase` |
+| 項目         | 値                         |
+| ------------ | -------------------------- |
+| ID           | `RecordQuizAttempt`        |
+| コンテキスト | Learning                   |
+| アクター     | 学習者（Flask API 経由）   |
+| トリガー     | 小テスト送信 1 回          |
+| Interactor   | `RecordQuizAttemptUseCase` |
 
 ### 前提条件
 
@@ -400,22 +400,22 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 入力 `RecordQuizAttemptRequest`
 
-| フィールド | 型 | 必須 | 既存 API フィールド |
-|-----------|-----|------|-------------------|
-| `learner_id` | `LearnerId` | yes | `participant_id` |
-| `lecture_id` | `LectureId` | yes | （未送信時は interfaces が `participant_id` から解決） |
-| `attempted_at` | `datetime` | yes | `timestamp` / `created_at` |
-| `score_numerator` | `int` | yes | `score_numerator` |
-| `score_denominator` | `int` | yes | `score_denominator` |
-| `answers` | `tuple[QuizAnswer, ...]` | yes | `answers`（下表） |
+| フィールド          | 型                       | 必須 | 既存 API フィールド                                    |
+| ------------------- | ------------------------ | ---- | ------------------------------------------------------ |
+| `learner_id`        | `LearnerId`              | yes  | `participant_id`                                       |
+| `lecture_id`        | `LectureId`              | yes  | （未送信時は interfaces が `participant_id` から解決） |
+| `attempted_at`      | `datetime`               | yes  | `timestamp` / `created_at`                             |
+| `score_numerator`   | `int`                    | yes  | `score_numerator`                                      |
+| `score_denominator` | `int`                    | yes  | `score_denominator`                                    |
+| `answers`           | `tuple[QuizAnswer, ...]` | yes  | `answers`（下表）                                      |
 
 #### `answers` の各要素（`QuizAnswer`）
 
-| フィールド | 型 | 必須 | 既存 API | 説明 |
-|-----------|-----|------|---------|------|
-| `question_index` | `int` | yes | `question_index` | 設問番号。**`Lecture.quizDefinition` の `Question.index` への参照 ID**（近い実験では 1 始まり・5 問想定） |
-| `selected_answer` | `str` | yes | `selected_answer` | 学習者が選んだ選択肢 |
-| `is_correct` | `bool` | yes | `is_correct` | 正誤 |
+| フィールド        | 型     | 必須 | 既存 API          | 説明                                                                                                      |
+| ----------------- | ------ | ---- | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `question_index`  | `int`  | yes  | `question_index`  | 設問番号。**`Lecture.quizDefinition` の `Question.index` への参照 ID**（近い実験では 1 始まり・5 問想定） |
+| `selected_answer` | `str`  | yes  | `selected_answer` | 学習者が選んだ選択肢                                                                                      |
+| `is_correct`      | `bool` | yes  | `is_correct`      | 正誤                                                                                                      |
 
 **Request に含めないもの**: 問題文・選択肢一覧・正解の定義。これらは `lecture_id` 経由で `LectureCatalog` の `QuizDefinition` から解決する。
 
@@ -435,9 +435,9 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 ### 出力 `RecordQuizAttemptResponse`
 
-| フィールド | 型 |
-|-----------|-----|
-| `attempt_id` | `QuizAttemptId` |
+| フィールド   | 型                  |
+| ------------ | ------------------- |
+| `attempt_id` | `QuizAttemptId`     |
 | `session_id` | `LearningSessionId` |
 
 ### 依存
@@ -463,11 +463,11 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 
 [application-error-handling.md#RecordQuizAttempt](./application-error-handling.md#recordquizattempt)
 
-| 条件 | AppError | ErrorCode |
-|------|----------|-----------|
-| 講義カタログに `lectureId` が無い | `LectureNotFoundError` | `LECTURE_NOT_FOUND` |
-| スコア不変条件違反 | `ValidationError` | `INVALID_QUIZ_ATTEMPT` |
-| 未知の `question_index` | `ValidationError` | `UNKNOWN_QUESTION_INDEX` |
+| 条件                              | AppError               | ErrorCode                |
+| --------------------------------- | ---------------------- | ------------------------ |
+| 講義カタログに `lectureId` が無い | `LectureNotFoundError` | `LECTURE_NOT_FOUND`      |
+| スコア不変条件違反                | `ValidationError`      | `INVALID_QUIZ_ATTEMPT`   |
+| 未知の `question_index`           | `ValidationError`      | `UNKNOWN_QUESTION_INDEX` |
 
 ### 受入基準
 
@@ -504,10 +504,10 @@ LAD UI    SendChatMessage（LearningSnapshotQuery Port 経由）
 
 ### Consumer とトリガー
 
-| Consumer | いつ `GetLearningSnapshot` を呼ぶか |
-|----------|-----------------------------------|
-| LAD UI | 画面表示時、`RecordViewingEvent` / `RecordQuizAttempt` 後の再表示時 |
-| Tutoring（`SendChatMessage`） | ユーザー発話のたび（応答生成前に最新 Snapshot を取得） |
+| Consumer                      | いつ `GetLearningSnapshot` を呼ぶか                                 |
+| ----------------------------- | ------------------------------------------------------------------- |
+| LAD UI                        | 画面表示時、`RecordViewingEvent` / `RecordQuizAttempt` 後の再表示時 |
+| Tutoring（`SendChatMessage`） | ユーザー発話のたび（応答生成前に最新 Snapshot を取得）              |
 
 **更新のきっかけ**は視聴ログ・小テスト記録。LAD も AI も、その後 **同じ UC・同じ `LearningSnapshot`** で中身を取り直す。
 
@@ -519,13 +519,13 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 
 ### 仕様
 
-| 項目 | 値 |
-|------|-----|
-| ID | `GetLearningSnapshot` |
-| コンテキスト | Learning |
-| アクター | LAD UI、Tutoring（`SendChatMessage` 内部） |
-| トリガー | 上表「Consumer とトリガー」参照 |
-| Interactor | `GetLearningSnapshotUseCase` |
+| 項目                | 値                                                     |
+| ------------------- | ------------------------------------------------------ |
+| ID                  | `GetLearningSnapshot`                                  |
+| コンテキスト        | Learning                                               |
+| アクター            | LAD UI、Tutoring（`SendChatMessage` 内部）             |
+| トリガー            | 上表「Consumer とトリガー」参照                        |
+| Interactor          | `GetLearningSnapshotUseCase`                           |
 | Tutoring からの参照 | `LearningSnapshotQuery` Port（実体は本 UC と同一契約） |
 
 ### 前提条件
@@ -542,27 +542,27 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 
 ### 入力 `GetLearningSnapshotRequest`
 
-| フィールド | 型 | 必須 |
-|-----------|-----|------|
-| `learner_id` | `LearnerId` | yes |
-| `lecture_id` | `LectureId` | yes |
+| フィールド   | 型          | 必須 |
+| ------------ | ----------- | ---- |
+| `learner_id` | `LearnerId` | yes  |
+| `lecture_id` | `LectureId` | yes  |
 
 ### 出力 `GetLearningSnapshotResponse`
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| `snapshot` | `LearningSnapshot` | LAD 表示・AI プロンプト入力の共通 Read Model |
+| フィールド           | 型                 | 説明                                                                 |
+| -------------------- | ------------------ | -------------------------------------------------------------------- |
+| `snapshot`           | `LearningSnapshot` | LAD 表示・AI プロンプト入力の共通 Read Model                         |
 | `content_updated_at` | `datetime \| None` | 当該 Session 内の視聴・小テストの最終更新時刻。データ無しなら `None` |
 
 `content_updated_at` は Snapshot 内イベントの `max(occurred_at, attempted_at)` から算出する。Consumer はこの値で **Snapshot 再取得要否** を判定する（Application 層に別 Port / UC は設けない）。
 
 ### HTTP 応答（interfaces 層への委譲）
 
-| 状況 | Application 層 | HTTP |
-|------|----------------|------|
-| 講義カタログに `lectureId` 無し | `LectureNotFoundError`（`LECTURE_NOT_FOUND`） | 404 |
-| Session 未作成（視聴・小テスト前） | 空 Snapshot + `content_updated_at=None` | **200** |
-| Session あり | Snapshot + `content_updated_at` | 200 |
+| 状況                               | Application 層                                | HTTP    |
+| ---------------------------------- | --------------------------------------------- | ------- |
+| 講義カタログに `lectureId` 無し    | `LectureNotFoundError`（`LECTURE_NOT_FOUND`） | 404     |
+| Session 未作成（視聴・小テスト前） | 空 Snapshot + `content_updated_at=None`       | **200** |
+| Session あり                       | Snapshot + `content_updated_at`               | 200     |
 
 ### 依存
 
@@ -584,8 +584,8 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 
 [application-error-handling.md#GetLearningSnapshot](./application-error-handling.md#getlearningsnapshot)
 
-| 条件 | AppError | ErrorCode |
-|------|----------|-----------|
+| 条件                              | AppError               | ErrorCode           |
+| --------------------------------- | ---------------------- | ------------------- |
 | 講義カタログに `lectureId` が無い | `LectureNotFoundError` | `LECTURE_NOT_FOUND` |
 
 ### 受入基準
@@ -603,10 +603,10 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 
 ### 既存 API 互換（interfaces 層・Application Port なし）
 
-| 既存 API | 移行方針 |
-|---------|---------|
-| `GET /api/participants/{id}/lad` | Presenter が `GetLearningSnapshotResponse.snapshot` を JSON 化 |
-| `GET /api/last-updated` | `GetLearningSnapshotUseCase` を呼び **`content_updated_at` のみ** JSON で返す薄い Adapter。Application 層に独立 Port / UC は設けない |
+| 既存 API                         | 移行方針                                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/participants/{id}/lad` | Presenter が `GetLearningSnapshotResponse.snapshot` を JSON 化                                                                       |
+| `GET /api/last-updated`          | `GetLearningSnapshotUseCase` を呼び **`content_updated_at` のみ** JSON で返す薄い Adapter。Application 層に独立 Port / UC は設けない |
 
 `last-updated` のスコープは **`(learnerId, lectureId)` = 1 LearningSession** とする（現行の DB 全体 MAX とは異なる）。
 
@@ -620,19 +620,19 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 
 #### `TutorSessionRepository`
 
-| メソッド | 入力 | 出力 | 備考 |
-|---------|------|------|------|
-| `find_by_id` | `TutorSessionId` | `TutorSession \| None` | |
-| `find_by_learning_session_id` | `LearningSessionId` | `TutorSession \| None` | StartOrGet の get |
-| `list_all` | なし | `tuple[TutorSession, ...]` | `NearTermExperimentPolicy` 用（近い実験は件数少） |
-| `save` | `TutorSession` | `None` | 集約全体を upsert |
+| メソッド                      | 入力                | 出力                       | 備考                                              |
+| ----------------------------- | ------------------- | -------------------------- | ------------------------------------------------- |
+| `find_by_id`                  | `TutorSessionId`    | `TutorSession \| None`     |                                                   |
+| `find_by_learning_session_id` | `LearningSessionId` | `TutorSession \| None`     | StartOrGet の get                                 |
+| `list_all`                    | なし                | `tuple[TutorSession, ...]` | `NearTermExperimentPolicy` 用（近い実験は件数少） |
+| `save`                        | `TutorSession`      | `None`                     | 集約全体を upsert                                 |
 
 #### `TutorSessionIdGenerator` / `MessageIdGenerator`
 
-| Port | メソッド | 出力 |
-|------|---------|------|
+| Port                      | メソッド    | 出力             |
+| ------------------------- | ----------- | ---------------- |
 | `TutorSessionIdGenerator` | `next_id()` | `TutorSessionId` |
-| `MessageIdGenerator` | `next_id()` | `MessageId` |
+| `MessageIdGenerator`      | `next_id()` | `MessageId`      |
 
 #### `LearningSnapshotQuery`（Learning → Tutoring ACL）
 
@@ -640,26 +640,26 @@ Learning コンテキストの **`LearningSnapshotQuery`**（上記 Port 一覧�
 
 #### `ChatPromptBuilder`（interfaces 層 ACL・Port）
 
-| メソッド | 入力 | 出力 | 備考 |
-|---------|------|------|------|
-| `build` | `LearningSnapshot`, `Message[]`, `user_message`, `Lecture`（設問文結合用） | `str` | LLM へ渡すプロンプト文字列。domain-model の Presenter 責務 |
+| メソッド | 入力                                                                       | 出力  | 備考                                                       |
+| -------- | -------------------------------------------------------------------------- | ----- | ---------------------------------------------------------- |
+| `build`  | `LearningSnapshot`, `Message[]`, `user_message`, `Lecture`（設問文結合用） | `str` | LLM へ渡すプロンプト文字列。domain-model の Presenter 責務 |
 
 #### `LlmGateway`
 
-| メソッド | 入力 | 出力 | 備考 |
-|---------|------|------|------|
+| メソッド   | 入力          | 出力  | 備考                                           |
+| ---------- | ------------- | ----- | ---------------------------------------------- |
 | `generate` | `prompt: str` | `str` | インフラ（Vertex 等）。近い実験は 1 モデル固定 |
 
 ---
 
 ### Tutoring UC 一覧
 
-| 優先 | ID | 公開 / 内部 | 概要 |
-|------|-----|------------|------|
-| 1 | `StartOrGetTutorSession` | 内部（compose 可） | `LearningSessionId` に TutorSession を 1 本確保。`NearTermExperimentPolicy` を適用 |
-| 2 | `SendChatMessage` | 公開 | user 発話追記 → 応答生成 → assistant 追記（[将来拡張](#tutoring-将来拡張複数エージェント) 参照） |
-| — | `ClassifyInterpretationSupportType` | 内部 | **将来**。解釈支援種類を判定 |
-| — | `InvokeTutoringAgent` | 内部 | **将来**。種類に応じたエージェントを実行 |
+| 優先 | ID                                  | 公開 / 内部        | 概要                                                                                             |
+| ---- | ----------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
+| 1    | `StartOrGetTutorSession`            | 内部（compose 可） | `LearningSessionId` に TutorSession を 1 本確保。`NearTermExperimentPolicy` を適用               |
+| 2    | `SendChatMessage`                   | 公開               | user 発話追記 → 応答生成 → assistant 追記（[将来拡張](#tutoring-将来拡張複数エージェント) 参照） |
+| —    | `ClassifyInterpretationSupportType` | 内部               | **将来**。解釈支援種類を判定                                                                     |
+| —    | `InvokeTutoringAgent`               | 内部               | **将来**。種類に応じたエージェントを実行                                                         |
 
 Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照する（[domain-model.md#コンテキストマップ](./domain-model.md)）。Learning **Entity** は import しない。
 
@@ -675,13 +675,13 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 仕様
 
-| 項目 | 値 |
-|------|-----|
-| ID | `StartOrGetTutorSession` |
-| コンテキスト | Tutoring |
-| アクター | 学習者（`LearningSession` は Learning 側で確保済み、または同リクエスト内で compose） |
-| トリガー | `SendChatMessage` の内部、または単体 API（任意） |
-| Interactor | `StartOrGetTutorSessionUseCase` |
+| 項目         | 値                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------ |
+| ID           | `StartOrGetTutorSession`                                                             |
+| コンテキスト | Tutoring                                                                             |
+| アクター     | 学習者（`LearningSession` は Learning 側で確保済み、または同リクエスト内で compose） |
+| トリガー     | `SendChatMessage` の内部、または単体 API（任意）                                     |
+| Interactor   | `StartOrGetTutorSessionUseCase`                                                      |
 
 ### 前提条件
 
@@ -697,18 +697,18 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 入力 `StartOrGetTutorSessionRequest`
 
-| フィールド | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
-| `learning_session_id` | `LearningSessionId` | yes | 紐づく学習セッション |
-| `started_at` | `datetime` | yes | 新規 start 時の `TutorSession.started_at`。get 時は未使用 |
+| フィールド            | 型                  | 必須 | 説明                                                      |
+| --------------------- | ------------------- | ---- | --------------------------------------------------------- |
+| `learning_session_id` | `LearningSessionId` | yes  | 紐づく学習セッション                                      |
+| `started_at`          | `datetime`          | yes  | 新規 start 時の `TutorSession.started_at`。get 時は未使用 |
 
 ### 出力 `StartOrGetTutorSessionResponse`
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| `tutor_session_id` | `TutorSessionId` | |
-| `session` | `TutorSession` | 呼び出し元が Message 追記を続けるため、集約を返す |
-| `outcome` | `StartOrGetOutcome` | `CREATED` = 新規 start、`RETRIEVED` = 既存 get |
+| フィールド         | 型                  | 説明                                              |
+| ------------------ | ------------------- | ------------------------------------------------- |
+| `tutor_session_id` | `TutorSessionId`    |                                                   |
+| `session`          | `TutorSession`      | 呼び出し元が Message 追記を続けるため、集約を返す |
+| `outcome`          | `StartOrGetOutcome` | `CREATED` = 新規 start、`RETRIEVED` = 既存 get    |
 
 ### 依存
 
@@ -730,10 +730,10 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 [application-error-handling.md#StartOrGetTutorSession](./application-error-handling.md#startorgettutorsession)
 
-| 条件 | AppError | ErrorCode | HTTP（interfaces） |
-|------|----------|-----------|-------------------|
-| 同一 `learningSessionId` に 2 本目を start（近い実験） | `ConflictError` | `TUTOR_SESSION_POLICY_VIOLATION` | 409 |
-| 同一 `learningSessionId` が既に存在（競合） | 手順 1 で get するため通常発生しない | — | — |
+| 条件                                                   | AppError                             | ErrorCode                        | HTTP（interfaces） |
+| ------------------------------------------------------ | ------------------------------------ | -------------------------------- | ------------------ |
+| 同一 `learningSessionId` に 2 本目を start（近い実験） | `ConflictError`                      | `TUTOR_SESSION_POLICY_VIOLATION` | 409                |
+| 同一 `learningSessionId` が既に存在（競合）            | 手順 1 で get するため通常発生しない | —                                | —                  |
 
 ### 受入基準
 
@@ -755,14 +755,14 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 仕様
 
-| 項目 | 値 |
-|------|-----|
-| ID | `SendChatMessage` |
-| コンテキスト | Tutoring |
-| アクター | 学習者 |
-| トリガー | チャット UI から 1 発話送信 |
-| Interactor | `SendChatMessageUseCase` |
-| 既存 API | `POST /chat` |
+| 項目         | 値                          |
+| ------------ | --------------------------- |
+| ID           | `SendChatMessage`           |
+| コンテキスト | Tutoring                    |
+| アクター     | 学習者                      |
+| トリガー     | チャット UI から 1 発話送信 |
+| Interactor   | `SendChatMessageUseCase`    |
+| 既存 API     | `POST /chat`                |
 
 ### 前提条件
 
@@ -778,42 +778,41 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### 入力 `SendChatMessageRequest`
 
-| フィールド | 型 | 必須 | 既存 API | 説明 |
-|-----------|-----|------|---------|------|
-| `user_message` | `str` | yes | `message` | 学習者の発話 |
-| `tutor_session_id` | `TutorSessionId \| None` | no | `session_id` | 継続対話時。未指定なら初回 |
-| `learner_id` | `LearnerId` | 初回 yes | `participant_id` | |
-| `lecture_id` | `LectureId` | 初回 yes | （未送信時は interfaces が `participant_id` から解決） | Snapshot 取得用 |
-| `sent_at` | `datetime` | yes | — | user / assistant Message の `created_at` |
+| フィールド         | 型                       | 必須     | 既存 API                                               | 説明                                     |
+| ------------------ | ------------------------ | -------- | ------------------------------------------------------ | ---------------------------------------- |
+| `user_message`     | `str`                    | yes      | `message`                                              | 学習者の発話                             |
+| `tutor_session_id` | `TutorSessionId \| None` | no       | `session_id`                                           | 継続対話時。未指定なら初回               |
+| `learner_id`       | `LearnerId`              | 初回 yes | `participant_id`                                       |                                          |
+| `lecture_id`       | `LectureId`              | 初回 yes | （未送信時は interfaces が `participant_id` から解決） | Snapshot 取得用                          |
+| `sent_at`          | `datetime`               | yes      | —                                                      | user / assistant Message の `created_at` |
 
 **初回 vs 継続**:
 
-| パターン | 必須フィールド |
-|---------|---------------|
-| 初回（`tutor_session_id` なし） | `learner_id`, `lecture_id`, `user_message` |
+| パターン                        | 必須フィールド                                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 初回（`tutor_session_id` なし） | `learner_id`, `lecture_id`, `user_message`                                                           |
 | 継続（`tutor_session_id` あり） | `tutor_session_id`, `user_message`（`learner_id` / `lecture_id` は Snapshot 用に引き続き渡してよい） |
 
 ### 出力 `SendChatMessageResponse`
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| `tutor_session_id` | `TutorSessionId` | クライアントが次回以降に指定 |
-| `assistant_content` | `str` | AI 応答本文 |
-| `user_message_id` | `MessageId` | 追記した user Message |
-| `assistant_message_id` | `MessageId` | 追記した assistant Message |
+| フィールド             | 型               | 説明                         |
+| ---------------------- | ---------------- | ---------------------------- |
+| `tutor_session_id`     | `TutorSessionId` | クライアントが次回以降に指定 |
+| `assistant_content`    | `str`            | AI 応答本文                  |
+| `user_message_id`      | `MessageId`      | 追記した user Message        |
+| `assistant_message_id` | `MessageId`      | 追記した assistant Message   |
 
 ### 依存
 
 - `StartOrGetLearningSessionUseCase`（Learning・初回 compose）
 - `StartOrGetTutorSessionUseCase`（compose）
 - `LearningSnapshotQuery`
-- `ChatPromptBuilder`
-- `LlmGateway`（近い実験。将来は `InvokeTutoringAgent` に置換）
+- `RunTutoringPipelineUseCase`（ITS 3 段パイプライン。内部で Student / Pedagogical / Interface Model Gateway を compose）
 - `TutorSessionRepository`
 - `MessageIdGenerator`
-- `LectureCatalog`（設問文をプロンプトに載せるため。`ChatPromptBuilder` 入力用）
+- `LectureCatalog`（プロンプト Builder 入力用）
 
-### 手順 `execute`（近い実験）
+### 手順 `execute`（近い実験 — ITS 3 段パイプライン）
 
 1. `user_message` が空なら **`err(ValidationError)`**（`EMPTY_USER_MESSAGE`）で終了
 2. **TutorSession 解決**
@@ -821,30 +820,42 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
    - 未指定時: `learning = start_or_get_learning_session.execute(learner_id, lecture_id, ...)` → `start_or_get_tutor_session.execute(learning_session_id=learning.session_id, ...)`
 3. `snapshot = learning_snapshot_query.get_by_learner_and_lecture(learner_id, lecture_id)`
 4. `lecture = lecture_catalog.find_by_id(lecture_id)`（プロンプト用。無ければ **`err(LectureNotFoundError)`** / `LECTURE_NOT_FOUND`）
-5. **初回・半角数字のみ特例**（既存挙動）: `messages` が空かつ `user_message` が `^[0-9]+$` のとき、定型文を `assistant_content` とし **LLM を呼ばない**（`FirstMessagePolicy` 相当）
-6. 上記以外: `prompt = chat_prompt_builder.build(snapshot, tutor_session.messages, user_message, lecture)` → `assistant_content = llm_gateway.generate(prompt)`
+5. **初回・半角数字のみ特例**（既存挙動）: `messages` が空かつ `user_message` が `^[0-9]+$` のとき、定型文を `assistant_content` とし **パイプラインを呼ばない**（付帯メタデータはすべて `None`）
+6. 上記以外: `run_tutoring_pipeline.execute(...)` で 3 段 LLM（Student → Pedagogical → Interface）を実行。直前 assistant Message の `interpretationState` を `previous_state_card` として渡す
 7. `user_msg_id`, `asst_msg_id = message_id_generator.next_id()` × 2
-8. `updated = tutor_session.append_message(user)` → `.append_message(assistant)`
+8. `updated = tutor_session.append_message(user)` → `.append_message(assistant, utterance_type=..., dialogue_move=..., interpretation_state=...)`（手順 6 成功時のみメタデータ付与）
 9. `repository.save(updated)`
 10. `Response(...)` を return
+
+### RunTutoringPipeline（内部 UC）
+
+| 項目    | 内容                                                                                                     |
+| ------- | -------------------------------------------------------------------------------------------------------- |
+| ID      | `RunTutoringPipeline`                                                                                    |
+| 入力    | `TutoringPipelineRequest`（`snapshot`, `messages`, `user_message`, `lecture`, `previous_state_card`）    |
+| 出力    | `TutoringPipelineResult`（`assistant_text`, `interpretation`, `decision`）                               |
+| Stage 1 | `StudentModelGateway.interpret` → `LearnerInterpretationResult`                                          |
+| Stage 2 | `PedagogicalModelGateway.select_move` → `DialogueMoveDecision`                                           |
+| Stage 3 | `InterfaceModelGateway.generate` → assistant テキスト                                                    |
+| 失敗    | いずれかの Stage が `LlmGatewayError` → `err`。Message は未永続化（呼び出し元 `SendChatMessage` の責務） |
 
 ### 例外
 
 [application-error-handling.md#SendChatMessage](./application-error-handling.md#sendchatmessage)
 
-| 条件 | AppError | ErrorCode | HTTP |
-|------|----------|-----------|------|
-| `user_message` 空 | `ValidationError` | `EMPTY_USER_MESSAGE` | 400 |
-| 未知の `tutor_session_id` | `TutorSessionNotFoundError` | `TUTOR_SESSION_NOT_FOUND` | 404 |
-| 講義カタログ不在 | `LectureNotFoundError` | `LECTURE_NOT_FOUND` | 404 |
-| LLM 障害 | `LlmGatewayError` | `LLM_GATEWAY_ERROR` | 502 等 |
+| 条件                      | AppError                    | ErrorCode                 | HTTP   |
+| ------------------------- | --------------------------- | ------------------------- | ------ |
+| `user_message` 空         | `ValidationError`           | `EMPTY_USER_MESSAGE`      | 400    |
+| 未知の `tutor_session_id` | `TutorSessionNotFoundError` | `TUTOR_SESSION_NOT_FOUND` | 404    |
+| 講義カタログ不在          | `LectureNotFoundError`      | `LECTURE_NOT_FOUND`       | 404    |
+| LLM 障害                  | `LlmGatewayError`           | `LLM_GATEWAY_ERROR`       | 502 等 |
 
 ### HTTP 応答（interfaces 層）
 
-| 状況 | HTTP |
-|------|------|
-| 成功 | 200 + `{ response, session_id }`（既存 JSON 形状。`response` = `assistant_content`、`session_id` = `tutor_session_id`） |
-| メッセージなし | 400 |
+| 状況           | HTTP                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 成功           | 200 + `{ response, session_id }`（既存 JSON 形状。`response` = `assistant_content`、`session_id` = `tutor_session_id`） |
+| メッセージなし | 400                                                                                                                     |
 
 ### 受入基準
 
@@ -852,21 +863,24 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 - [ ] 2 回目以降 → 同一 TutorSession に user / assistant が 2 件追加される
 - [ ] 応答生成前に `LearningSnapshotQuery` が呼ばれ、LAD と同契約の Snapshot が入力になる
 - [ ] Snapshot 上の `quiz_answers`（`question_index` + `is_correct`）がプロンプトに載り、第 N 問の正誤を AI が参照できる
-- [ ] 初回・半角数字のみ → 定型文応答、LLM 未呼び出し、Message は 2 件永続化
+- [ ] 初回・半角数字のみ → 定型文応答、パイプライン未呼び出し、Message は 2 件永続化（メタデータは `None`）
+- [ ] 通常ターン → assistant Message に `utterance_type` / `dialogue_move` / `interpretation_state` が永続化される
+- [ ] 2 ターン目以降 → 直前 assistant の `interpretation_state` が Student Model 入力に渡る
 - [ ] Tutoring コードが `domain.learning.learning_session` 等を import しない
-- [ ] 将来: 手順 6 を `Classify` → `Invoke` に差し替えても compose 構造は維持できる
 
 ### 既存 API 互換（interfaces 層）
 
-| 既存 | 移行方針 |
-|------|---------|
+| 既存         | 移行方針                                                                                                                            |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /chat` | `participant_id` → `learner_id`、`lecture_id` は未送信時 interfaces が `participant_id` から解決。`session_id` → `tutor_session_id` |
 
 ---
 
-### Tutoring 将来拡張（複数エージェント）
+### Tutoring 将来拡張（複数エージェント）— 履歴メモ
 
-**変更理由（Why・将来）**
+**現行（近い実験）**: `SendChatMessage` はオーケストレータのまま、内部で **ITS 3 段パイプライン**（`RunTutoringPipeline` → Student / Pedagogical / Interface Model Gateway）を compose する。assistant Message にパイプライン出力（発話分類・Coach Move・State Card）をメタデータとして永続化する。
+
+以下は Classify → Invoke 案の **将来検討メモ**（ITS パイプライン採用により置換済みの概念を含む）。
 
 - 研究 RQ は「暫定的な解釈」の外化支援（[domain-model.md#研究コンテキスト](./domain-model.md)）。支援の仕方は **解釈支援種類** ごとに異なりうる
 - 見通し: **解釈支援種類ごとに命題単位のエージェント** を定義し、種類に応じたエージェントを動かす
@@ -887,11 +901,11 @@ SendChatMessage
 
 #### 将来ユビキタス言語（Tutoring）
 
-| 用語 | 意味 |
-|------|------|
-| 解釈支援種類 | 学習科学・対話研究に裏付けられた支援の型（`InterpretationSupportType`） |
-| チューターエージェント | 1 解釈支援種類（命題単位）に対応する LLM 対話戦略 |
-| エージェント ID | 実行時に呼んだエージェントの識別子（`TutoringAgentId`）。研究・Export 用 |
+| 用語                   | 意味                                                                     |
+| ---------------------- | ------------------------------------------------------------------------ |
+| 解釈支援種類           | 学習科学・対話研究に裏付けられた支援の型（`InterpretationSupportType`）  |
+| チューターエージェント | 1 解釈支援種類（命題単位）に対応する LLM 対話戦略                        |
+| エージェント ID        | 実行時に呼んだエージェントの識別子（`TutoringAgentId`）。研究・Export 用 |
 
 種類の定義と研究根拠は **domain-model.md**（What）。判定・呼び出し手順は **本仕様**（How）。プロンプト文言・モデル名は interfaces / infrastructure。
 
@@ -899,21 +913,21 @@ SendChatMessage
 
 **`ClassifyInterpretationSupportType`（内部）**
 
-| 項目 | 内容 |
-|------|------|
-| 入力 | user 発話、`LearningSnapshot`、直近 `Message[]` |
-| 出力 | `InterpretationSupportType` |
-| 依存 Port | `InterpretationSupportClassifier` |
-| 近い実験 | 常に `default`（または列挙 1 値）を返す stub |
+| 項目      | 内容                                            |
+| --------- | ----------------------------------------------- |
+| 入力      | user 発話、`LearningSnapshot`、直近 `Message[]` |
+| 出力      | `InterpretationSupportType`                     |
+| 依存 Port | `InterpretationSupportClassifier`               |
+| 近い実験  | 常に `default`（または列挙 1 値）を返す stub    |
 
 **`InvokeTutoringAgent`（内部）**
 
-| 項目 | 内容 |
-|------|------|
-| 入力 | `InterpretationSupportType`、`LearningSnapshot`、履歴、user 発話 |
-| 出力 | assistant テキスト、`TutoringAgentId`（どのエージェントを呼んだか） |
+| 項目      | 内容                                                                                         |
+| --------- | -------------------------------------------------------------------------------------------- |
+| 入力      | `InterpretationSupportType`、`LearningSnapshot`、履歴、user 発話                             |
+| 出力      | assistant テキスト、`TutoringAgentId`（どのエージェントを呼んだか）                          |
 | 依存 Port | `TutoringAgentRegistry`（種類 → エージェント）、`TutoringAgentGateway`（1 エージェント実行） |
-| 近い実験 | Registry に 1 エントリのみ |
+| 近い実験  | Registry に 1 エントリのみ                                                                   |
 
 **`SendChatMessage`（公開・compose 先）**
 
@@ -928,17 +942,17 @@ SendChatMessage
 
 #### 将来 Port（Tutoring）
 
-| Port | 責務 |
-|------|------|
-| `InterpretationSupportClassifier` | 発話 + Snapshot + 履歴 → `InterpretationSupportType` |
-| `TutoringAgentRegistry` | `InterpretationSupportType` → エージェント定義（命題単位） |
-| `TutoringAgentGateway` | 1 エージェント実行（プロンプト in → 応答 out）。現行 `LlmGateway` の拡張先 |
-| `LearningSnapshotQuery` | 変更なし（LAD と AI 共通 Read） |
+| Port                              | 責務                                                                       |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `InterpretationSupportClassifier` | 発話 + Snapshot + 履歴 → `InterpretationSupportType`                       |
+| `TutoringAgentRegistry`           | `InterpretationSupportType` → エージェント定義（命題単位）                 |
+| `TutoringAgentGateway`            | 1 エージェント実行（プロンプト in → 応答 out）。現行 `LlmGateway` の拡張先 |
+| `LearningSnapshotQuery`           | 変更なし（LAD と AI 共通 Read）                                            |
 
 ### Research Export UC 一覧
 
-| ID | 概要 |
-|----|------|
+| ID                   | 概要                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
 | `ExportResearchData` | 分析用に **視聴ログ**・**小テスト結果**・**対話ログ** を Read 専用 Port から取得し、DTO として出力する |
 
 手順ごとの `ok` / `err`: [application-error-handling.md#Research Export UC: 手順ごとの ok / err 表](./application-error-handling.md#research-export-uc-手順ごとの-ok--err-表)
@@ -947,11 +961,11 @@ SendChatMessage
 
 研究分析向けエクスポートは、次の **3 種類** を想定する。
 
-| 種別 | ソースコンテキスト | ドメイン上のデータ | 備考 |
-|------|-------------------|-----------------|------|
-| **視聴ログ** | Learning | `LearningSession` 配下の `ViewingEvent[]` | 動画操作の時系列 |
-| **小テスト結果** | Learning | `LearningSession` 配下の `QuizAttempt[]` と `QuizAnswer[]` | 再試行含む全 Attempt。設問定義は `Lecture.quizDefinition` 参照 |
-| **対話ログ** | Tutoring | `TutorSession` 配下の `Message[]` | user / assistant の発話時系列。将来は `support_type` / `agent_id` メタデータを含めうる（[Tutoring 将来拡張](#tutoring-将来拡張複数エージェント)） |
+| 種別             | ソースコンテキスト | ドメイン上のデータ                                         | 備考                                                                                                                                              |
+| ---------------- | ------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **視聴ログ**     | Learning           | `LearningSession` 配下の `ViewingEvent[]`                  | 動画操作の時系列                                                                                                                                  |
+| **小テスト結果** | Learning           | `LearningSession` 配下の `QuizAttempt[]` と `QuizAnswer[]` | 再試行含む全 Attempt。設問定義は `Lecture.quizDefinition` 参照                                                                                    |
+| **対話ログ**     | Tutoring           | `TutorSession` 配下の `Message[]`                          | user / assistant の発話時系列。将来は `support_type` / `agent_id` メタデータを含めうる（[Tutoring 将来拡張](#tutoring-将来拡張複数エージェント)） |
 
 **結合キー**: `(learnerId, learningSessionId)`（必要に応じて `lectureId` を付与）。視聴・小テスト・対話を同一 Session 単位で対応づけ可能であること（[domain-model.md#Research Export](./domain-model.md)）。
 

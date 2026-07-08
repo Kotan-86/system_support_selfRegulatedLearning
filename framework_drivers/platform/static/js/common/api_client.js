@@ -67,10 +67,44 @@
     });
   }
 
+  /**
+   * POST /api/quiz-attempts 用の小テスト payload を組み立てる（GAS 契約形状）。
+   * timestamp は視聴ログ（buildViewingLogPayload）と同様に ISO 8601 UTC（toISOString）。
+   * @param {Array<{question_index: number, selected_answer: string, is_correct: 0|1}>} answers
+   */
+  function buildQuizAttemptPayload(
+    participantId,
+    answers,
+    scoreNumerator,
+    scoreDenominator
+  ) {
+    return {
+      participant_id: String(participantId),
+      timestamp: new Date().toISOString(),
+      score_numerator: Number(scoreNumerator),
+      score_denominator: Number(scoreDenominator),
+      answers: answers,
+    };
+  }
+
+  /**
+   * POST /api/quiz-attempts に小テスト 1 試行を送信する。
+   * @returns {Promise<Response>}
+   */
+  function postQuizAttempt(payload) {
+    return fetch("/api/quiz-attempts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
   global.ApiClient = {
     buildViewingLogPayload: buildViewingLogPayload,
     postViewingLog: postViewingLog,
     getLad: getLad,
     postChat: postChat,
+    buildQuizAttemptPayload: buildQuizAttemptPayload,
+    postQuizAttempt: postQuizAttempt,
   };
 })(window);

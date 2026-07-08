@@ -3,11 +3,13 @@
 """Gemini Enterprise Agent Platform（google-genai SDK）による LlmGateway 実装。"""
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
 from application.common.errors import LlmGatewayError
 from application.tutoring.ports.llm_gateway import LlmGateway
+from framework_drivers.external.http_proxy_env import http_proxy_environment
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 _DEFAULT_MODEL_NAME = "gemini-3.5-flash"
@@ -56,20 +58,21 @@ class VertexLlmGateway(LlmGateway):
             raise LlmGatewayError("prompt must not be empty")
 
         try:
-            client = self._get_client()
+            with http_proxy_environment():
+                client = self._get_client()
 
-            @retry(
-                stop=stop_after_attempt(3),
-                wait=wait_exponential(multiplier=1, min=2, max=10),
-            )
-            def _generate(prompt_text: str) -> Any:
-                return client.models.generate_content(
-                    model=self._model_name,
-                    contents=prompt_text,
+                @retry(
+                    stop=stop_after_attempt(3),
+                    wait=wait_exponential(multiplier=1, min=2, max=10),
                 )
+                def _generate(prompt_text: str) -> Any:
+                    return client.models.generate_content(
+                        model=self._model_name,
+                        contents=prompt_text,
+                    )
 
-            response = _generate(prompt)
-            text = response.text if response and response.text else ""
+                response = _generate(prompt)
+                text = response.text if response and response.text else ""
         except LlmGatewayError:
             raise
         except Exception as exc:
@@ -79,6 +82,55 @@ class VertexLlmGateway(LlmGateway):
             raise LlmGatewayError("LLM gateway returned empty response")
 
         return text
+
+    def generate_json(self, prompt: str, schema_hint: str | None = None) -> dict:
+        """JSON オブジェクトを返す。失敗時は LlmGatewayError。"""
+        del schema_hint
+        if not prompt.strip():
+            raise LlmGatewayError("prompt must not be empty")
+
+        try:
+            with http_proxy_environment():
+                client = self._get_client()
+                config = self._json_generation_config()
+
+                @retry(
+                    stop=stop_after_attempt(3),
+                    wait=wait_exponential(multiplier=1, min=2, max=10),
+                )
+                def _generate_json(prompt_text: str) -> Any:
+                    return client.models.generate_content(
+                        model=self._model_name,
+                        contents=prompt_text,
+                        config=config,
+                    )
+
+                response = _generate_json(prompt)
+                text = response.text if response and response.text else ""
+        except LlmGatewayError:
+            raise
+        except Exception as exc:
+            raise LlmGatewayError(_format_gateway_error(exc)) from exc
+
+        if not text:
+            raise LlmGatewayError("LLM gateway returned empty JSON response")
+
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise LlmGatewayError("LLM gateway returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise LlmGatewayError("LLM gateway JSON response must be an object")
+        return payload
+
+    def _json_generation_config(self) -> Any:
+        try:
+            from google.genai import types
+        except ImportError as exc:
+            raise LlmGatewayError(
+                "google-genai is required for VertexLlmGateway"
+            ) from exc
+        return types.GenerateContentConfig(response_mime_type="application/json")
 
     def _get_client(self) -> Any:
         if self._client is not None:

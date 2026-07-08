@@ -12,6 +12,8 @@ from pathlib import Path
 from flask import Flask, g, redirect, render_template, request, url_for
 from jinja2 import ChoiceLoader, FileSystemLoader
 
+from domain.shared.ids import LectureId
+from framework_drivers.db.learning.quiz_definitions import lecture_1, lecture_2, lecture_3
 from framework_drivers.db.learning.sqlite_connection import connect_learning_db
 from framework_drivers.db.learning.static_lecture_catalog import StaticLectureCatalog
 from framework_drivers.db.tutoring.sqlite_connection import connect_tutor_db
@@ -31,9 +33,6 @@ from framework_drivers.platform.wiring import (
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _PLATFORM_ROOT = Path(__file__).resolve().parent
-
-_DEFAULT_QUIZ_FORM_URL = "https://forms.gle/imt5HxuzNHnJkeW26"
-"""小テスト用 Google Form の既定 URL（`QUIZ_FORM_URL` で上書き可）。"""
 
 _REFLECT_FIXED_TEXT = {
     "reflection_intro": (
@@ -55,11 +54,37 @@ _REFLECT_FIXED_TEXT = {
 }
 
 
-def _resolve_quiz_form_url() -> str:
-    return os.environ.get("QUIZ_FORM_URL", _DEFAULT_QUIZ_FORM_URL).strip()
-
-
 _STATIC_LECTURE_CATALOG = StaticLectureCatalog()
+
+_QUIZ_MODULES = {
+    "lecture-1": lecture_1,
+    "lecture-2": lecture_2,
+    "lecture-3": lecture_3,
+}
+
+
+def _quiz_template_context(lecture_id: str) -> dict[str, object]:
+    """講義 ID からテンプレート用の小テスト表示データを組み立てる（正解は answer_key のみ）。"""
+    module = _QUIZ_MODULES.get(lecture_id)
+    if module is None:
+        raise ValueError(f"Unknown lecture_id: {lecture_id}")
+
+    lecture = _STATIC_LECTURE_CATALOG.find_by_id(LectureId(lecture_id))
+    if lecture is None:
+        raise ValueError(f"Unknown lecture_id: {lecture_id}")
+
+    quiz = lecture.quiz_definition
+    return {
+        "quiz_title": module.QUIZ_TITLE,
+        "quiz_description": module.QUIZ_DESCRIPTION,
+        "quiz_questions": [
+            {"index": question.index, "text": question.text, "choices": question.choices}
+            for question in quiz.questions
+        ],
+        "quiz_answer_key": {
+            question.index: question.correct_answer for question in quiz.questions
+        },
+    }
 
 
 def _resolve_youtube_video_id_for_participant(
@@ -151,7 +176,6 @@ def create_app() -> Flask:
     def lecture():
         """GET /lecture: 講義動画ページ（participant_id クエリ必須）。"""
         participant_id = request.args.get("participant_id", "").strip()
-        quiz_form_url = _resolve_quiz_form_url()
         if not participant_id:
             return (
                 render_template(
@@ -161,7 +185,6 @@ def create_app() -> Flask:
                     lecture_id="",
                     youtube_video_id="",
                     lecture_error="",
-                    quiz_form_url=quiz_form_url,
                 ),
                 400,
             )
@@ -170,6 +193,7 @@ def create_app() -> Flask:
                 participant_id,
                 lecture_id=request.args.get("lecture_id"),
             )
+            quiz_context = _quiz_template_context(lecture_id)
         except ValueError as exc:
             return (
                 render_template(
@@ -179,7 +203,6 @@ def create_app() -> Flask:
                     lecture_id="",
                     youtube_video_id="",
                     lecture_error=str(exc),
-                    quiz_form_url=quiz_form_url,
                 ),
                 404,
             )
@@ -190,7 +213,7 @@ def create_app() -> Flask:
             lecture_id=lecture_id,
             youtube_video_id=youtube_video_id,
             lecture_error="",
-            quiz_form_url=quiz_form_url,
+            **quiz_context,
         )
 
     @app.route("/chat", methods=["POST"])

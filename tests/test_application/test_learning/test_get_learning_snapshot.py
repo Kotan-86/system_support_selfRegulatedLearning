@@ -382,6 +382,40 @@ class TestGetLearningSnapshotContentUpdatedAt:
         assert isinstance(result, Ok)
         assert result.value.content_updated_at == quiz_at
 
+    def test_mixed_naive_quiz_and_aware_viewing_does_not_raise(self) -> None:
+        """legacy naive 小テストと aware 視聴ログが混在しても content_updated_at を算出できる。"""
+        repository = InMemoryLearningSessionRepository()
+        get_snapshot = _get_snapshot_use_case(repository=repository)
+        record_viewing = _record_viewing_use_case(repository)
+        record_quiz = _record_quiz_use_case(repository)
+        viewing_at = datetime(2026, 6, 29, 6, 23, 37, tzinfo=timezone.utc)
+        quiz_at_naive = datetime(2026, 6, 29, 15, 23, 30)
+        record_viewing.execute(
+            RecordViewingEventRequest(
+                learner_id=LearnerId("learner-1"),
+                lecture_id=LectureId("lecture-1"),
+                occurred_at=viewing_at,
+                video_position=10,
+                action=ViewingAction.PLAY,
+                position_delta=0,
+            )
+        )
+        record_quiz.execute(
+            RecordQuizAttemptRequest(
+                learner_id=LearnerId("learner-1"),
+                lecture_id=LectureId("lecture-1"),
+                attempted_at=quiz_at_naive,
+                score_numerator=5,
+                score_denominator=5,
+                answers=_five_answers(),
+            )
+        )
+
+        result = get_snapshot.execute(_request())
+
+        assert isinstance(result, Ok)
+        assert result.value.content_updated_at is not None
+
 
 class TestGetLearningSnapshotValidation:
     """Request 検証を検証する。"""

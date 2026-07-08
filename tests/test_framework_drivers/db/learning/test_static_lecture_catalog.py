@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from domain.shared.ids import LectureId
 from framework_drivers.db.learning.static_lecture_catalog import (
     StaticLectureCatalog,
@@ -61,3 +63,32 @@ class TestStaticLectureCatalog:
         catalog = StaticLectureCatalog()
 
         assert catalog.find_by_id(LectureId("lecture-unknown")) is None
+
+    @pytest.mark.parametrize(
+        ("lecture_id", "q1_snippet"),
+        [
+            (
+                "lecture-1",
+                "球の表面積と「同じ半径を持つ円の面積」の関係として正しいものはどれですか？",
+            ),
+            (
+                "lecture-2",
+                "モンティ・ホール問題において、司会者がハズレの扉を1つ開けた後",
+            ),
+            (
+                "lecture-3",
+                "囚人Aは、看守から「Bは処刑される」と教えられました。",
+            ),
+        ],
+    )
+    def test_quiz_definition_has_five_questions_with_lecture_specific_q1(
+        self, lecture_id: str, q1_snippet: str
+    ) -> None:
+        """各講義の QuizDefinition は 5 問で、Q1 文言が講義別定義と一致する。"""
+        catalog = StaticLectureCatalog()
+        lecture = catalog.find_by_id(LectureId(lecture_id))
+        assert lecture is not None
+
+        questions = lecture.quiz_definition.questions
+        assert len(questions) == 5
+        assert q1_snippet in questions[0].text

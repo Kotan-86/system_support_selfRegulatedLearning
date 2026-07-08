@@ -41,9 +41,49 @@ class TestLectureRoute:
             "/static/js/common/participant_context.js",
             "/static/js/common/api_client.js",
             "/static/js/lecture/player.js",
+            "/static/js/lecture/quiz.js",
         ):
             response = phase2_client.get(path)
             assert response.status_code == 200, path
+
+    @pytest.mark.parametrize(
+        ("participant_id", "q1_snippet", "quiz_title"),
+        [
+            (
+                "1",
+                "球の表面積と「同じ半径を持つ円の面積」の関係として正しいものはどれですか？",
+                "球の表面積に関する理解度テスト",
+            ),
+            (
+                "2",
+                "モンティ・ホール問題において、司会者がハズレの扉を1つ開けた後",
+                "モンティ・ホール問題：直感と論理のクイズ",
+            ),
+            (
+                "3",
+                "囚人Aは、看守から「Bは処刑される」と教えられました。",
+                "3囚人問題：確率のパラドックスに挑戦",
+            ),
+        ],
+    )
+    def test_lecture_embedded_quiz_for_each_participant(
+        self,
+        phase2_client,
+        participant_id: str,
+        q1_snippet: str,
+        quiz_title: str,
+    ) -> None:
+        """participant_id=1/2/3 で講義別の埋め込み小テストが表示される。"""
+        response = phase2_client.get(f"/lecture?participant_id={participant_id}")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+
+        assert q1_snippet in html
+        assert quiz_title in html
+        assert 'id="quiz-form"' in html
+        assert "/static/js/lecture/quiz.js" in html
+        assert "forms.gle" not in html
+        assert "docs.google.com/forms" not in html
 
 
 def _gas_viewing_log_payload(*, participant_id: str, action: str, duration: float):

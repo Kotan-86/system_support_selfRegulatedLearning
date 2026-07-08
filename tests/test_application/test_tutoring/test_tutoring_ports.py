@@ -82,4 +82,4 @@ class TestTutoringPortContracts:
             for name, member in inspect.getmembers(LlmGateway)
             if getattr(member, "__isabstractmethod__", False)
         }
-        assert methods == {"generate"}
+        assert methods == {"generate", "generate_json"}
