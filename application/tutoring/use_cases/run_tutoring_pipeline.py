@@ -39,6 +39,7 @@ class RunTutoringPipelineUseCase:
         turn_context = TurnContext.from_messages(
             request.messages,
             lecture=request.lecture,
+            snapshot=request.snapshot,
         )
 
         try:
@@ -57,6 +58,7 @@ class RunTutoringPipelineUseCase:
         try:
             decision = self._pedagogical_model.select_move(
                 interpretation,
+                snapshot=request.snapshot,
                 turn_context=turn_context,
             )
         except LlmGatewayError as error:

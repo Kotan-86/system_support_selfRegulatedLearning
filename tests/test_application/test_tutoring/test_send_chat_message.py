@@ -115,7 +115,7 @@ def _request(
 class _FailingPedagogicalModelGateway(PedagogicalModelGateway):
     """Stage 2 失敗をシミュレートする Fake。"""
 
-    def select_move(self, interpretation, *, turn_context):
+    def select_move(self, interpretation, *, snapshot, turn_context):
         raise LlmGatewayError("LLM gateway failed in test")
 
 

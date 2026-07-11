@@ -167,6 +167,43 @@ class TestTutoringPipelineSnapshotIntegration:
         assert passed_snapshot.quiz_answers[2].question_index == 3
         assert passed_snapshot.quiz_answers[2].is_correct is False
 
+    def test_snapshot_is_passed_to_pedagogical_model(self) -> None:
+        learning_repo = InMemoryLearningSessionRepository()
+        record_quiz = _record_quiz_use_case(learning_repo)
+        record_result = record_quiz.execute(
+            RecordQuizAttemptRequest(
+                learner_id=LearnerId("learner-1"),
+                lecture_id=LectureId("lecture-1"),
+                attempted_at=FIXED_NOW,
+                score_numerator=4,
+                score_denominator=5,
+                answers=_five_answers(wrong_at=3),
+            )
+        )
+        assert isinstance(record_result, Ok)
+
+        from application.learning.dto.get_learning_snapshot import GetLearningSnapshotRequest
+
+        snapshot_uc = _get_snapshot_use_case(repository=learning_repo)
+        snapshot_result = snapshot_uc.execute(
+            GetLearningSnapshotRequest(
+                learner_id=LearnerId("learner-1"),
+                lecture_id=LectureId("lecture-1"),
+            )
+        )
+        assert isinstance(snapshot_result, Ok)
+        snapshot = snapshot_result.value.snapshot
+
+        pedagogical = FakePedagogicalModelGateway()
+        use_case = _pipeline_use_case(pedagogical=pedagogical)
+        result = use_case.execute(_request(snapshot=snapshot))
+
+        assert isinstance(result, Ok)
+        assert len(pedagogical.select_move_calls) == 1
+        passed_snapshot = pedagogical.select_move_calls[0].snapshot
+        assert isinstance(passed_snapshot, LearningSnapshot)
+        assert len(passed_snapshot.quiz_answers) == 5
+
 
 class TestTutoringPipelineStateCardCarryover:
     """2 ターン目に previous_state_card が Stage 1 へ渡る。"""
@@ -218,6 +255,32 @@ class TestTutoringPipelineTurnContext:
         assert isinstance(result, Ok)
         assert pedagogical.select_move_calls[0].turn_context.is_first_assistant_turn is False
 
+    def test_turn_context_includes_move_history_from_prior_assistant(self) -> None:
+        pedagogical = FakePedagogicalModelGateway()
+        use_case = _pipeline_use_case(pedagogical=pedagogical)
+
+        prior_move = DialogueMove.JOINT_EVIDENCE_CHECK
+        result = use_case.execute(
+            _request(
+                messages=(
+                    _user_message_entity(),
+                    Message.create(
+                        id=MessageId("msg-asst-prior"),
+                        role=MessageRole.ASSISTANT,
+                        content="前ターン",
+                        created_at=FIXED_NOW,
+                        dialogue_move=prior_move,
+                    ),
+                ),
+            )
+        )
+
+        assert isinstance(result, Ok)
+        turn_context = pedagogical.select_move_calls[0].turn_context
+        assert turn_context.turn_index == 1
+        assert len(turn_context.move_history.records) == 1
+        assert turn_context.move_history.records[0].dialogue_move is prior_move
+
 
 class TestTutoringPipelineMetadata:
     """TutoringPipelineResult に interpretation / decision が含まれる。"""
@@ -250,7 +313,7 @@ class _FailingStudentModelGateway(StudentModelGateway):
 
 
 class _FailingPedagogicalModelGateway(PedagogicalModelGateway):
-    def select_move(self, interpretation, *, turn_context):
+    def select_move(self, interpretation, *, snapshot, turn_context):
         raise LlmGatewayError("Pedagogical model failed in test")
 
 

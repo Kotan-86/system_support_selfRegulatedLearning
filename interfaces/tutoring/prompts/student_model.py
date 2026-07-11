@@ -72,6 +72,16 @@ _INTERPRETATION_STATE_CARD = """
 各項目は confirmed / hypothesized / unknown を区別する。
 """
 
+_LAD_CONNECTION_UPDATE = """
+## LAD_connection 更新ルール
+
+`LADデータ（視聴ログ等）` セクションと学習者発話を照合し、毎ターン `LAD_connection` を更新する。
+
+- LAD 要約が `(なし)` でないとき、`LAD_connection` を `unknown` のまま放置してはならない。ログ内容・学習者発話・前ターンの State Card から、毎ターン `confirmed` / `hypothesized` / `unknown` のいずれかへ更新する。
+- 学習者が「動画を飛ばした」「最初の方を見た」「途中から見た」など視聴行動を述べたら、`LAD_connection` を `hypothesized` 以上に更新する（ログと一致・矛盾の有無を `note` に記す）。
+- `evidence_references` に LAD を含めてよい（例: `lad_segment_00:00-02:00`, `lad_digest`）。
+"""
+
 _LEARNER_UTTERANCE_TYPE = """
 ## Learner Utterance Type
 
@@ -116,7 +126,7 @@ JSON のみを出力する。自然言語の説明や前置きは禁止。
     "AI_hypotheses": {{"status": "unknown", "note": "..."}},
     "learner_load": {{"status": "unknown", "note": "..."}}
   }},
-  "evidence_references": ["quiz_q1", "transcript_02:30-03:15"]
+  "evidence_references": ["quiz_q1", "lad_segment_00:00-02:00", "transcript_02:30-03:15"]
 }}
 ```
 """
@@ -137,6 +147,7 @@ STUDENT_MODEL_PROMPT = (
     + SHARED_INTRO
     + _EVIDENCE_FIRST_READING
     + _INTERPRETATION_STATE_CARD
+    + _LAD_CONNECTION_UPDATE
     + _LEARNER_UTTERANCE_TYPE
     + _JSON_OUTPUT
     + _CONTEXT_DATA

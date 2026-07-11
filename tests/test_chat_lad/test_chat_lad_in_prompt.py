@@ -61,7 +61,9 @@ class TestChatLadInPrompt:
         assert len(fake_llm_gateway.generate_calls) >= 1
         prompt = fake_llm_gateway.generate_calls[-1]
         assert (
-            "4" in prompt and "5" in prompt
-        ) or "視聴" in prompt or "小テスト" in prompt or "play" in prompt or "quiz" in prompt.lower(), (
-            "プロンプトに学習データ（LAD）が含まれること"
-        )
+            ("4" in prompt and "5" in prompt)
+            or "視聴" in prompt
+            or "小テスト" in prompt
+            or "再生開始" in prompt
+            or "視聴ログ要約" in prompt
+        ), "プロンプトに学習データ（LAD）が含まれること"

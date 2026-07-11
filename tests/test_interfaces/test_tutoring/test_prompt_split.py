@@ -56,6 +56,26 @@ class TestPromptConstantsExist:
         assert INTERFACE_MODEL_PROMPT.strip()
 
 
+class TestPedagogicalPromptLadReflection:
+    """Pedagogical Model の LAD 振り返りルールがプロンプトに含まれる。"""
+
+    def test_lad_reflection_trigger_section_present(self) -> None:
+        assert "## LAD Reflection Trigger" in PEDAGOGICAL_MODEL_PROMPT
+
+    def test_lad_connection_uses_unknown_not_not_checked(self) -> None:
+        assert "not_checked" not in PEDAGOGICAL_MODEL_PROMPT
+        assert "lad_connection.status が unknown" in PEDAGOGICAL_MODEL_PROMPT
+
+    def test_data_check_anti_loop_max_two_per_session(self) -> None:
+        assert "DATA_CHECK` は **同一セッションで最大 2 回**まで" in PEDAGOGICAL_MODEL_PROMPT
+
+    def test_data_check_conditional_priority_over_revoice(self) -> None:
+        assert (
+            "REVOICE_LEARNER_INTERPRETATION` / `HYPOTHESIS_OFFER` より引き上げる"
+            in PEDAGOGICAL_MODEL_PROMPT
+        )
+
+
 class TestPedagogicalPromptCoachMoves:
     """Pedagogical Model プロンプトに全 Coach Move が含まれる。"""
 
@@ -70,6 +90,23 @@ class TestPedagogicalPromptCoachMoves:
             1 for move in DialogueMove if move.value in PEDAGOGICAL_MODEL_PROMPT
         )
         assert present == len(DialogueMove)
+
+
+class TestStudentPromptLadConnection:
+    """Student Model の LAD_connection 更新ルールがプロンプトに含まれる。"""
+
+    def test_lad_connection_update_section_present(self) -> None:
+        assert "## LAD_connection 更新ルール" in STUDENT_MODEL_PROMPT
+
+    def test_lad_connection_must_not_stay_unknown_when_lad_present(self) -> None:
+        assert "unknown` のまま放置してはならない" in STUDENT_MODEL_PROMPT
+
+    def test_viewing_behavior_utterance_updates_lad_connection(self) -> None:
+        assert "動画を飛ばした" in STUDENT_MODEL_PROMPT
+        assert "hypothesized" in STUDENT_MODEL_PROMPT
+
+    def test_evidence_references_may_include_lad(self) -> None:
+        assert "lad_segment_00:00-02:00" in STUDENT_MODEL_PROMPT
 
 
 class TestStudentPromptStateCard:

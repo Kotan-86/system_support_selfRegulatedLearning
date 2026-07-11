@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from application.tutoring.dto.tutoring_pipeline import TurnContext
+from domain.learning.learning_snapshot import LearningSnapshot
 from domain.tutoring.dialogue_move_decision import DialogueMoveDecision
 from domain.tutoring.learner_interpretation import LearnerInterpretationResult
 
@@ -17,6 +18,7 @@ class PedagogicalModelGateway(ABC):
         self,
         interpretation: LearnerInterpretationResult,
         *,
+        snapshot: LearningSnapshot,
         turn_context: TurnContext,
     ) -> DialogueMoveDecision:
         """Stage 2: Dialogue Move と Interface 指示を返す。"""

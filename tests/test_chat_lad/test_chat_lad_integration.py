@@ -67,10 +67,12 @@ class TestChatLadIntegration:
         assert len(fake_llm_gateway.generate_calls) >= 1
         prompt = fake_llm_gateway.generate_calls[-1]
         assert (
-            "4" in prompt and "5" in prompt
-        ) or "視聴" in prompt or "小テスト" in prompt or "play" in prompt, (
-            "プロンプトに学習データが含まれること"
-        )
+            ("4" in prompt and "5" in prompt)
+            or "視聴" in prompt
+            or "小テスト" in prompt
+            or "再生開始" in prompt
+            or "視聴ログ要約" in prompt
+        ), "プロンプトに学習データが含まれること"
 
     def test_chat_without_participant_id_returns_400(self, chat_lad_client) -> None:
         """POST /chat で message のみ（session_id も participant_id も無し）だと 400。"""

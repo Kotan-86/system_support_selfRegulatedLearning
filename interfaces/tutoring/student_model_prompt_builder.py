@@ -10,7 +10,7 @@ from domain.tutoring.message import Message
 from interfaces.tutoring.context_formatters import (
     HISTORY_EMPTY_PLACEHOLDER,
     format_history,
-    format_lecture_log,
+    format_lad_digest,
     format_lecture_outline,
     format_lecture_transcript,
     format_quiz_result,
@@ -35,7 +35,7 @@ class StudentModelPromptBuilder:
         return STUDENT_MODEL_PROMPT.format(
             history=history_str or HISTORY_EMPTY_PLACEHOLDER,
             user_message=user_message,
-            lecture_log=format_lecture_log(snapshot),
+            lecture_log=format_lad_digest(snapshot, lecture),
             quiz_result=format_quiz_result(snapshot, lecture),
             lecture_transcript=format_lecture_transcript(snapshot, lecture),
             lecture_outline=format_lecture_outline(lecture.outline),

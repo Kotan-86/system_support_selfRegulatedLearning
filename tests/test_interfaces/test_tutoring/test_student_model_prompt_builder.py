@@ -13,11 +13,13 @@ from domain.learning.lecture_outline import (
 )
 from domain.learning.learning_snapshot import LearningSnapshot
 from domain.learning.quiz_definition import Question, QuizDefinition
+from domain.learning.viewing_event import ViewingAction, ViewingEvent
 from domain.shared.ids import (
     LectureId,
     LearnerId,
     LearningSessionId,
     MessageId,
+    ViewingEventId,
 )
 from domain.tutoring.message import Message, MessageRole
 from interfaces.tutoring.context_formatters import EMPTY_PLACEHOLDER
@@ -139,3 +141,30 @@ class TestStudentModelPromptBuilder:
         assert "LADデータ（視聴ログ等）:" in prompt
         assert "テスト結果:" in prompt
         assert "講義字幕:" in prompt
+
+    def test_lad_digest_in_student_prompt_when_viewing_events_exist(self) -> None:
+        snapshot = LearningSnapshot(
+            session_id=LearningSessionId("session-1"),
+            learner_id=LearnerId("learner-1"),
+            lecture_id=LectureId("lecture-1"),
+            viewing_events=(
+                ViewingEvent.create(
+                    id=ViewingEventId("event-1"),
+                    occurred_at=FIXED_NOW,
+                    video_position=0,
+                    action=ViewingAction.PLAY,
+                    position_delta=0,
+                ),
+            ),
+            latest_quiz_attempt=None,
+            quiz_answers=(),
+        )
+        prompt = StudentModelPromptBuilder().build(
+            snapshot,
+            (),
+            "動画の最初の方を見ました",
+            _lecture_with_outline(),
+        )
+
+        assert "## 視聴ログ要約" in prompt
+        assert "再生開始" in prompt

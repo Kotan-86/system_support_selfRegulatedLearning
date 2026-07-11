@@ -526,23 +526,74 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 | Builder                         | Stage                  | 入力                                                                             | 出力                                   |
 | ------------------------------- | ---------------------- | -------------------------------------------------------------------------------- | -------------------------------------- |
 | `StudentModelPromptBuilder`     | 1（Student Model）     | `LearningSnapshot`, `messages`, `user_message`, `Lecture`, `previous_state_card` | Stage 1 プロンプト                     |
-| `PedagogicalModelPromptBuilder` | 2（Pedagogical Model） | `LearnerInterpretationResult`, `TurnContext`                                     | Stage 2 プロンプト（JSON 強制）        |
+| `PedagogicalModelPromptBuilder` | 2（Pedagogical Model） | `LearnerInterpretationResult`, `LearningSnapshot`, `TurnContext`                 | Stage 2 プロンプト（JSON 強制）        |
 | `InterfaceModelPromptBuilder`   | 3（Interface Model）   | `DialogueMoveDecision`, 証拠, `messages`, `user_message`, `Lecture`              | Stage 3 プロンプト（プレーンテキスト） |
 
 プロンプト定数は `interfaces/tutoring/prompts/`（`student_model.py`, `pedagogical_model.py`, `interface_model.py`, `shared_rules.py`）に分割する。コンテキスト整形は `interfaces/tutoring/context_formatters.py` を 3 Builder で共有する。
+
+#### Pedagogical Model: Move 履歴と Anti-Loop
+
+`PedagogicalModelPromptBuilder` は `TurnContext` から以下を Stage 2 プロンプトに注入する。
+
+| セクション                    | データ源                                                                         | 説明                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `LAD データ要約`              | `LearningSnapshot.viewing_events`（`format_lad_digest` 経由）                    | 視聴ログの集計サマリと直近タイムライン                      |
+| `Student evidence_references` | `LearnerInterpretationResult.evidence_references`（`format_evidence_list` 経由） | Student Model が参照した証拠 ID                             |
+| `Recent Coach Move History`   | `TurnContext.move_history`                                                       | 直近 assistant の `dialogue_move` / `target_fields` を JSON |
+| `Anti-Loop Rule`（テンプレ）  | `pedagogical_model.py` 固定文                                                    | 同一 Move 連続禁止、REVOICE 再選択条件                      |
+| `turn_index`                  | `TurnContext.turn_index`                                                         | assistant ターン数（次ターン生成前）                        |
+| `has_lad_data`                | `TurnContext.has_lad_data`                                                       | LAD 視聴イベントの有無                                      |
+| `lad_check_pending`           | `TurnContext.lad_check_pending`                                                  | LAD ありかつ `DATA_CHECK` 未実施のとき `true`               |
+
+#### Pedagogical Model: LAD Reflection Trigger
+
+`pedagogical_model.py` の `## LAD Reflection Trigger` により、Stage 2 は LAD 要約が `(なし)` でないセッションで `DATA_CHECK` を最低 1 回選択する。`lad_connection.status` が `unknown` かつ `answer_rationale` が `confirmed` / `hypothesized` のときは `REVOICE` / `HYPOTHESIS` より `DATA_CHECK` を優先する。Move 履歴に `DATA_CHECK` が無く `turn_index >= 2` のときは次ターンで `DATA_CHECK` を強く推奨する。`DATA_CHECK` は同一セッションで最大 2 回までとし、3 回目以降は `JOINT_EVIDENCE_CHECK` で字幕・小テストと統合する。
+
+`evidence_to_surface` に `lad_log` 系 ID を含めるとき、Stage 3 が LAD 要約を応答に必ず含めるよう `interface_instructions` と併せて指定する。
+
+#### Student Model: LAD_connection 更新
+
+`student_model.py` の `## LAD_connection 更新ルール` により、Stage 1 は LAD 要約が `(なし)` でないとき `LAD_connection` を毎ターン更新する（`unknown` のまま放置しない）。学習者が視聴行動を述べた場合は `hypothesized` 以上へ更新し、`evidence_references` に `lad_segment_*` 等を含めてよい。
+
+#### Interface Model: 動的 Response Budget
+
+`InterfaceModelPromptBuilder` は `DialogueMoveDecision.response_budget` に応じて Response Budget セクションを切り替える（`format_response_budget_section`）。
+
+| 条件                                   | テンプレート                 | 制約概要                                          |
+| -------------------------------------- | ---------------------------- | ------------------------------------------------- |
+| `allow_composite_turn=true`            | `_RESPONSE_BUDGET_COMPOSITE` | 確認+遷移の複合発話可。`composite_pattern` を明示 |
+| `scaffolding_level=high`（複合不可）   | `_RESPONSE_BUDGET_HIGH`      | 4 文・問い 1・複合不可                            |
+| 上記以外（`medium` / `low`、複合不可） | `_RESPONSE_BUDGET_STANDARD`  | `max_sentences` / `max_questions` を可変反映      |
+
+コンテキストデータ末尾に `scaffolding_level` と `allow_composite_turn` を追記する。
+
+#### Interface Model: Evidence Surfacing Rule
+
+`InterfaceModelPromptBuilder` は `DialogueMoveDecision.evidence_to_surface` を `format_evidence_list` 経由で `提示必須の証拠` に注入する。プロンプト固定文 `## Evidence Surfacing Rule` により、指定証拠 ID に応じて問いかけ前にコンテキストデータの該当セクションを応答に含める。
+
+| 証拠 ID パターン                     | 参照セクション          | 要件                                           |
+| ------------------------------------ | ----------------------- | ---------------------------------------------- |
+| `lad_log`, `lad_log_*`, `lad_digest` | LADデータ（視聴ログ等） | LAD 要約を 1 文以上提示してから問いかける      |
+| `quiz_q*`                            | テスト結果              | 該当問題の結果・選択肢を提示してから問いかける |
+| `transcript_*`                       | 講義字幕                | 該当箇所の字幕を提示してから問いかける         |
+
+`evidence_to_surface` が空のときは `(なし)` を注入し、Surfacing Rule は適用せず `interface_instructions` のみに従う。
 
 ### コンテキストデータ（6 フィールド）
 
 各 Builder はテンプレート末尾のプレースホルダに以下を注入する（データが無い場合は `(なし)` または `(履歴なし)`）。
 
-| プレースホルダ         | ラベル                  | データ源                                                    | 主な利用 Stage                  |
-| ---------------------- | ----------------------- | ----------------------------------------------------------- | ------------------------------- |
-| `{history}`            | 会話履歴                | `messages`                                                  | Student, Interface              |
-| `{user_message}`       | ユーザーの直近の発話    | リクエスト本文                                              | Student, Interface              |
-| `{lecture_log}`        | LADデータ（視聴ログ等） | `LearningSnapshot.viewing_events`                           | Student                         |
-| `{quiz_result}`        | テスト結果              | `LearningSnapshot.quiz_answers` + `Lecture.quiz_definition` | Student, Interface              |
-| `{lecture_transcript}` | 講義字幕                | `LearningSnapshot.lecture_transcript_excerpts` または SRT   | Student, Interface              |
-| `{lecture_outline}`    | 講義構造                | `Lecture.outline`（ITS Domain Model）                       | Student, Pedagogical, Interface |
+`{lecture_log}` は生イベント列ではなく `format_lad_digest` による視聴ログ要約（操作回数・操作が多い区間・直近 10 件のタイムライン）を注入する。整形は `interfaces/tutoring/context_formatters.py` の `format_lad_digest` / `format_lad_timeline` が担い、集計には `ViewingBehaviorMetrics` を用いる。
+
+| プレースホルダ          | ラベル                  | データ源                                                                  | 主な利用 Stage                  |
+| ----------------------- | ----------------------- | ------------------------------------------------------------------------- | ------------------------------- |
+| `{history}`             | 会話履歴                | `messages`                                                                | Student, Interface              |
+| `{user_message}`        | ユーザーの直近の発話    | リクエスト本文                                                            | Student, Interface              |
+| `{lecture_log}`         | LADデータ（視聴ログ等） | `LearningSnapshot.viewing_events`（`format_lad_digest` 経由）             | Student, Interface, Pedagogical |
+| `{quiz_result}`         | テスト結果              | `LearningSnapshot.quiz_answers` + `Lecture.quiz_definition`               | Student, Interface              |
+| `{lecture_transcript}`  | 講義字幕                | `LearningSnapshot.lecture_transcript_excerpts` または SRT                 | Student, Interface              |
+| `{lecture_outline}`     | 講義構造                | `Lecture.outline`（ITS Domain Model）                                     | Student, Pedagogical, Interface |
+| `{evidence_to_surface}` | 提示必須の証拠          | `DialogueMoveDecision.evidence_to_surface`（`format_evidence_list` 経由） | Interface                       |
 
 ---
 
@@ -583,6 +634,32 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 - 正解フラグ（正解なら `1`、不正解なら `0`）
 
 変更理由: 解釈フェーズ用プロンプトへの切り替えと、`app/` 移行完了に伴う依存関係の整理。
+
+### LAD 振り返り強化（受入基準）
+
+| 項目                                                    | 検証方法                                                             |
+| ------------------------------------------------------- | -------------------------------------------------------------------- |
+| 教授モデルプロンプトに LAD 要約が含まれる               | `test_pedagogical_model_prompt_builder.py`                           |
+| Interface プロンプトに `evidence_to_surface` が含まれる | `test_interface_model_prompt_builder.py`                             |
+| `format_lad_digest` が操作回数・タイムラインを出力する  | `test_context_formatters_lad.py`                                     |
+| Stage 2 が `snapshot` を受け取る                        | `test_tutoring_pipeline.py`, `test_llm_pedagogical_model_gateway.py` |
+| `TurnContext` の LAD フラグ                             | `test_turn_context.py`                                               |
+
+#### 手動 E2E 確認チェックリスト
+
+LAD データ（視聴ログ）と小テスト結果を登録した参加者で、3 ターン以上の振り返り対話を行う。
+
+**自動検証済み（単体テスト + プロンプト組み立て検証）**
+
+- [x] 教授モデルプロンプトに LAD 要約が含まれる
+- [x] Interface プロンプトに `evidence_to_surface` が含まれ、`lad_log` 指定時に Surfacing Rule が適用される
+- [x] `lad_connection` の条件表記がプロンプト内で `unknown` に統一されている（`not_checked` が残っていない）
+- [x] 既存 P0 テスト + regression guard が GREEN（810 tests）
+
+**実 LLM 環境での手動確認（デプロイ前）**
+
+- [ ] 5 ターン程度の振り返り対話で `DATA_CHECK` が少なくとも 1 回選ばれる（LAD データあり・選択理由が出た後）
+- [ ] `evidence_to_surface` に `lad_log` 系が含まれるターンで、応答本文に視聴ログ要約が 1 文以上含まれる
 
 ---
 

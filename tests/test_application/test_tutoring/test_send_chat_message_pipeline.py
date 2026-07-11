@@ -39,7 +39,7 @@ FIXED_NOW = datetime(2026, 6, 21, 12, 0, 0, tzinfo=timezone.utc)
 
 
 class _FailingPedagogicalModelGateway(PedagogicalModelGateway):
-    def select_move(self, interpretation, *, turn_context):
+    def select_move(self, interpretation, *, snapshot, turn_context):
         raise LlmGatewayError("Pedagogical model failed in test")
 
 

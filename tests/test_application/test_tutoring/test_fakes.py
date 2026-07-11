@@ -188,3 +188,13 @@ class TestFakeLlmGateway:
         result = gateway.generate_json("json prompt", schema_hint="hint")
         assert result == payload
         assert gateway.generate_json_calls == [("json prompt", "hint")]
+
+    def test_generate_json_returns_stage_defaults_when_not_forced(self) -> None:
+        gateway = FakeLlmGateway()
+
+        student = gateway.generate_json("# ITS Student Model (Stage 1)\n...")
+        pedagogical = gateway.generate_json("# ITS Pedagogical Model (Stage 2)\n...")
+
+        assert student["utterance_type"] == "VAGUE_MEMORY"
+        assert pedagogical["dialogue_move"] == "JOINT_EVIDENCE_CHECK"
+        assert pedagogical["interface_instructions"]

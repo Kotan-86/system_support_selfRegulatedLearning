@@ -568,17 +568,20 @@ TutorSession（Aggregate Root）
 
 ### Tutoring Value Object（ITS パイプライン）
 
-| 名前                          | 説明                                              | 不変条件                                   |
-| ----------------------------- | ------------------------------------------------- | ------------------------------------------ |
-| `MessageRole`                 | 発話者                                            | `user` \| `assistant`                      |
-| `InterpretationFieldStatus`   | State Card 各軸の確信度                           | `confirmed` \| `hypothesized` \| `unknown` |
-| `InterpretationField`         | State Card の 1 軸（status + note）               | —                                          |
-| `InterpretationStateCard`     | 8 軸の学習者解釈状態カード                        | 8 軸すべて必須。`empty()` は全軸 `unknown` |
-| `LearnerUtteranceType`        | 学習者発話分類（5 種）                            | `FACT_REQUEST` 等                          |
-| `DialogueMove`                | Coach Move（13 種）                               | プロンプト定義と列挙が一致すること         |
-| `ResponseBudget`              | 発話予算（max_sentences, max_questions）          | 正の整数                                   |
-| `DialogueMoveDecision`        | Pedagogical Model 出力（Move + budget + 指示）    | `interface_instructions` は空でない        |
-| `LearnerInterpretationResult` | Student Model 出力（utterance_type + state_card） | —                                          |
+| 名前                          | 説明                                              | 不変条件                                                                                                             |
+| ----------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `MessageRole`                 | 発話者                                            | `user` \| `assistant`                                                                                                |
+| `InterpretationFieldStatus`   | State Card 各軸の確信度                           | `confirmed` \| `hypothesized` \| `unknown`                                                                           |
+| `InterpretationField`         | State Card の 1 軸（status + note）               | —                                                                                                                    |
+| `InterpretationStateCard`     | 8 軸の学習者解釈状態カード                        | 8 軸すべて必須。`empty()` は全軸 `unknown`                                                                           |
+| `LearnerUtteranceType`        | 学習者発話分類（5 種）                            | `FACT_REQUEST` 等                                                                                                    |
+| `DialogueMove`                | Coach Move（13 種）                               | プロンプト定義と列挙が一致すること                                                                                   |
+| `ScaffoldingLevel`            | Interface への足場かけ強度                        | `high` \| `medium` \| `low`                                                                                          |
+| `ResponseBudget`              | 発話予算（文数・問い数・足場かけ・複合発話可否）  | `max_sentences` は正の整数。`max_questions` は 0 以上。省略時 `scaffolding_level=high`、`allow_composite_turn=false` |
+| `DialogueMoveRecord`          | 1 assistant ターンの Coach Move 記録              | `turn_index` は正の整数。`target_fields` は State Card 軸名のタプル                                                  |
+| `DialogueMoveHistory`         | 直近 N 件の Coach Move 履歴                       | `from_messages` で `window=3` デフォルト。`has_consecutive` で同一 Move 連続を検出                                   |
+| `DialogueMoveDecision`        | Pedagogical Model 出力（Move + budget + 指示）    | `interface_instructions` は空でない。`evidence_to_surface` は Interface への提示必須証拠 ID のタプル（空可）         |
+| `LearnerInterpretationResult` | Student Model 出力（utterance_type + state_card） | —                                                                                                                    |
 
 配置: `domain/tutoring/`。Application 層 DTO（`TutoringPipelineRequest` 等）とは分離する。
 
