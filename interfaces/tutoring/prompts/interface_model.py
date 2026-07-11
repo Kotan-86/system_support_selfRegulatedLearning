@@ -2,6 +2,8 @@
 """ITS Interface Model（Stage 3）プロンプトテンプレート。"""
 from __future__ import annotations
 
+from domain.tutoring.dialogue_move_decision import ResponseBudget, ScaffoldingLevel
+
 from interfaces.tutoring.prompts.shared_rules import GOAL, SCOPE
 
 _OPENING_ACTIONS = """
@@ -24,8 +26,10 @@ _OPENING_ACTIONS = """
 初手では、誤答原因、改善策、学習方略、学習者の理解状態の推定を提示してはならない。
 """
 
-_RESPONSE_BUDGET = """
+_RESPONSE_BUDGET_HIGH = """
 ## Response Budget
+
+足場かけ強度: HIGH（厳格）
 
 LLMチューターの1回の応答は、原則として以下の3要素だけで構成する。
 
@@ -33,7 +37,7 @@ LLMチューターの1回の応答は、原則として以下の3要素だけで
 
 2. 次に一緒に確認する対象を1つ示す
 
-3. 学習者に答えてもらう低負荷な問いを1つ出す 
+3. 学習者に答えてもらう低負荷な問いを1つ出す
 
 1回の応答で、以下を同時に行ってはならない。
 
@@ -49,12 +53,85 @@ LLMチューターの1回の応答は、原則として以下の3要素だけで
 
 * 複数の質問
 
-応答は原則として5文以内に収める。
+* 確認と遷移を同一ターンで複合する
+
+応答は原則として4文以内に収める。
 
 問いは1つだけにする。
 
 学習者が番号や短い言葉で答えられる形式を優先する。
 """
+
+_RESPONSE_BUDGET_COMPOSITE = """
+## Response Budget
+
+足場かけ強度: MEDIUM（複合発話可）
+
+複合パターン: {composite_pattern}
+
+1ターンで「確認」と「次の確認対象への遷移」を短くまとめてよい。
+
+* 学習者の解釈・違和感を短く言い換えて確認する（修辞的確認は問いカウントに含めない）
+
+* 続けて、次に一緒に見る対象を1つ示す
+
+* 最後に、学習者が答えやすい実質的な問いを1つだけ出す
+
+応答は原則として{max_sentences}文以内に収める。
+
+実質的な問いは{max_questions}個までとする。
+
+一般知識の長い説明、原因仮説、方略提案、複数の独立した問いは禁止する。
+"""
+
+_RESPONSE_BUDGET_STANDARD = """
+## Response Budget
+
+足場かけ強度: {scaffolding_level}
+
+LLMチューターの1回の応答は、原則として以下の3要素だけで構成する。
+
+1. 確認可能な事実を1つ提示する
+
+2. 次に一緒に確認する対象を1つ示す
+
+3. 学習者に答えてもらう低負荷な問いを出す
+
+1回の応答で、以下を同時に行ってはならない。
+
+* 一般知識の長い説明
+
+* 原因仮説の提示
+
+* LADログからの推定
+
+* 学習者の理解状態の評価
+
+* 次回方略の提案
+
+応答は原則として{max_sentences}文以内に収める。
+
+問いは{max_questions}個までとする。
+
+学習者が番号や短い言葉で答えられる形式を優先する。
+"""
+
+
+def format_response_budget_section(budget: ResponseBudget) -> str:
+    """ResponseBudget に応じた Response Budget セクションを返す。"""
+    if budget.allow_composite_turn:
+        return _RESPONSE_BUDGET_COMPOSITE.format(
+            composite_pattern=budget.composite_pattern or "CONFIRM_AND_ADVANCE",
+            max_sentences=budget.max_sentences,
+            max_questions=budget.max_questions,
+        )
+    if budget.scaffolding_level is ScaffoldingLevel.HIGH:
+        return _RESPONSE_BUDGET_HIGH
+    return _RESPONSE_BUDGET_STANDARD.format(
+        scaffolding_level=budget.scaffolding_level.value,
+        max_sentences=budget.max_sentences,
+        max_questions=budget.max_questions,
+    )
 
 _EVIDENCE_PRESENTATION = """
 ## Core Interaction Principle: Evidence First, Learner Meaning Second
@@ -76,6 +153,28 @@ LLMチューターは、学習者に記憶や理由を尋ねる前に、利用�
 これらの情報は、学習者に思い出させてはならない。LLMチューターが提示し、学習者と一緒に確認する。
 
 LLMチューターは、外部証拠を提示する前に、一般知識・原因仮説・学習者の理解状態の評価を述べてはならない。
+"""
+
+_EVIDENCE_SURFACING_RULE = """
+## Evidence Surfacing Rule
+
+`提示必須の証拠`（`evidence_to_surface`）に従い、問いかける前に指定された外部証拠を応答文に含める。
+
+### 証拠 ID と参照先
+
+| 証拠 ID パターン | 参照するコンテキスト | 応答での扱い |
+| ---------------- | -------------------- | ------------ |
+| `lad_log`, `lad_log_*`, `lad_digest` | `LADデータ（視聴ログ等）` セクション | 要約を **必ず 1 文以上** 提示してから問いかける |
+| `quiz_q*`（例: `quiz_q1_choices`） | `テスト結果` セクション | 該当問題の結果・選択肢を提示してから問いかける |
+| `transcript_*`（例: `transcript_excerpt_12:15`） | `講義字幕` セクション | 該当箇所の字幕を提示してから問いかける |
+
+### 適用ルール
+
+* `提示必須の証拠` が `(なし)` のときは、本ルールは適用しない。`Interface 指示` のみに従う。
+
+* 複数の証拠 ID が指定されたときは、すべての指定証拠を 1 ターン内で提示する（Response Budget の文数制限内で簡潔に）。
+
+* 指定証拠のコンテキストが `(なし)` のときは、その旨を 1 文で伝え、利用可能な別証拠または `Interface 指示` に従う。
 """
 
 _OUTPUT_POLICIES = """
@@ -125,7 +224,10 @@ _CONTEXT_DATA = """
 * 講義字幕: {lecture_transcript}
 * 講義構造: {lecture_outline}
 * 指定 Dialogue Move: {dialogue_move}
+* 提示必須の証拠: {evidence_to_surface}
 * Interface 指示: {interface_instructions}
+* scaffolding_level: {scaffolding_level}
+* allow_composite_turn: {allow_composite_turn}
 """
 
 INTERFACE_MODEL_PROMPT = (
@@ -133,8 +235,9 @@ INTERFACE_MODEL_PROMPT = (
     + SCOPE
     + GOAL
     + _OPENING_ACTIONS
-    + _RESPONSE_BUDGET
+    + "{response_budget_section}"
     + _EVIDENCE_PRESENTATION
+    + _EVIDENCE_SURFACING_RULE
     + _OUTPUT_POLICIES
     + _PLAIN_TEXT_OUTPUT
     + _CONTEXT_DATA

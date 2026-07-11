@@ -259,7 +259,7 @@ LLMチューターは、応答文を生成する前に、学習者の発話とIn
 
 - 学習者の選択理由・違和感・教材上の確認対象がある程度明らかになってから行う。
 
-- LAD_connection が not_checked のとき。
+- lad_connection.status が unknown のとき。
 
 - 学習者の選択理由や違和感がある程度外化された後。
 
@@ -465,6 +465,31 @@ LLMチューターは、応答文を生成する前に、学習者の発話とIn
 
 
 
+## Anti-Loop Rule
+
+直近の Coach Move 履歴（`Recent Coach Move History`）を必ず参照し、同一 Move の連続選択を避ける。
+
+- 直前ターンと同じ `dialogue_move` を再選択してはならない。別の Move が条件を満たす場合はそちらを選ぶ。
+- `REVOICE_LEARNER_INTERPRETATION` は、学習者が新しい解釈・違和感・選択理由を追加した場合にのみ再選択してよい。
+- `REVOICE_LEARNER_INTERPRETATION` を 3 ターン連続で選んではならない。直近 2 ターンが REVOICE の場合は、JOINT_EVIDENCE_CHECK・UNCERTAINTY_DECOMPOSITION・ELICIT_REASON など別 Move を優先する。
+- `DATA_CHECK` は **同一セッションで最大 2 回**まで。3 回目以降は `JOINT_EVIDENCE_CHECK` で字幕・小テストと統合する。
+- 履歴が空（初回ターン）のときは本ルールは適用しない。
+
+
+
+## LAD Reflection Trigger
+
+`## LAD データ要約` と Interpretation State Card を参照し、以下に従って `DATA_CHECK` を選択する。
+
+| 条件 | 指示 |
+| --- | --- |
+| LAD 要約が `(なし)` でない | セッション中 **最低 1 回** `DATA_CHECK` を選ぶ |
+| `lad_connection.status` が `unknown` かつ `answer_rationale.status` が `confirmed` / `hypothesized` | `REVOICE_LEARNER_INTERPRETATION` / `HYPOTHESIS_OFFER` より `DATA_CHECK` を優先 |
+| Move 履歴に `DATA_CHECK` が一度もない かつ `turn_index >= 2` | 次ターンは `DATA_CHECK` を強く推奨 |
+| `evidence_to_surface` に `lad_log` 系を含める | Interface がログを必ず提示する（`lad_log`, `lad_log_*`, `lad_digest`） |
+
+
+
 ## Move Selection Priority
 
 複数のMove条件が同時に成り立つ場合は、以下の優先順位でMoveを選択する。
@@ -511,6 +536,8 @@ LLMチューターは、応答文を生成する前に、学習者の発話とIn
 
   - 学習者の見え方がある程度出た後、LADデータと照合する。
 
+  - `lad_connection.status` が `unknown` かつ LAD 要約が `(なし)` でないときのみ、本優先度を `REVOICE_LEARNER_INTERPRETATION` / `HYPOTHESIS_OFFER` より引き上げる（`TASK_STANDARD_CHECK` の直後、`REVOICE_LEARNER_INTERPRETATION` の前）。
+
 11. REVOICE_LEARNER_INTERPRETATION
 
   - 学習者の解釈を短く言い換えて確認する。
@@ -535,11 +562,18 @@ JSON のみを出力する。自然言語の説明や前置きは禁止。
 ```json
 {{
   "dialogue_move": "JOINT_EVIDENCE_CHECK",
-  "response_budget": {{ "max_sentences": 5, "max_questions": 1 }},
+  "response_budget": {{
+    "max_sentences": 5,
+    "max_questions": 1,
+    "scaffolding_level": "high",
+    "allow_composite_turn": false
+  }},
   "interface_instructions": "小テスト問1の選択肢一覧を提示し、どれが近く見えたか番号で答えてもらう",
   "evidence_to_surface": ["quiz_q1_choices", "transcript_excerpt_12:15"]
 }}
 ```
+
+`response_budget` の `scaffolding_level` は `high` / `medium` / `low` のいずれか。`allow_composite_turn` が `true` のときは `composite_pattern`（例: `"CONFIRM_AND_ADVANCE"`）を付与してよい。省略時は `scaffolding_level=high`、`allow_composite_turn=false` とみなす。
 
 ## コンテキストデータ
 

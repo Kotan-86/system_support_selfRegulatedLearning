@@ -8,7 +8,11 @@ from typing import Any
 
 from application.common.errors import LlmGatewayError
 from domain.tutoring.dialogue_move import DialogueMove
-from domain.tutoring.dialogue_move_decision import DialogueMoveDecision, ResponseBudget
+from domain.tutoring.dialogue_move_decision import (
+    DialogueMoveDecision,
+    ResponseBudget,
+    ScaffoldingLevel,
+)
 from domain.tutoring.interpretation_state import (
     InterpretationField,
     InterpretationFieldStatus,
@@ -131,6 +135,42 @@ def parse_student_model_output(data: dict[str, Any]) -> LearnerInterpretationRes
     )
 
 
+def _parse_response_budget(budget_raw: Any) -> ResponseBudget:
+    """response_budget オブジェクトを ResponseBudget に変換する。"""
+    if not isinstance(budget_raw, dict):
+        raise LlmGatewayError("response_budget must be an object")
+    try:
+        max_sentences = int(budget_raw.get("max_sentences", 5))
+        max_questions = int(budget_raw.get("max_questions", 1))
+    except (TypeError, ValueError) as exc:
+        raise LlmGatewayError("response_budget values must be integers") from exc
+
+    scaffolding_raw = budget_raw.get("scaffolding_level", "high")
+    try:
+        scaffolding_level = ScaffoldingLevel(str(scaffolding_raw))
+    except ValueError as exc:
+        raise LlmGatewayError(
+            f"invalid scaffolding_level: {scaffolding_raw!r}"
+        ) from exc
+
+    allow_composite_raw = budget_raw.get("allow_composite_turn", False)
+    if not isinstance(allow_composite_raw, bool):
+        raise LlmGatewayError("allow_composite_turn must be a boolean")
+
+    composite_pattern_raw = budget_raw.get("composite_pattern")
+    composite_pattern = (
+        str(composite_pattern_raw) if composite_pattern_raw is not None else None
+    )
+
+    return ResponseBudget(
+        max_sentences=max_sentences,
+        max_questions=max_questions,
+        scaffolding_level=scaffolding_level,
+        allow_composite_turn=allow_composite_raw,
+        composite_pattern=composite_pattern,
+    )
+
+
 def parse_pedagogical_model_output(data: dict[str, Any]) -> DialogueMoveDecision:
     """Pedagogical Model の JSON 出力を DialogueMoveDecision に変換する。"""
     move_raw = data.get("dialogue_move")
@@ -143,14 +183,7 @@ def parse_pedagogical_model_output(data: dict[str, Any]) -> DialogueMoveDecision
             f"invalid dialogue_move: {move_raw!r}"
         ) from exc
 
-    budget_raw = data.get("response_budget") or {}
-    if not isinstance(budget_raw, dict):
-        raise LlmGatewayError("response_budget must be an object")
-    try:
-        max_sentences = int(budget_raw.get("max_sentences", 5))
-        max_questions = int(budget_raw.get("max_questions", 1))
-    except (TypeError, ValueError) as exc:
-        raise LlmGatewayError("response_budget values must be integers") from exc
+    response_budget = _parse_response_budget(data.get("response_budget") or {})
 
     interface_instructions = str(data.get("interface_instructions") or "").strip()
     if not interface_instructions:
@@ -165,10 +198,7 @@ def parse_pedagogical_model_output(data: dict[str, Any]) -> DialogueMoveDecision
 
     return DialogueMoveDecision(
         dialogue_move=dialogue_move,
-        response_budget=ResponseBudget(
-            max_sentences=max_sentences,
-            max_questions=max_questions,
-        ),
+        response_budget=response_budget,
         interface_instructions=interface_instructions,
         evidence_to_surface=evidence_to_surface,
     )

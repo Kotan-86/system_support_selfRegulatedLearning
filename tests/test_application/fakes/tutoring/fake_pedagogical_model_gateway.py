@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from application.tutoring.dto.tutoring_pipeline import TurnContext
 from application.tutoring.ports.pedagogical_model_gateway import PedagogicalModelGateway
+from domain.learning.learning_snapshot import LearningSnapshot
 from domain.tutoring.dialogue_move import DialogueMove
 from domain.tutoring.dialogue_move_decision import DialogueMoveDecision, ResponseBudget
 from domain.tutoring.learner_interpretation import LearnerInterpretationResult
@@ -16,6 +17,7 @@ class SelectMoveCall:
     """select_move 呼び出しの記録。"""
 
     interpretation: LearnerInterpretationResult
+    snapshot: LearningSnapshot
     turn_context: TurnContext
 
 
@@ -36,11 +38,13 @@ class FakePedagogicalModelGateway(PedagogicalModelGateway):
         self,
         interpretation: LearnerInterpretationResult,
         *,
+        snapshot: LearningSnapshot,
         turn_context: TurnContext,
     ) -> DialogueMoveDecision:
         self.select_move_calls.append(
             SelectMoveCall(
                 interpretation=interpretation,
+                snapshot=snapshot,
                 turn_context=turn_context,
             )
         )

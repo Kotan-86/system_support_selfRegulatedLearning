@@ -829,15 +829,49 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 ### RunTutoringPipeline（内部 UC）
 
-| 項目    | 内容                                                                                                     |
-| ------- | -------------------------------------------------------------------------------------------------------- |
-| ID      | `RunTutoringPipeline`                                                                                    |
-| 入力    | `TutoringPipelineRequest`（`snapshot`, `messages`, `user_message`, `lecture`, `previous_state_card`）    |
-| 出力    | `TutoringPipelineResult`（`assistant_text`, `interpretation`, `decision`）                               |
-| Stage 1 | `StudentModelGateway.interpret` → `LearnerInterpretationResult`                                          |
-| Stage 2 | `PedagogicalModelGateway.select_move` → `DialogueMoveDecision`                                           |
-| Stage 3 | `InterfaceModelGateway.generate` → assistant テキスト                                                    |
-| 失敗    | いずれかの Stage が `LlmGatewayError` → `err`。Message は未永続化（呼び出し元 `SendChatMessage` の責務） |
+| 項目    | 内容                                                                                                      |
+| ------- | --------------------------------------------------------------------------------------------------------- |
+| ID      | `RunTutoringPipeline`                                                                                     |
+| 入力    | `TutoringPipelineRequest`（`snapshot`, `messages`, `user_message`, `lecture`, `previous_state_card`）     |
+| 出力    | `TutoringPipelineResult`（`assistant_text`, `interpretation`, `decision`）                                |
+| Stage 1 | `StudentModelGateway.interpret` → `LearnerInterpretationResult`                                           |
+| Stage 2 | `PedagogicalModelGateway.select_move(interpretation, *, snapshot, turn_context)` → `DialogueMoveDecision` |
+| Stage 3 | `InterfaceModelGateway.generate` → assistant テキスト                                                     |
+| 失敗    | いずれかの Stage が `LlmGatewayError` → `err`。Message は未永続化（呼び出し元 `SendChatMessage` の責務）  |
+
+#### PedagogicalModelGateway
+
+`InterfaceModelGateway` と対称に、Stage 2 でも `LearningSnapshot` を受け取る。
+
+| メソッド      | 引数                                                           | 戻り値                 |
+| ------------- | -------------------------------------------------------------- | ---------------------- |
+| `select_move` | `interpretation`, `snapshot: LearningSnapshot`, `turn_context` | `DialogueMoveDecision` |
+
+**受入基準**
+
+- [x] `RunTutoringPipeline` が `TutoringPipelineRequest.snapshot` を Stage 2 に渡す
+- [x] `PedagogicalModelPromptBuilder` が `format_lad_digest(snapshot, lecture)` をプロンプトに注入する
+
+#### TurnContext（Stage 2 入力 DTO）
+
+`TurnContext.from_messages(messages, lecture=..., snapshot=...)` で構築する。
+
+| フィールド                | 型                    | 説明                                                                                |
+| ------------------------- | --------------------- | ----------------------------------------------------------------------------------- |
+| `is_first_assistant_turn` | `bool`                | 履歴に assistant Message が無いとき `True`                                          |
+| `lecture`                 | `Lecture`             | 対象講義                                                                            |
+| `turn_index`              | `int`                 | 履歴上の assistant ターン数（次ターン生成前のカウント）                             |
+| `move_history`            | `DialogueMoveHistory` | 直近 assistant の `dialogue_move` 履歴（[domain-model.md](./domain-model.md) 参照） |
+| `has_lad_data`            | `bool`                | `snapshot.viewing_events` が非空のとき `True`                                       |
+| `lad_check_pending`       | `bool`                | `has_lad_data` かつセッション履歴に `DATA_CHECK` が一度も無いとき `True`            |
+
+**受入基準**
+
+- [x] 初回ターン（assistant 履歴なし）→ `turn_index=0`、`move_history` は空
+- [x] 2 ターン目以降 → 直前 assistant の `dialogue_move` が `move_history` に含まれる
+- [x] `move_history` は直近 3 件を超えない
+- [x] LAD データあり・`DATA_CHECK` 未実施 → `lad_check_pending=true`
+- [x] セッション内に `DATA_CHECK` 済み → `lad_check_pending=false`
 
 ### 例外
 

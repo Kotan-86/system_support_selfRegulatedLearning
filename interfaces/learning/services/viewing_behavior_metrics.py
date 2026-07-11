@@ -20,6 +20,13 @@ _ACTION_LABELS: dict[ViewingAction, str] = {
 _BACKWARD_ACTIONS = (ViewingAction.BACKWARD_SKIP, ViewingAction.BACKWARD_SEEK)
 
 
+def timeline_action_label(action: ViewingAction) -> str:
+    """タイムライン行用の操作ラベル（集計ラベル _ACTION_LABELS を再利用）。"""
+    if action is ViewingAction.PLAY:
+        return "再生開始"
+    return _ACTION_LABELS[action].removesuffix("回数")
+
+
 def _empty_action_counts() -> dict[str, int]:
     return {action.value: 0 for action in ViewingAction}
 

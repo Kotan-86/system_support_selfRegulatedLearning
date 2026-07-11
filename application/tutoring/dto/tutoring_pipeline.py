@@ -6,7 +6,9 @@ from dataclasses import dataclass
 
 from domain.learning.lecture import Lecture
 from domain.learning.learning_snapshot import LearningSnapshot
+from domain.tutoring.dialogue_move import DialogueMove
 from domain.tutoring.dialogue_move_decision import DialogueMoveDecision
+from domain.tutoring.dialogue_move_history import DialogueMoveHistory
 from domain.tutoring.interpretation_state import InterpretationStateCard
 from domain.tutoring.learner_interpretation import LearnerInterpretationResult
 from domain.tutoring.message import Message, MessageRole
@@ -18,13 +20,37 @@ class TurnContext:
 
     is_first_assistant_turn: bool
     lecture: Lecture
+    turn_index: int
+    move_history: DialogueMoveHistory
+    has_lad_data: bool
+    lad_check_pending: bool
 
     @classmethod
     def from_messages(
-        cls, messages: tuple[Message, ...], *, lecture: Lecture
+        cls,
+        messages: tuple[Message, ...],
+        *,
+        lecture: Lecture,
+        snapshot: LearningSnapshot,
     ) -> TurnContext:
-        has_assistant = any(message.role is MessageRole.ASSISTANT for message in messages)
-        return cls(is_first_assistant_turn=not has_assistant, lecture=lecture)
+        # 仕様: docs/spec/domain-model.md#TurnContext（LAD 可用性フラグ）
+        assistant_count = sum(
+            1 for message in messages if message.role is MessageRole.ASSISTANT
+        )
+        has_lad_data = bool(snapshot.viewing_events)
+        has_data_check = any(
+            message.role is MessageRole.ASSISTANT
+            and message.dialogue_move is DialogueMove.DATA_CHECK
+            for message in messages
+        )
+        return cls(
+            is_first_assistant_turn=assistant_count == 0,
+            lecture=lecture,
+            turn_index=assistant_count,
+            move_history=DialogueMoveHistory.from_messages(messages),
+            has_lad_data=has_lad_data,
+            lad_check_pending=has_lad_data and not has_data_check,
+        )
 
 
 @dataclass(frozen=True)
