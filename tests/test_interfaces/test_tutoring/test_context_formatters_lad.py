@@ -121,6 +121,52 @@ class TestFormatLadDigest:
         assert "## 操作タイムライン（直近10件）" in text
         assert "早送り（+20秒" in text
 
+    def test_ac10_busy_segments_skip_idle_segments_between(self) -> None:
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC10
+        # 操作のない区間(120-480)を挟む視聴ログ。修正前と同じ出力を固定する。
+        text = format_lad_digest(
+            _snapshot(
+                _event(video_position=10, action=ViewingAction.PLAY, event_id="e1"),
+                _event(video_position=20, action=ViewingAction.PAUSE, event_id="e2"),
+                _event(video_position=500, action=ViewingAction.PAUSE, event_id="e3"),
+                _event(video_position=610, action=ViewingAction.PAUSE, event_id="e4"),
+                _event(video_position=620, action=ViewingAction.PAUSE, event_id="e5"),
+                _event(video_position=630, action=ViewingAction.PAUSE, event_id="e6"),
+            ),
+            _lecture(),
+        )
+
+        lines = text.split("\n")
+        assert lines[0] == "## 視聴ログ要約"
+        assert lines[1] == "- 早送り: 0回 / 巻き戻し: 0回 / 一時停止: 5回"
+        assert lines[2] == "- 操作が多い区間: 10:00–12:00, 00:00–02:00, 08:00–10:00"
+        assert lines[3] == "## 操作タイムライン（直近10件）"
+        assert lines[4] == "- 00:10 再生開始"
+        assert lines[-1] == "- 10:30 一時停止"
+        assert len(lines) == 4 + 6
+
+    def test_ac10_busy_segments_with_positions_over_10min(self) -> None:
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC10
+        # 10 分超の位置を含む視聴ログ。10 分超の区間も従来どおり上位に入り、区間の表記は分:秒。
+        text = format_lad_digest(
+            _snapshot(
+                _event(video_position=650, action=ViewingAction.PAUSE, event_id="e1"),
+                _event(video_position=660, action=ViewingAction.PLAY, event_id="e2"),
+                _event(video_position=670, action=ViewingAction.PLAY, event_id="e3"),
+                _event(video_position=790, action=ViewingAction.PLAY, event_id="e4"),
+                _event(video_position=800, action=ViewingAction.PLAY, event_id="e5"),
+                _event(video_position=30, action=ViewingAction.PLAY, event_id="e6"),
+            ),
+            _lecture(),
+        )
+
+        lines = text.split("\n")
+        assert lines[1] == "- 早送り: 0回 / 巻き戻し: 0回 / 一時停止: 1回"
+        assert lines[2] == "- 操作が多い区間: 10:00–12:00, 12:00–14:00, 00:00–02:00"  # 件数 3, 2, 1(同点なし)
+        assert lines[3] == "## 操作タイムライン（直近10件）"
+        assert lines[4] == "- 10:50 一時停止"
+        assert lines[-1] == "- 00:30 再生開始"
+
     def test_recent_timeline_is_limited_to_last_ten_events(self) -> None:
         events = tuple(
             _event(

@@ -148,7 +148,7 @@ tests/
 | フィールド | 内容 | 算出元 |
 |-----------|------|--------|
 | `action_counts` | 操作種類別カウント | `viewing_events` |
-| `video_segments` | 動画120秒区間ごとの `action_counts`（`video_position // 120`） | `viewing_events` |
+| `video_segments` | 0 秒から欠けのない120秒区間ごとの `action_counts`（`video_position // 120`。最後の区間開始 = max(480, 動画長を覆う区間, 最後の操作を含む区間)。操作0件の区間を含む密な並びで、LAD Presenter が生成） | `viewing_events` |
 | `quiz_results` | 問題文・選択回答・正誤 | `quiz_answers` + `Lecture.quizDefinition` |
 | `score` | 得点 | `latest_quiz_attempt` |
 | `learner_profile` | タイプ名・**動的** `learning_behaviors`・**静的** 特徴/動機づけ/成績 | Classifier + Catalog |
@@ -205,6 +205,7 @@ Session 未作成（空 Snapshot）→ HTTP 200 相当の成功 ViewModel（空�
 - `ViewingBehaviorMetrics`（全体 `action_counts` + `video_segments`）
   - バケット: `segment_start_sec = (video_position // 120) * 120`
   - 各イベントは発生時点の `video_position` で 1 バケットに割当
+  - `ViewingBehaviorMetrics.video_segments` は操作のあった区間だけ（疎）。LAD 応答の全区間（密）は `LadDashboardPresenter` が動画長から生成する
 - `LearnerTypeCatalog`（Advanced / Diligent / Indifferent / Persistent の静的文）
 - `LearnerTypeClassifier` Protocol + `StubLearnerTypeClassifier`（常に `None` またはテスト用固定値）
 - `LadDashboardPresenter`（`Result[GetLearningSnapshotResponse, AppError]` + `Lecture` → `LadDashboardViewModel`）
