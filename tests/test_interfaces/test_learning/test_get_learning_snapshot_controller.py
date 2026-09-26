@@ -97,10 +97,57 @@ class TestGetLearningSnapshotController:
         result = controller.execute("learner-1", lecture_id="lecture-1")
 
         assert isinstance(result, LadDashboardViewModel)
-        assert result.video_segments == ()
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC7
+        assert [s.segment_start_sec for s in result.video_segments] == [
+            0, 120, 240, 360, 480,
+        ]
+        assert sum(sum(s.action_counts.values()) for s in result.video_segments) == 0
         assert result.score is None
         assert result.learner_profile is not None
         assert result.learner_profile.type_code is None
+
+    def test_no_session_with_video_duration_818_returns_seven_zero_segments(self) -> None:
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC7
+        use_case = _get_snapshot_use_case()
+        controller = _controller(
+            use_case, video_duration_resolver=FakeVideoDurationResolver(duration_sec=818)
+        )
+
+        result = controller.execute("learner-1", lecture_id="lecture-1")
+
+        assert isinstance(result, LadDashboardViewModel)
+        assert [s.segment_start_sec for s in result.video_segments] == [
+            120 * i for i in range(7)
+        ]
+
+    def test_viewing_after_10min_with_duration_818_is_in_dense_segments(self) -> None:
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC1 / AC5
+        repository = InMemoryLearningSessionRepository()
+        use_case = _get_snapshot_use_case(repository=repository)
+        controller = _controller(
+            use_case, video_duration_resolver=FakeVideoDurationResolver(duration_sec=818)
+        )
+        record_viewing = _record_viewing_use_case(repository)
+        record_viewing.execute(
+            RecordViewingEventRequest(
+                learner_id=LearnerId("learner-1"),
+                lecture_id=LectureId("lecture-1"),
+                occurred_at=FIXED_NOW,
+                video_position=650,
+                action=ViewingAction.PAUSE,
+                position_delta=0,
+            )
+        )
+
+        result = controller.execute("learner-1", lecture_id="lecture-1")
+
+        assert isinstance(result, LadDashboardViewModel)
+        by_start = {s.segment_start_sec: s for s in result.video_segments}
+        assert sorted(by_start) == [120 * i for i in range(7)]
+        assert by_start[600].action_counts["pause"] == 1
+        assert sum(
+            sum(s.action_counts.values()) for s in result.video_segments
+        ) == sum(result.action_counts.values()) == 1
 
     def test_missing_lecture_returns_lecture_not_found(self) -> None:
         use_case = _get_snapshot_use_case(lectures=())
@@ -132,7 +179,13 @@ class TestGetLearningSnapshotController:
 
         assert isinstance(result, LadDashboardViewModel)
         assert result.action_counts["play"] == 1
-        assert result.video_segments[0].segment_start_sec == 120
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC6 / AC5
+        by_start = {s.segment_start_sec: s for s in result.video_segments}
+        assert sorted(by_start) == [0, 120, 240, 360, 480]
+        assert by_start[120].action_counts["play"] == 1
+        assert sum(
+            sum(s.action_counts.values()) for s in result.video_segments
+        ) == sum(result.action_counts.values())
         assert result.content_updated_at == FIXED_NOW
 
     def test_video_duration_validation_error_returns_error_view_model(self) -> None:

@@ -11,12 +11,12 @@ from interfaces.learning.classifiers.rule_based_learner_type_classifier import (
 from interfaces.learning.ports.learner_type_catalog import LearnerTypeCatalog
 from interfaces.learning.ports.learner_type_classifier import LearnerTypeClassifier
 from interfaces.learning.services.quiz_result_rows import build_quiz_result_rows
+from interfaces.learning.services.video_segment_series import build_dense_video_segments
 from interfaces.learning.services.viewing_behavior_metrics import ViewingBehaviorMetrics
 from interfaces.learning.view_models.lad_dashboard import (
     LadDashboardViewModel,
     LearnerProfileViewModel,
     LearningBehaviorViewModel,
-    VideoSegmentViewModel,
 )
 
 
@@ -68,12 +68,9 @@ class LadDashboardPresenter:
 
         return LadDashboardViewModel(
             action_counts=dict(metrics.action_counts),
-            video_segments=tuple(
-                VideoSegmentViewModel(
-                    segment_start_sec=segment.segment_start_sec,
-                    action_counts=dict(segment.action_counts),
-                )
-                for segment in metrics.video_segments
+            video_segments=build_dense_video_segments(
+                metrics.video_segments,
+                video_duration_sec=video_duration_sec,
             ),
             quiz_results=build_quiz_result_rows(
                 snapshot.quiz_answers,

@@ -413,7 +413,7 @@ Looker Studio から移行する UI 要素と ViewModel の対応。
 | UI 要素                  | データソース                                        | ライブラリ     |
 | ------------------------ | --------------------------------------------------- | -------------- |
 | 操作種類別円グラフ       | `action_counts`                                     | ECharts pie    |
-| 2 分区間グループ棒グラフ | `video_segments`（フロントで 5 固定バケット整形可） | ECharts bar    |
+| 2 分区間グループ棒グラフ | `video_segments`（動画全体の区間を欠けなく表示し、操作は捨てない。フロントは受け取った区間をそのまま描く） | ECharts bar    |
 | 小テスト表               | `quiz_results`, `score`                             | HTML `<table>` |
 | 学習者タイプ等テキスト   | `learner_profile` + **固定文**                      | HTML           |
 | 更新判定                 | `content_updated_at`                                | JS ポーリング  |

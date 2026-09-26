@@ -256,7 +256,7 @@ tests/
 | #   | LAD UI 表示ブロック         | ViewModel フィールド    | 内容                                                         |
 | --- | --------------------------- | ----------------------- | ------------------------------------------------------------ |
 | 1   | 操作種類別集計（全体）      | `action_counts`         | `ViewingAction` ごとの件数                                   |
-| 2   | 動画 2 分区間ごとの操作集計 | `video_segments`        | 120 秒区間ごとの `action_counts`                             |
+| 2   | 動画 2 分区間ごとの操作集計 | `video_segments`        | 0 秒から、最後の区間開始 = max(480、動画長を覆う区間、最後の操作を含む区間)までの、欠けのない 120 秒区間ごとの `action_counts`（操作 0 件の区間を含む） |
 | 3   | 小テスト結果表              | `quiz_results`, `score` | 問題文・選択回答・正誤、最新試行の得点                       |
 | 4   | 学習者プロファイル          | `learner_profile`       | タイプ名、動的 `learning_behaviors`、静的 特徴/動機づけ/成績 |
 
@@ -267,7 +267,7 @@ tests/
 | フィールド           | 型                                | 説明                                                                  | 算出元                                              |
 | -------------------- | --------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------- |
 | `action_counts`      | `dict[str, int]`                  | 操作種類別カウント。キーは `ViewingAction` の値（`play`, `pause` 等） | `snapshot.viewing_events`                           |
-| `video_segments`     | `list[VideoSegmentViewModel]`     | 動画 120 秒区間ごとの集計                                             | `snapshot.viewing_events`                           |
+| `video_segments`     | `list[VideoSegmentViewModel]`     | 0 秒から、最後の区間開始 = max(480、動画長を覆う区間、最後の操作を含む区間)までの、欠けのない 120 秒区間ごとの `action_counts`（操作 0 件の区間を含む）。密な並び（Presenter が生成。[2 分バケット定義](#2-分バケット定義)参照） | `snapshot.viewing_events` + 動画長（`VideoDurationResolver`） |
 | `quiz_results`       | `list[QuizResultRowViewModel]`    | 問題文付きの回答行                                                    | `snapshot.quiz_answers` + `Lecture.quiz_definition` |
 | `score`              | `int \| None`                     | 最新試行の得点。未受験時 `None`                                       | `snapshot.latest_quiz_attempt`                      |
 | `learner_profile`    | `LearnerProfileViewModel \| None` | 学習者プロファイル。下記「空 Snapshot」参照                           | Classifier + Catalog + Metrics                      |
@@ -314,7 +314,7 @@ Application 層は空 `LearningSnapshot` を **正常系**として返す（HTTP
 | フィールド           | 空 Snapshot 時の値                                                         |
 | -------------------- | -------------------------------------------------------------------------- |
 | `action_counts`      | 全操作 0 または空 dict（実装で統一）                                       |
-| `video_segments`     | 空リスト                                                                   |
+| `video_segments`     | 全操作種類 0 件の区間の並び（最低 5 区間、動画長を覆う）                   |
 | `quiz_results`       | 空リスト                                                                   |
 | `score`              | `None`                                                                     |
 | `learner_profile`    | `learning_behaviors` のみ（数値付き）を載せ、`type_code` / 静的文は `None` |
@@ -343,7 +343,7 @@ Application 層は空 `LearningSnapshot` を **正常系**として返す（HTTP
 | フィールド       | 説明                             |
 | ---------------- | -------------------------------- |
 | `action_counts`  | 操作種類別件数（全体）           |
-| `video_segments` | 120 秒区間ごとの `action_counts` |
+| `video_segments` | 120 秒区間ごとの `action_counts`。**操作のあった区間だけ（疎）**。全区間の並び（密）は LAD 応答（`LadDashboardViewModel.video_segments`）だけの性質で、本フィールドは疎のまま変えない |
 
 ### フィールド（派生指標・Classifier 入力）
 
@@ -370,6 +370,8 @@ Application 層は空 `LearningSnapshot` を **正常系**として返す（HTTP
 | 区間開始秒 | `segment_start_sec = (video_position // 120) * 120`                                              |
 | 割当       | 各 `ViewingEvent` は、そのイベントの `video_position` に基づき **ちょうど 1 バケット**に計上する |
 | 全体集計   | バケットに関係なく、全イベントを `action_counts` に集計する                                      |
+| 区間の範囲（LAD 応答） | 最初の区間開始は 0。最後の区間開始 = `max(480, ceil(動画長 / 120) * 120 - 120, (最大操作位置 // 120) * 120)`（最大操作位置は操作 0 件なら無視）。区間数 = 最後の区間開始 / 120 + 1。最低 5 区間、動画長を覆い、動画長を超える位置の操作は捨てず区間を延ばす |
+| 密 / 疎 | LAD 応答の `video_segments` は操作 0 件の区間も含む密な並び（Presenter が生成）。`ViewingBehaviorMetrics.video_segments` は操作のあった区間だけの疎のまま |
 
 **例**: `video_position = 125` → `segment_start_sec = 120`。`video_position = 0` → `segment_start_sec = 0`。
 

@@ -175,7 +175,11 @@ class TestGetLearningSnapshotControllerWithSqliteRepository:
         result = controller.execute("learner-1")
 
         assert isinstance(result, LadDashboardViewModel)
-        assert result.video_segments == ()
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC7
+        assert [s.segment_start_sec for s in result.video_segments] == [
+            0, 120, 240, 360, 480,
+        ]
+        assert sum(sum(s.action_counts.values()) for s in result.video_segments) == 0
         assert result.quiz_results == ()
         assert result.score is None
         assert result.content_updated_at is None
@@ -226,10 +230,36 @@ class TestGetLearningSnapshotControllerWithSqliteRepository:
 
         assert isinstance(result, LadDashboardViewModel)
         assert result.action_counts["play"] == 1
-        assert result.video_segments[0].segment_start_sec == 120
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC6 / AC5
+        by_start = {s.segment_start_sec: s for s in result.video_segments}
+        assert sorted(by_start) == [0, 120, 240, 360, 480]
+        assert by_start[120].action_counts["play"] == 1
+        assert sum(
+            sum(s.action_counts.values()) for s in result.video_segments
+        ) == sum(result.action_counts.values())
         assert result.score == 5
         assert len(result.quiz_results) == 5
         assert result.content_updated_at == quiz_at
+
+    def test_empty_snapshot_with_video_duration_818_returns_seven_zero_segments(
+        self,
+        learning_db_conn: sqlite3.Connection,
+    ) -> None:
+        # 仕様: docs/spec/bugs/lad-video-segments-over-10min.md#受入基準 AC7
+        controller = build_get_learning_snapshot_controller(
+            learning_db_conn,
+            video_duration_resolver=YoutubeVideoDurationResolver(
+                api_key="test-key",
+                http_get=lambda url: _youtube_api_payload(duration="PT13M38S"),
+            ),
+        )
+
+        result = controller.execute("learner-1")
+
+        assert isinstance(result, LadDashboardViewModel)
+        assert [s.segment_start_sec for s in result.video_segments] == [
+            120 * i for i in range(7)
+        ]
 
     def test_json_dict_contains_required_lad_keys(
         self,

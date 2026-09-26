@@ -21,7 +21,6 @@
     "backward_seek",
   ];
 
-  var FIXED_BUCKET_COUNT = 5;
   var SEGMENT_WIDTH_SEC = 120;
 
   var pieChart = null;
@@ -34,26 +33,6 @@
   function formatSegmentLabel(segmentStartSec) {
     var end = segmentStartSec + SEGMENT_WIDTH_SEC;
     return segmentStartSec + "–" + end + " 秒";
-  }
-
-  /**
-   * video_segments を 5 固定バケットに整形する。
-   */
-  function normalizeSegments(videoSegments) {
-    var byStart = {};
-    (videoSegments || []).forEach(function (segment) {
-      byStart[segment.segment_start_sec] = segment.action_counts || {};
-    });
-
-    var buckets = [];
-    for (var i = 0; i < FIXED_BUCKET_COUNT; i += 1) {
-      var start = i * SEGMENT_WIDTH_SEC;
-      buckets.push({
-        segment_start_sec: start,
-        action_counts: byStart[start] || {},
-      });
-    }
-    return buckets;
   }
 
   function renderActionCountsPie(actionCounts) {
@@ -107,7 +86,8 @@
       barChart = echarts.init(el);
     }
 
-    var buckets = normalizeSegments(videoSegments);
+    // サーバが返す全区間(欠けなし・昇順)を、追加も削除もせずそのまま描く。
+    var buckets = videoSegments || [];
     var categories = buckets.map(function (bucket) {
       return formatSegmentLabel(bucket.segment_start_sec);
     });
@@ -244,6 +224,5 @@
     render: render,
     resizeCharts: resizeCharts,
     labelForAction: labelForAction,
-    normalizeSegments: normalizeSegments,
   };
 })(window);
