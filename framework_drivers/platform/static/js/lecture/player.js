@@ -16,6 +16,7 @@
   var isSeeking = false;
   var isDragging = false;
   var range = null;
+  var boundRange = null;
   var prevTime = 0;
 
   function recordLog(currentTimeValue, action, duration) {
@@ -74,6 +75,13 @@
       return;
     }
     range.style.width = playerElement.offsetWidth + "px";
+
+    // 仕様: docs/spec/bugs/seek-duplicate-count.md#修正方針
+    // 初期化が何度呼ばれても、リスナーは同じ要素に1回だけ登録する。
+    if (boundRange === range) {
+      return;
+    }
+    boundRange = range;
 
     range.addEventListener("change", function () {
       isDragging = false;
