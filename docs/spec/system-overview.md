@@ -15,7 +15,7 @@
 flowchart TB
     subgraph Client["ブラウザ（Vanilla JS / HTML / ECharts）"]
         LP["/lecture<br/>player.js（YouTube IFrame）<br/>quiz.js"]
-        RP["/reflect<br/>lad_panel.js（LAD）<br/>chat_panel.js（AI チャット）"]
+        RP["/reflect<br/>lad_panel.js（LAD）<br/>chat_panel.js（AI チャット）<br/>dialog_log.js / leave_guard.js（対話ログ保存）"]
     end
 
     subgraph FD["Framework & Drivers（framework_drivers/）"]
@@ -27,7 +27,7 @@ flowchart TB
 
     subgraph IA["Interface Adapters（interfaces/）"]
         direction TB
-        CTRL["Controllers<br/>RecordViewingEvent / RecordQuizAttempt<br/>GetLearningSnapshot / GetLastUpdated<br/>SendChatMessage"]
+        CTRL["Controllers<br/>RecordViewingEvent / RecordQuizAttempt<br/>GetLearningSnapshot / GetLastUpdated<br/>SendChatMessage / SaveDialogLog"]
         PRES["Presenters → ViewModel<br/>LadDashboard / ChatResponse ほか"]
         PB["Prompt Builders<br/>Student / Pedagogical / Interface"]
         CLS["Learner Type Classifier<br/>（ルールベース）"]
@@ -36,7 +36,7 @@ flowchart TB
     subgraph APP["Application Business Rules（application/）"]
         direction TB
         UCL["Learning Use Cases<br/>StartOrGetLearningSession<br/>RecordViewingEvent<br/>RecordQuizAttempt<br/>GetLearningSnapshot"]
-        UCT["Tutoring Use Cases<br/>StartOrGetTutorSession<br/>SendChatMessage<br/>RunTutoringPipeline<br/>（Student → Pedagogical → Interface）"]
+        UCT["Tutoring Use Cases<br/>StartOrGetTutorSession<br/>SendChatMessage<br/>SaveDialogLog<br/>RunTutoringPipeline<br/>（Student → Pedagogical → Interface）"]
         PORT["Ports<br/>Repository / LlmGateway<br/>Student・Pedagogical・InterfaceModelGateway<br/>LectureCatalog / LearningSnapshotQuery"]
     end
 
@@ -49,7 +49,7 @@ flowchart TB
 
     subgraph DATA["永続化（SQLite 2 ファイル）"]
         LDB[("learning.db<br/>learning_sessions<br/>viewing_logs<br/>quiz_attempts / answers")]
-        TDB[("tutor.db<br/>sessions / messages<br/>（dialogue_move 等を保持）")]
+        TDB[("tutor.db<br/>sessions / messages<br/>（dialogue_move・responded_at 等を保持）<br/>dialog_logs")]
     end
 
     subgraph CLOUD["外部サービス"]
@@ -102,6 +102,7 @@ flowchart TB
 | `GET /api/participants/<id>/lad` | Read | LAD ViewModel |
 | `GET /api/last-updated` | Read | 学習データ最終更新時刻（ポーリング用） |
 | `POST /chat` | Write/Read | AI チューター応答生成 |
+| `POST /api/dialog-log` | Write | 対話ログの保存（終了ボタン・離脱時。`tutor.db` の `dialog_logs`） |
 
 ## 2. データフロー図
 
@@ -225,7 +226,7 @@ sequenceDiagram
         G-->>P: assistant_text
         P-->>S: 応答 + interpretation + decision
     end
-    S->>TD: save（user / assistant メッセージ + utterance_type・dialogue_move・state を追記）
+    S->>TD: save（user / assistant メッセージ + utterance_type・dialogue_move・state・responded_at を追記）
     S-->>F: assistant_content
     F-->>B: JSON（ChatResponsePresenter）
 ```
@@ -235,6 +236,6 @@ sequenceDiagram
 | DB | 主なテーブル | 書き込み元 | 読み取り先 |
 | --- | --- | --- | --- |
 | `learning.db` | `learning_sessions`（learner × lecture で一意）、`viewing_logs`、`quiz_attempts`、`quiz_attempt_answers` | 視聴ログ API・小テスト API | LAD API、`/chat`（Snapshot 経由） |
-| `tutor.db` | `sessions`（`learning_session_id` で紐づけ）、`messages`（`utterance_type` / `dialogue_move` / `interpretation_state` 付き） | `/chat` | `/chat`（対話履歴・Move 履歴・前回 State Card） |
+| `tutor.db` | `sessions`（`learning_session_id` で紐づけ）、`messages`（`utterance_type` / `dialogue_move` / `interpretation_state` / `responded_at` 付き）、`dialog_logs`（1 対話セッション = 最大 1 行の対話ログ JSON） | `/chat`（`messages`）、`/api/dialog-log`（`dialog_logs`） | `/chat`（対話履歴・Move 履歴・前回 State Card）、`/api/dialog-log`（`messages` から対話ログを作る） |
 
 パスは環境変数 `LEARNING_DB_PATH` / `TUTOR_DB_PATH` で上書き可能（既定は `db/data/`）。

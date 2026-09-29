@@ -99,7 +99,50 @@
     });
   }
 
+  /**
+   * POST /api/dialog-log に対話ログの保存を要求する。
+   * 仕様: docs/spec/dialog-log-save.md#受入基準 (PBI-A-2)
+   * @param {string} participantId
+   * @param {"end_button"|"page_leave"} endMethod
+   * @returns {Promise<Response>}
+   */
+  function postDialogLog(participantId, endMethod) {
+    return fetch("/api/dialog-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        participant_id: String(participantId),
+        end_method: endMethod,
+      }),
+    });
+  }
+
+  /**
+   * ページ離脱時に page_leave で保存を要求する。結果は待たず、失敗は握りつぶす。
+   * 仕様: docs/spec/dialog-log-save.md#PBI-B (B4)
+   */
+  function postDialogLogOnLeave(participantId) {
+    try {
+      var p = fetch("/api/dialog-log", {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          participant_id: String(participantId),
+          end_method: "page_leave",
+        }),
+      });
+      if (p && typeof p.catch === "function") {
+        p.catch(function () {});
+      }
+    } catch (e) {
+      // 離脱中の失敗は握りつぶす
+    }
+  }
+
   global.ApiClient = {
+    postDialogLogOnLeave: postDialogLogOnLeave,
+    postDialogLog: postDialogLog,
     buildViewingLogPayload: buildViewingLogPayload,
     postViewingLog: postViewingLog,
     getLad: getLad,

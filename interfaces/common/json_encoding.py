@@ -19,6 +19,7 @@ from interfaces.learning.view_models.record_responses import (
     RecordViewingEventSuccessViewModel,
 )
 from interfaces.tutoring.view_models.chat_response import ChatResponseViewModel
+from interfaces.tutoring.view_models.dialog_log_saved import DialogLogSavedViewModel
 
 
 def datetime_to_json(value: datetime | None) -> str | None:
@@ -124,3 +125,14 @@ def record_viewing_event_success_to_json_dict(
 ) -> dict[str, Any]:
     """RecordViewingEventSuccessViewModel を JSON 化可能な dict へ変換する。"""
     return {"ok": view_model.ok}
+
+
+def dialog_log_saved_view_model_to_json_dict(
+    view_model: DialogLogSavedViewModel,
+) -> dict[str, str]:
+    """DialogLogSavedViewModel を JSON 化可能な dict へ変換する。"""
+    return {
+        "tutor_session_id": view_model.tutor_session_id,
+        "ended_at": view_model.ended_at,
+        "end_method": view_model.end_method,
+    }

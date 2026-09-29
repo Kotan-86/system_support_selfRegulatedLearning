@@ -17,6 +17,7 @@ from application.learning.use_cases.start_or_get_learning_session import (
 )
 from application.tutoring.ports.llm_gateway import LlmGateway
 from application.tutoring.use_cases.run_tutoring_pipeline import RunTutoringPipelineUseCase
+from application.tutoring.use_cases.save_dialog_log import SaveDialogLogUseCase
 from application.tutoring.use_cases.send_chat_message import SendChatMessageUseCase
 from application.tutoring.use_cases.start_or_get_tutor_session import (
     StartOrGetTutorSessionUseCase,
@@ -29,6 +30,9 @@ from framework_drivers.db.learning.static_lecture_catalog import StaticLectureCa
 from framework_drivers.db.tutoring.id_generators import (
     UuidMessageIdGenerator,
     UuidTutorSessionIdGenerator,
+)
+from framework_drivers.db.tutoring.sqlite_dialog_log_repository import (
+    SqliteDialogLogRepository,
 )
 from framework_drivers.db.tutoring.sqlite_tutor_session_repository import (
     SqliteTutorSessionRepository,
@@ -71,10 +75,16 @@ from interfaces.learning.presenters.record_quiz_attempt_presenter import (
 from interfaces.learning.presenters.record_viewing_event_presenter import (
     RecordViewingEventPresenter,
 )
+from interfaces.tutoring.controllers.save_dialog_log_controller import (
+    SaveDialogLogController,
+)
 from interfaces.tutoring.controllers.send_chat_message_controller import (
     SendChatMessageController,
 )
 from interfaces.tutoring.presenters.chat_response_presenter import ChatResponsePresenter
+from interfaces.tutoring.presenters.dialog_log_saved_presenter import (
+    DialogLogSavedPresenter,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _TUTOR_SCHEMA = _PROJECT_ROOT / "db" / "schema.sql"
@@ -273,4 +283,27 @@ def build_send_chat_message_controller(
     return SendChatMessageController(
         use_case=use_case,
         presenter=ChatResponsePresenter(),
+    )
+
+
+def build_save_dialog_log_controller(
+    *,
+    learning_connection: sqlite3.Connection,
+    tutor_connection: sqlite3.Connection,
+) -> SaveDialogLogController:
+    """SaveDialogLogController を組み立てる。"""
+    # 仕様: docs/spec/dialog-log-save.md#保存-API
+    tutor_repository = _tutor_repository(tutor_connection)
+    use_case = SaveDialogLogUseCase(
+        start_or_get_learning=_start_or_get_learning_use_case(learning_connection),
+        start_or_get_tutor=StartOrGetTutorSessionUseCase(
+            repository=tutor_repository,
+            id_generator=UuidTutorSessionIdGenerator(),
+        ),
+        tutor_repository=tutor_repository,
+        dialog_log_repository=SqliteDialogLogRepository(tutor_connection),
+    )
+    return SaveDialogLogController(
+        use_case=use_case,
+        presenter=DialogLogSavedPresenter(),
     )

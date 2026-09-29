@@ -545,6 +545,7 @@ TutorSession（Aggregate Root）
 | utteranceType       | `LearnerUtteranceType \| None`    | 当ターンの user 発話分類（assistant のみ。研究ログ用）          |
 | dialogueMove        | `DialogueMove \| None`            | 当ターンに選択した Coach Move（assistant のみ）                 |
 | interpretationState | `InterpretationStateCard \| None` | 当ターン時点の State Card（assistant のみ。ターン間引き継ぎ用） |
+| respondedAt         | `datetime \| None`                | AI の応答の生成を終えた時刻（assistant のみ。`None` = 記録なし。対話ログの `timestamp` に使う） |
 
 **不変条件**
 
@@ -553,6 +554,7 @@ TutorSession（Aggregate Root）
 - 1 Message は 1 発話（user と assistant を 1 行にペアリングしない）
 - `utteranceType` / `dialogueMove` / `interpretationState` は **assistant Message のみ** に付与する。user Message では常に `None`
 - 初回ターン・半角数字のみ定型文など LLM 未呼び出し時は assistant の付帯メタデータはすべて `None`
+- `respondedAt` は assistant Message のみに付く。user Message では常に `None`。`createdAt`（受け付けた時刻。並び順に使う）の値と意味は変えない。`respondedAt` を追加する前に保存された assistant Message は `None`（記録なし。`createdAt` で代用しない）。固定応答（LLM 未呼び出し）の assistant Message も、応答の生成を終えた時刻が入る（判断記録 D-1）
 
 **State Card ターン間引き継ぎ**
 
@@ -561,7 +563,7 @@ TutorSession（Aggregate Root）
 
 **インフラマッピング**
 
-- 既存 `messages` テーブル（`session_id`, `role`, `content`, `created_at`）に加え、`utterance_type` / `dialogue_move` / `interpretation_state`（JSON）列で付帯メタデータを永続化する（[framework-drivers-persistence.md](./framework-drivers-persistence.md)）
+- 既存 `messages` テーブル（`session_id`, `role`, `content`, `created_at`）に加え、`utterance_type` / `dialogue_move` / `interpretation_state`（JSON）列で付帯メタデータを、`responded_at` 列で応答の生成終了時刻を永続化する（[framework-drivers-persistence.md](./framework-drivers-persistence.md)）
 - 既存 `sessions` テーブルは TutorSession に対応（`learning_session_id` 列 — [framework-drivers-persistence.md](./framework-drivers-persistence.md)）
 
 ---

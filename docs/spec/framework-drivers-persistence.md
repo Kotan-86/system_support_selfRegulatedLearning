@@ -329,12 +329,33 @@ TutorSession は `learning_session_id` で Learning を参照する（[domain-mo
 | `utterance_type`       | TEXT     | NULL 可。assistant の `LearnerUtteranceType`                         |
 | `dialogue_move`        | TEXT     | NULL 可。assistant の `DialogueMove`                                 |
 | `interpretation_state` | TEXT     | NULL 可。assistant の `InterpretationStateCard` を JSON 文字列で保存 |
+| `responded_at`         | TEXT     | NULL 可。assistant の応答の生成を終えた時刻（ISO 8601、`created_at` と同じ形式）。user の行と、追加前に保存された assistant の行は NULL（記録なし）。`created_at`（並び順に使う）の値と意味は変えない |
 
 **Mapper 契約（Message メタデータ）**
 
 - `utterance_type` / `dialogue_move` は列挙の `value` 文字列をそのまま保存する
 - `interpretation_state` は 8 軸 State Card の JSON（`status` + `note`）を 1 列に格納する
 - 既存行（列なし DB）は読み込み時にメタデータ `None` として扱う（新規スキーマ適用 DB を前提）
+- `responded_at` は、`Message.responded_at`（`None` = 記録なし）を ISO 8601 の文字列（`created_at` と同じ書式）で保存する。NULL・空文字は読み込み時に `None`（記録なし）として扱う。書き込みは `format_responded_at` で行い、`message_to_insert_params` の戻り値の形は変えない
+
+**変更前の `tutor.db` への対応**: `apply_tutor_schema`（[db/schema.sql](../../db/schema.sql) の適用）は、`CREATE TABLE IF NOT EXISTS` では既存の `messages` に列が増えないため、適用の後に `PRAGMA table_info(messages)` で `responded_at` の有無を調べ、なければ `ALTER TABLE messages ADD COLUMN responded_at TEXT` を実行する（冪等。既存の行と値は変更しない）。`dialog_logs` は `CREATE TABLE IF NOT EXISTS` で作る。`responded_at` を参照するインデックスは `db/schema.sql` に置かない（旧経路の `db/init_db.py` も同じファイルを実行するため）。
+
+### `dialog_logs` テーブル
+
+対話ログ（[dialog-log-save.md](./dialog-log-save.md) の共有IF。Issue #11）。1 行 = 1 件。1 `TutorSession` につき最大 1 行（保存は upsert で上書き）。
+
+| 列                    | 型   | 備考                                                                 |
+| --------------------- | ---- | -------------------------------------------------------------------- |
+| `session_id`          | TEXT | PK。FK → `sessions.id`（`TutorSessionId`）                           |
+| `participant_id`      | TEXT | NOT NULL。保存要求の participant_id（`sessions.participant_id` は空文字のため要求の値を使う） |
+| `lecture_id`          | TEXT | NOT NULL                                                             |
+| `learning_session_id` | TEXT | NOT NULL                                                             |
+| `end_method`          | TEXT | NOT NULL。`end_button` / `page_leave`                                |
+| `ended_at`            | TEXT | NOT NULL。保存を受け付けた時刻（ISO 8601、秒まで、UTC オフセット付き） |
+| `log_json`            | TEXT | NOT NULL。対話ログの JSON 全体（キーと値は dialog-log-save.md の共有IF）。列の値と JSON 内の同名の値は、同じ保存で書かれ常に一致する |
+
+- 書き込み: `SqliteDialogLogRepository.save` が `INSERT ... ON CONFLICT(session_id) DO UPDATE`（upsert）で行い、成功で commit、失敗で rollback して例外を送出する。JSON の組み立ては `dialog_log_json.dialog_log_to_json_dict`。
+- 過去の保存の履歴は残さない（上書き）。
 
 ---
 

@@ -9,6 +9,7 @@ from flask import Response, jsonify
 
 from interfaces.common.json_encoding import (
     chat_response_view_model_to_json_dict,
+    dialog_log_saved_view_model_to_json_dict,
     error_view_model_to_json_dict,
     lad_dashboard_view_model_to_json_dict,
     last_updated_view_model_to_json_dict,
@@ -23,6 +24,7 @@ from interfaces.learning.view_models.record_responses import (
     RecordViewingEventSuccessViewModel,
 )
 from interfaces.tutoring.view_models.chat_response import ChatResponseViewModel
+from interfaces.tutoring.view_models.dialog_log_saved import DialogLogSavedViewModel
 
 _HTTP_STATUS_BY_KIND: dict[StatusKind, int] = {
     StatusKind.NOT_FOUND: 404,
@@ -37,6 +39,7 @@ ControllerResult = (
     | RecordViewingEventSuccessViewModel
     | RecordQuizAttemptSuccessViewModel
     | ChatResponseViewModel
+    | DialogLogSavedViewModel
     | ErrorViewModel
 )
 
@@ -70,6 +73,9 @@ def controller_result_to_flask_response(
 
     if isinstance(result, ChatResponseViewModel):
         return jsonify(chat_response_view_model_to_json_dict(result)), 200
+
+    if isinstance(result, DialogLogSavedViewModel):
+        return jsonify(dialog_log_saved_view_model_to_json_dict(result)), 200
 
     raise TypeError(f"Unsupported controller result type: {type(result)!r}")
 

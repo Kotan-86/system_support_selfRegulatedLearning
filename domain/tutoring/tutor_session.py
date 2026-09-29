@@ -46,6 +46,7 @@ class TutorSession:
         utterance_type: LearnerUtteranceType | None = None,
         dialogue_move: DialogueMove | None = None,
         interpretation_state: InterpretationStateCard | None = None,
+        responded_at: datetime | None = None,
     ) -> TutorSession:
         message = Message.create(
             id=message_id,
@@ -55,5 +56,6 @@ class TutorSession:
             utterance_type=utterance_type,
             dialogue_move=dialogue_move,
             interpretation_state=interpretation_state,
+            responded_at=responded_at,
         )
         return replace(self, messages=(*self.messages, message))

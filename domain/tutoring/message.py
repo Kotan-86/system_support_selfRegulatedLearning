@@ -51,6 +51,7 @@ class Message:
         utterance_type: LearnerUtteranceType | None = None,
         dialogue_move: DialogueMove | None = None,
         interpretation_state: InterpretationStateCard | None = None,
+        responded_at: datetime | None = None,
     ) -> Message:
         if not content:
             raise ValueError("Message content must not be empty")
@@ -63,4 +64,5 @@ class Message:
         object.__setattr__(instance, "utterance_type", utterance_type)
         object.__setattr__(instance, "dialogue_move", dialogue_move)
         object.__setattr__(instance, "interpretation_state", interpretation_state)
+        object.__setattr__(instance, "responded_at", responded_at)
         return instance

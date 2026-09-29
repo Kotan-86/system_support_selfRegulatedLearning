@@ -48,6 +48,13 @@ def message_to_insert_params(
     )
 
 
+def format_responded_at(message: Message) -> str | None:
+    """AI 応答の生成終了時刻を DB の時刻形式へ。記録なしは None。"""
+    if message.responded_at is None:
+        return None
+    return format_datetime(message.responded_at)
+
+
 def message_row_to_message(row: object) -> Message:
     """messages 1 行を Message に変換する。"""
     role_value = _row_value(row, "role")
@@ -76,6 +83,16 @@ def message_row_to_message(row: object) -> Message:
     except ValueError as exc:
         raise SqliteTutorMapperError(str(exc)) from exc
 
+    responded_at_raw = _optional_row_value(row, "responded_at")
+    try:
+        responded_at = (
+            parse_datetime(str(responded_at_raw))
+            if responded_at_raw is not None and responded_at_raw != ""
+            else None
+        )
+    except ValueError as exc:
+        raise SqliteTutorMapperError(str(exc)) from exc
+
     try:
         return Message.create(
             id=MessageId(str(_row_value(row, "id"))),
@@ -85,6 +102,7 @@ def message_row_to_message(row: object) -> Message:
             utterance_type=utterance_type,
             dialogue_move=dialogue_move,
             interpretation_state=interpretation_state,
+            responded_at=responded_at,
         )
     except ValueError as exc:
         raise SqliteTutorMapperError(str(exc)) from exc

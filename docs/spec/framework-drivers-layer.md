@@ -257,6 +257,7 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 | `LearningSessionIdGenerator` 等 | `framework_drivers/db/learning/id_generators.py`                        | `db`           | —                                                      |
 | `TutorSessionRepository`        | `framework_drivers/db/tutoring/sqlite_tutor_session_repository.py`      | `db`           | `tutor.db`                                             |
 | `TutorSessionIdGenerator`       | `framework_drivers/db/tutoring/id_generators.py`                        | `db`           | —                                                      |
+| `DialogLogRepository`           | `framework_drivers/db/tutoring/sqlite_dialog_log_repository.py`         | `db`           | `tutor.db`（`dialog_logs`。JSON 組み立ては同ディレクトリの `dialog_log_json.py`） |
 | `LlmGateway`                    | `framework_drivers/external/vertex/vertex_llm_gateway.py`               | `external`     | Vertex AI                                              |
 | `VideoDurationResolver`         | `framework_drivers/external/youtube/youtube_video_duration_resolver.py` | `external`     | YouTube API（キャッシュ付き）                          |
 
@@ -297,6 +298,9 @@ interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表
 | `GET /api/participants/{id}/lad` | `GetLearningSnapshotController` | `/reflect` LAD                               |
 | `GET /api/last-updated`          | `GetLastUpdatedController`      | `/reflect`（任意）                           |
 | `POST /chat`                     | `SendChatMessageController`     | `/reflect` Chat                              |
+| `POST /api/dialog-log`           | `SaveDialogLogController`       | `/reflect`（終了ボタン・離脱時。下記）       |
+
+`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}`（`end_method` は `end_button` / `page_leave`）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
 **破壊的変更**: 旧 LAD レスポンス（生 `viewing_logs` dict）は返さない。`LadDashboardViewModel` のみ。
 
@@ -307,6 +311,17 @@ interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表
 | `GET /lecture` | `framework_drivers/platform/templates/lecture.html`（移行目標） | 講義動画 + 埋め込み小テスト            |
 | `GET /reflect` | `framework_drivers/platform/templates/reflect.html`（移行目標） | LAD + AI 統合                          |
 | `GET /`        | `/reflect` へリダイレクトまたは統合                             | 旧 `index.html` チャット単体は廃止方向 |
+
+### `/reflect` の対話ログ保存（Issue #11。仕様: [dialog-log-save.md](./dialog-log-save.md)）
+
+| 要素 | 内容 |
+|---|---|
+| `reflect.html` | AI チューターの欄に、送信フォームの下へ「対話ログを送信して終了する」ボタン（`#end-dialog-button`）、失敗の表示（`#dialog-end-error`）、完了の表示（`#dialog-end-complete`）を置く。欄（`#chat-panel`）の JS の読み込み順は `chat_panel.js` → `dialog_log.js` → `leave_guard.js` → `reflect_app.js` |
+| `js/common/api_client.js` | `ApiClient.postDialogLog(participantId, endMethod)`（`fetch` の Promise を返す）と `ApiClient.postDialogLogOnLeave(participantId)`（`end_method: "page_leave"`、`keepalive: true`。結果を待たず、失敗は握りつぶす） |
+| `js/reflect/chat_panel.js` | 送信の開始・終了を通知する `ChatPanel.onSendStateChange(listener)` と `ChatPanel.isSending()` を提供する（応答待ちの間の判定用） |
+| `js/reflect/dialog_log.js` | `window.DialogLog = { init(participantId), isEnded() }`。終了ボタンで `end_button` の保存を要求する。応答待ちの間・保存中は終了ボタンを無効にする。成功で完了画面に切り替え（入力・送信フォームと終了ボタンを非表示にし、入力・送信を無効にする）、失敗（2xx 以外・通信失敗）では失敗の表示を出して再び押せるようにする。保存中は入力欄・送信ボタンも無効にする（失敗で戻す） |
+| `js/reflect/leave_guard.js` | `window.LeaveGuard = { init(participantId), shouldConfirm() }`。「発言済み」（この画面で 1 回以上送信を開始した）かつ「未終了」（`DialogLog.isEnded()` が偽）のとき、`beforeunload` でブラウザ標準の確認を求め（保存要求は送らない）、`pagehide` で `postDialogLogOnLeave` を呼ぶ |
+| `js/reflect/reflect_app.js` | 初期化で `DialogLog.init`、`LeaveGuard.init` を呼ぶ |
 
 ---
 

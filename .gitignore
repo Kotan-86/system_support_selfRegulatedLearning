@@ -36,3 +36,6 @@ build/
 
 # --- dev-team の作業記録 ---
 .work/
+
+# --- その他 ---
+.DS_Store

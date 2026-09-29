@@ -16,6 +16,7 @@ from application.common.viewing_seconds import (
 )
 from domain.learning.quiz_attempt import QuizAnswer
 from domain.learning.viewing_event import ViewingAction
+from application.tutoring.dto.save_dialog_log import EndMethod
 from domain.shared.ids import LearnerId, LectureId, TutorSessionId
 
 from interfaces.common.default_lecture import resolve_default_lecture_id
@@ -253,3 +254,18 @@ def parse_quiz_answers(value: Any) -> Result[tuple[QuizAnswer, ...], ValidationE
         )
 
     return ok(tuple(answers))
+
+
+def parse_end_method(value: Any) -> Result[EndMethod, ValidationError]:
+    """end_method を EndMethod へ変換する。end_button / page_leave の完全一致だけ受け付ける。"""
+    if value is None:
+        return err(ValidationError("end_method is required"))
+    if not isinstance(value, str):
+        return err(ValidationError("end_method must be a string"))
+    try:
+        return ok(EndMethod(value))
+    except ValueError:
+        valid = ", ".join(method.value for method in EndMethod)
+        return err(
+            ValidationError(f"unknown end_method: {value!r}. Must be one of: {valid}")
+        )
