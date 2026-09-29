@@ -22,7 +22,7 @@ def build_quiz_definition() -> QuizDefinition:
                 ),
                 choices=(
                     "上面の円だけ",
-                    "上面と下面の円"
+                    "上面と下面の円",
                     "側面",
                     "上面・下面・側面の合計",
                 ),
