@@ -24,5 +24,9 @@ def connect_in_memory_tutor_db(schema_path: Path) -> sqlite3.Connection:
 
 
 def apply_tutor_schema(conn: sqlite3.Connection, schema_path: Path) -> None:
-    """db/schema.sql を接続に適用する。"""
+    """db/schema.sql を接続に適用する。変更前の messages には responded_at を足す（冪等）。"""
     conn.executescript(schema_path.read_text(encoding="utf-8"))
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+    if "responded_at" not in columns:
+        conn.execute("ALTER TABLE messages ADD COLUMN responded_at TEXT")
+        conn.commit()

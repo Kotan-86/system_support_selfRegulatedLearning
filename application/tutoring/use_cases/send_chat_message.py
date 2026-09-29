@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from application.common.errors import (
     AppError,
@@ -71,6 +73,7 @@ class SendChatMessageUseCase:
         repository: TutorSessionRepository,
         message_id_generator: MessageIdGenerator,
         lecture_catalog: LectureCatalog,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._start_or_get_learning = start_or_get_learning
         self._start_or_get_tutor = start_or_get_tutor
@@ -79,6 +82,7 @@ class SendChatMessageUseCase:
         self._repository = repository
         self._message_id_generator = message_id_generator
         self._lecture_catalog = lecture_catalog
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     def execute(
         self, request: SendChatMessageRequest
@@ -115,6 +119,7 @@ class SendChatMessageUseCase:
             return assistant_result  # type: ignore[return-value]
 
         assistant_turn = assistant_result.value
+        responded_at = self._clock()
         user_msg_id = self._message_id_generator.next_id()
         asst_msg_id = self._message_id_generator.next_id()
         updated = (
@@ -131,6 +136,7 @@ class SendChatMessageUseCase:
                 utterance_type=assistant_turn.utterance_type,
                 dialogue_move=assistant_turn.dialogue_move,
                 interpretation_state=assistant_turn.interpretation_state,
+                responded_at=responded_at,
             )
         )
         self._repository.save(updated)

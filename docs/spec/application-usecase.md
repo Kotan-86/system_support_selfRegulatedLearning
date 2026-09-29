@@ -216,6 +216,7 @@ Tutoring は Learning Entity を import せず、この Port 経由で **LAD と
 | 4    | `GetLearningSnapshot`       | Learning        | 公開               | `GET /api/participants/{id}/lad`、Tutoring（ACL 経由）、`GET /api/last-updated`（interfaces 層 Adapter） |
 | —    | `StartOrGetTutorSession`    | Tutoring        | 内部（compose 可） | `POST /chat`（初回）                                                                                     |
 | —    | `SendChatMessage`           | Tutoring        | 公開               | `POST /chat`                                                                                             |
+| —    | `SaveDialogLog`             | Tutoring        | 公開               | `POST /api/dialog-log`                                                                                   |
 | —    | `ExportResearchData`        | Research Export | 公開               | 未実装（視聴ログ + 小テスト + 対話ログ）                                                                 |
 
 ---
@@ -627,6 +628,10 @@ Learning コンテキストにおける **共有 Read の唯一の主 UC**。
 | `list_all`                    | なし                | `tuple[TutorSession, ...]` | `NearTermExperimentPolicy` 用（近い実験は件数少） |
 | `save`                        | `TutorSession`      | `None`                     | 集約全体を upsert                                 |
 
+#### `DialogLogRepository`
+
+[SaveDialogLog](#savedialoglog) の節を参照（`save(DialogLog)` のみ。同じ対話セッションは上書き）。
+
 #### `TutorSessionIdGenerator` / `MessageIdGenerator`
 
 | Port                      | メソッド    | 出力             |
@@ -658,6 +663,7 @@ Learning コンテキストの **`LearningSnapshotQuery`**（上記 Port 一覧�
 | ---- | ----------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
 | 1    | `StartOrGetTutorSession`            | 内部（compose 可） | `LearningSessionId` に TutorSession を 1 本確保。`NearTermExperimentPolicy` を適用               |
 | 2    | `SendChatMessage`                   | 公開               | user 発話追記 → 応答生成 → assistant 追記（[将来拡張](#tutoring-将来拡張複数エージェント) 参照） |
+| —    | `SaveDialogLog`                     | 公開               | 対話セッションの全発言を対話ログとして保存（upsert。[SaveDialogLog](#savedialoglog)）           |
 | —    | `ClassifyInterpretationSupportType` | 内部               | **将来**。解釈支援種類を判定                                                                     |
 | —    | `InvokeTutoringAgent`               | 内部               | **将来**。種類に応じたエージェントを実行                                                         |
 
@@ -811,6 +817,7 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 - `TutorSessionRepository`
 - `MessageIdGenerator`
 - `LectureCatalog`（プロンプト Builder 入力用）
+- `clock: Callable[[], datetime]`（任意。省略時は現在時刻（UTC）。assistant Message の `responded_at` に使う。テストでは差し替える）
 
 ### 手順 `execute`（近い実験 — ITS 3 段パイプライン）
 
@@ -822,8 +829,8 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 4. `lecture = lecture_catalog.find_by_id(lecture_id)`（プロンプト用。無ければ **`err(LectureNotFoundError)`** / `LECTURE_NOT_FOUND`）
 5. **初回・半角数字のみ特例**（既存挙動）: `messages` が空かつ `user_message` が `^[0-9]+$` のとき、定型文を `assistant_content` とし **パイプラインを呼ばない**（付帯メタデータはすべて `None`）
 6. 上記以外: `run_tutoring_pipeline.execute(...)` で 3 段 LLM（Student → Pedagogical → Interface）を実行。直前 assistant Message の `interpretationState` を `previous_state_card` として渡す
-7. `user_msg_id`, `asst_msg_id = message_id_generator.next_id()` × 2
-8. `updated = tutor_session.append_message(user)` → `.append_message(assistant, utterance_type=..., dialogue_move=..., interpretation_state=...)`（手順 6 成功時のみメタデータ付与）
+7. 応答の生成が成功した後（手順 5 の定型文を含む）に `responded_at = clock()` を **1 回**読む。`user_msg_id`, `asst_msg_id = message_id_generator.next_id()` × 2
+8. `updated = tutor_session.append_message(user)` → `.append_message(assistant, utterance_type=..., dialogue_move=..., interpretation_state=..., responded_at=responded_at)`（手順 6 成功時のみメタデータ付与。`responded_at` は定型文の場合も付く。user Message の `responded_at` は `None`。`created_at`（= `sent_at`）は従来どおり）
 9. `repository.save(updated)`
 10. `Response(...)` を return
 
@@ -907,6 +914,80 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 | 既存         | 移行方針                                                                                                                            |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /chat` | `participant_id` → `learner_id`、`lecture_id` は未送信時 interfaces が `participant_id` から解決。`session_id` → `tutor_session_id` |
+
+---
+
+## SaveDialogLog
+
+### 変更理由（Why）
+
+- 研究協力者が振り返りを終えるとき（終了ボタン）と、ブラウザを離れるとき（離脱時）に、対話セッションの全発言を対話ログとして `tutor.db` に残す（Issue #11。仕様: [dialog-log-save.md](./dialog-log-save.md)。JSON の形・`dialog_logs`・保存 API は同仕様の共有IF が正）
+- 1 往復ごとの `messages` の保存（`SendChatMessage`）は変えず、併用する
+
+### 仕様
+
+| 項目         | 値                                 |
+| ------------ | ---------------------------------- |
+| ID           | `SaveDialogLog`                    |
+| コンテキスト | Tutoring                           |
+| アクター     | 学習者（終了ボタン・離脱時の画面） |
+| Interactor   | `SaveDialogLogUseCase`             |
+| 既存 API     | なし（新設 `POST /api/dialog-log`） |
+
+### 入力 `SaveDialogLogRequest`
+
+| フィールド    | 型          | 必須 | 説明                                                       |
+| ------------- | ----------- | ---- | ---------------------------------------------------------- |
+| `learner_id`  | `LearnerId` | yes  | `participant_id` から変換                                  |
+| `lecture_id`  | `LectureId` | yes  | interfaces が `participant_id` から解決                    |
+| `end_method`  | `EndMethod` | yes  | `end_button` / `page_leave` の 2 値（enum）                |
+| `received_at` | `datetime`  | yes  | 保存を受け付けた時刻。対話ログの `ended_at` になる         |
+
+### 出力 `SaveDialogLogResponse`
+
+| フィールド         | 型               | 説明                   |
+| ------------------ | ---------------- | ---------------------- |
+| `tutor_session_id` | `TutorSessionId` | 保存した対話セッション |
+| `ended_at`         | `datetime`       | `received_at` と同じ   |
+| `end_method`       | `EndMethod`      | 保存した終了の方法     |
+
+保存する対話ログの値オブジェクトは `DialogLog`（`participant_id`、`lecture_id`、`learning_session_id`、`tutor_session_id`、`ended_at`、`end_method`、`messages: tuple[Message, ...]`）。DTO は `application/tutoring/dto/save_dialog_log.py`。
+
+### 依存
+
+- `StartOrGetLearningSessionUseCase`
+- `StartOrGetTutorSessionUseCase`
+- `TutorSessionRepository`（`find_by_id` で全発言を読む）
+- `DialogLogRepository`（新 Port）
+
+#### `DialogLogRepository`
+
+| メソッド | 入力        | 出力   | 備考                                                                                          |
+| -------- | ----------- | ------ | --------------------------------------------------------------------------------------------- |
+| `save`   | `DialogLog` | `None` | 同じ `tutor_session_id` があれば置き換え、なければ追加（upsert）。失敗時は例外を送出する |
+
+### 手順 `execute`
+
+1. `start_or_get_learning_session.execute(learner_id, lecture_id, started_at=received_at)`（無ければ学習セッションを作る）。`err` ならそのまま返す
+2. `start_or_get_tutor_session.execute(learning_session_id, started_at=received_at)`（無ければ対話セッションを作る。発言 0 件でも同じ）。`err` ならそのまま返す
+3. `session = tutor_repository.find_by_id(tutor_session_id)`。無ければ **`err(TutorSessionNotFoundError)`**
+4. `dialog_log_repository.save(DialogLog(..., ended_at=received_at, end_method=end_method, messages=session.messages))`（`messages` は `session.messages` の順のまま）
+5. `Response(tutor_session_id, ended_at=received_at, end_method)` を return
+
+- `participant_id` は `str(learner_id)`。`lecture_id` は要求の値
+- 保存失敗（DB に書けない）は例外として伝わり、Repository が rollback するため既存の対話ログは変更されない。HTTP では未捕捉例外として 2xx 以外（500）になる
+
+### 例外
+
+| 条件                                      | AppError                    | HTTP                                      |
+| ----------------------------------------- | --------------------------- | ----------------------------------------- |
+| `participant_id` の誤り、`end_method` の誤り、本文が JSON オブジェクトでない | `ValidationError`（interfaces の Controller / ingress が検出。UC には届かない） | 400 |
+| 対話セッションが読めない                  | `TutorSessionNotFoundError` | 404                                       |
+| DB への書き込み失敗                       | （例外）                    | 2xx 以外（500。本文の形は定めない）       |
+
+### 受入基準
+
+対話ログの受入基準は [dialog-log-save.md](./dialog-log-save.md) の PBI-A-1（A2〜A8、A11〜A15、A17）が正。本節は Use Case の契約のみを記す。
 
 ---
 

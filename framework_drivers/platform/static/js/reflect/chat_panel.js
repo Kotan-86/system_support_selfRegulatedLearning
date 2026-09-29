@@ -5,6 +5,29 @@
 
   var sessionId = null;
   var participantId = null;
+  var sending = false;
+  var sendStateListeners = [];
+
+  // 仕様: docs/spec/dialog-log-save.md#受入基準 (A19)
+  function notifySendState(value) {
+    sendStateListeners.slice().forEach(function (listener) {
+      try {
+        listener(value);
+      } catch (e) {
+        // listener の失敗でチャットの送信を妨げない
+      }
+    });
+  }
+
+  function onSendStateChange(listener) {
+    if (typeof listener === "function") {
+      sendStateListeners.push(listener);
+    }
+  }
+
+  function isSending() {
+    return sending;
+  }
 
   function getChatBox() {
     return document.getElementById("chat-box");
@@ -74,7 +97,6 @@
     if (!messageForm || !messageInput) {
       return;
     }
-    var sending = false;
 
     function sendMessage() {
       if (sending) {
@@ -92,6 +114,7 @@
       var submitBtn = messageForm.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       showLoading();
+      notifySendState(true);
 
       var body = { message: userMessage, participant_id: participantId };
       if (sessionId) {
@@ -132,6 +155,7 @@
         .finally(function () {
           sending = false;
           submitBtn.disabled = false;
+          notifySendState(false);
         });
     }
 
@@ -176,5 +200,7 @@
   global.ChatPanel = {
     init: init,
     appendMessage: appendMessage,
+    onSendStateChange: onSendStateChange,
+    isSending: isSending,
   };
 })(window);

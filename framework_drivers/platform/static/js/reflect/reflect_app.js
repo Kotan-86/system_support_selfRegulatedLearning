@@ -57,6 +57,14 @@
     }
 
     global.ChatPanel.init(participantId);
+    // 仕様: docs/spec/dialog-log-save.md#受入基準 (PBI-A-2) A9
+    if (global.DialogLog) {
+      global.DialogLog.init(participantId);
+    }
+    // 仕様: docs/spec/dialog-log-save.md#PBI-B
+    if (global.LeaveGuard) {
+      global.LeaveGuard.init(participantId);
+    }
 
     fetchLad(participantId).then(function (viewModel) {
       applyLadViewModel(viewModel, true);

@@ -25,6 +25,7 @@ from framework_drivers.platform.wiring import (
     build_get_learning_snapshot_controller,
     build_record_quiz_attempt_controller,
     build_record_viewing_event_controller,
+    build_save_dialog_log_controller,
     build_send_chat_message_controller,
     get_learning_db_path,
     get_tutor_db_path,
@@ -225,6 +226,18 @@ def create_app() -> Flask:
             tutor_connection=g.tutor_conn,
         )
         result = controller.execute(data, sent_at=datetime.now(timezone.utc))
+        return controller_result_to_flask_response(result)
+
+    @app.route("/api/dialog-log", methods=["POST"])
+    def api_dialog_log():
+        """POST /api/dialog-log: 対話ログを保存する(仕様: dialog-log-save.md#保存-API)。"""
+        controller = build_save_dialog_log_controller(
+            learning_connection=g.learning_conn,
+            tutor_connection=g.tutor_conn,
+        )
+        result = controller.execute(
+            request.get_json(silent=True), received_at=datetime.now(timezone.utc)
+        )
         return controller_result_to_flask_response(result)
 
     @app.route("/api/quiz-attempts", methods=["POST"])

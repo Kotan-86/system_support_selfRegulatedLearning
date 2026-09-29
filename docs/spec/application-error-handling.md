@@ -82,7 +82,7 @@ application/
 | ---------------------------- | ------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `LECTURE_NOT_FOUND`          | `LectureNotFoundError`         | 講義カタログに `lecture_id` が無い                                       | `RecordQuizAttempt`, `GetLearningSnapshot`, `SendChatMessage`, `ExportResearchData` |
 | `LEARNING_SESSION_NOT_FOUND` | `LearningSessionNotFoundError` | `learning_session_id` 指定で Session が無い（Export の明示スコープのみ） | `ExportResearchData`                                                                |
-| `TUTOR_SESSION_NOT_FOUND`    | `TutorSessionNotFoundError`    | 指定 `tutor_session_id` が無い                                           | `SendChatMessage`（継続時）                                                         |
+| `TUTOR_SESSION_NOT_FOUND`    | `TutorSessionNotFoundError`    | 指定 `tutor_session_id` が無い                                           | `SendChatMessage`（継続時）、`SaveDialogLog`（対話セッションが読めないとき）       |
 
 ### Conflict 系（HTTP 409）
 

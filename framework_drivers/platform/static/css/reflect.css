@@ -215,3 +215,54 @@ body {
     flex-direction: column;
   }
 }
+
+/* 仕様: docs/spec/dialog-log-save.md#受入基準 (PBI-A-2) A1, A9, A10, A19 */
+.end-dialog-button {
+  display: block;
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: #fff;
+  color: #b23b00;
+  border: 1px solid #b23b00;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.end-dialog-button:disabled {
+  color: #888;
+  border-color: #ccc;
+  background: #f0f0f0;
+  cursor: not-allowed;
+}
+
+.dialog-end-error {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  color: #b71c1c;
+  background: #fdecea;
+  border-radius: 6px;
+}
+
+.dialog-end-error[hidden],
+.dialog-end-complete[hidden] {
+  display: none;
+}
+
+.dialog-end-complete {
+  margin-top: 16px;
+  padding: 12px 16px;
+  color: #1b5e20;
+  background: #e8f5e9;
+  border-radius: 6px;
+  font-weight: bold;
+}
+
+.dialog-end-complete p {
+  margin: 0;
+}
+
+.chat-panel.dialog-ended #message-form,
+.chat-panel.dialog-ended #end-dialog-button {
+  display: none;
+}

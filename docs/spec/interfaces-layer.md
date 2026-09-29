@@ -179,8 +179,11 @@ tests/
 | `action`                 | `ViewingAction`    | 列挙値文字列                                                           |
 | `message`                | `user_message`     | チャット                                                               |
 | `session_id`             | `tutor_session_id` | チャット継続時                                                         |
+| `end_method`             | `EndMethod`        | 対話ログ保存。`parse_end_method`（下記）                               |
 
 `current_time` / `duration` の `NaN` / `Infinity` / 非数値文字列は `ValidationError` 相当としてエラー ViewModel に変換する（[application-error-handling.md](./application-error-handling.md)）。
+
+**`parse_end_method`**（`interfaces/common/ingress.py`。[dialog-log-save.md](./dialog-log-save.md) の共有IF）: `end_method` を `EndMethod`（`application/tutoring/dto/save_dialog_log.py`）へ変換する。`end_button` / `page_leave` の完全一致だけ受け付ける。値がない（`None`）、文字列でない、2 値以外は `ValidationError`（エラー ViewModel。HTTP 400）。
 
 ---
 
@@ -509,6 +512,22 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 
 ---
 
+## DialogLogSavedViewModel
+
+`POST /api/dialog-log` 成功時（[dialog-log-save.md#保存 API](./dialog-log-save.md)、[application-usecase.md#SaveDialogLog](./application-usecase.md#savedialoglog)）。
+
+| フィールド         | 型    | JSON キー          | 説明                                                             |
+| ------------------ | ----- | ------------------ | ---------------------------------------------------------------- |
+| `tutor_session_id` | `str` | `tutor_session_id` | 保存した対話セッションID                                         |
+| `ended_at`         | `str` | `ended_at`         | 保存を受け付けた時刻。ISO 8601、秒まで（秒未満は切り捨て）、UTC オフセット付き |
+| `end_method`       | `str` | `end_method`       | `end_button` / `page_leave`                                      |
+
+- `SaveDialogLogController.execute(payload, *, received_at)`: `payload`（リクエスト本文を JSON として読んだもの。JSON でなければ `None`）が JSON オブジェクトでない、`participant_id` が文字列でない・空・空白だけ、`end_method` が不正、のいずれかは `ValidationError`（エラー ViewModel。HTTP 400）。`participant_id` は前後の空白を除いた値で `LearnerId` と講義（[default_lecture](#default_lecture)）を解決する。それ以外は `SaveDialogLogUseCase` の結果を `DialogLogSavedPresenter` で ViewModel にする（失敗は `ErrorPresenter`）
+- JSON への変換は `interfaces/common/json_encoding.py` の `dialog_log_saved_view_model_to_json_dict`（3 キーだけ）。Flask への変換は `controller_result_to_flask_response`（成功は 200）。
+- 保存する対話ログ本体の JSON（`log_json`）の組み立ては、この層ではなく `framework_drivers/db/tutoring/dialog_log_json.py`（[framework-drivers-persistence.md#dialog_logs テーブル](./framework-drivers-persistence.md)）。
+
+---
+
 ## 既存 API 対応表
 
 | 既存 API                         | Controller                      | Presenter                     | ViewModel               |
@@ -518,6 +537,7 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 | `POST /api/viewing-log`          | `RecordViewingEventController`  | `RecordViewingEventPresenter` | 成功 / Error            |
 | `POST /api/quiz-attempts`        | `RecordQuizAttemptController`   | `RecordQuizAttemptPresenter`  | 成功 / Error            |
 | `POST /chat`                     | `SendChatMessageController`     | `ChatResponsePresenter`       | `ChatResponseViewModel` |
+| `POST /api/dialog-log`（新設）   | `SaveDialogLogController`       | `DialogLogSavedPresenter`     | `DialogLogSavedViewModel` / Error |
 
 ---
 

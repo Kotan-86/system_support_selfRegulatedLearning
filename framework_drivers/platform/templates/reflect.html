@@ -60,7 +60,7 @@
       </div>
     </section>
 
-    <section class="chat-panel" aria-label="AI チューター">
+    <section class="chat-panel" id="chat-panel" aria-label="AI チューター">
       <h2>AI チューター</h2>
       <div id="chat-box"></div>
       <form id="message-form">
@@ -68,6 +68,12 @@
         <textarea id="message-input" rows="1" placeholder="メッセージを入力..." autocomplete="off"></textarea>
         <button type="submit">送信</button>
       </form>
+      {# 仕様: docs/spec/dialog-log-save.md#受入基準 (PBI-A-2) A1, A9, A10 #}
+      <button type="button" id="end-dialog-button" class="end-dialog-button">対話ログを送信して終了する</button>
+      <p id="dialog-end-error" class="dialog-end-error" role="alert" hidden>対話ログを送信できませんでした。もう一度「対話ログを送信して終了する」を押してください。</p>
+      <div id="dialog-end-complete" class="dialog-end-complete" role="status" hidden>
+        <p>対話ログを送信しました。ご協力ありがとうございました。このページを閉じて終了してください。</p>
+      </div>
     </section>
   </div>
 
@@ -80,6 +86,8 @@
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <script src="{{ url_for('static', filename='js/reflect/lad_panel.js') }}"></script>
   <script src="{{ url_for('static', filename='js/reflect/chat_panel.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/reflect/dialog_log.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/reflect/leave_guard.js') }}"></script>
   <script src="{{ url_for('static', filename='js/reflect/reflect_app.js') }}"></script>
   {% endif %}
 </body>

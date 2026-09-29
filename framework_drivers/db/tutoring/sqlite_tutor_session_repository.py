@@ -10,6 +10,7 @@ from domain.shared.ids import LearningSessionId, TutorSessionId
 from domain.tutoring.tutor_session import TutorSession
 
 from framework_drivers.db.tutoring.sqlite_tutor_session_mapper import (
+    format_responded_at,
     message_to_insert_params,
     rows_to_tutor_session,
     tutor_session_to_insert_params,
@@ -85,11 +86,12 @@ class SqliteTutorSessionRepository(TutorSessionRepository):
                 """
                 INSERT INTO messages (
                     session_id, role, content, created_at,
-                    utterance_type, dialogue_move, interpretation_state
+                    utterance_type, dialogue_move, interpretation_state,
+                    responded_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                message_to_insert_params(message, session.id),
+                (*message_to_insert_params(message, session.id), format_responded_at(message)),
             )
 
         self._conn.commit()
@@ -109,7 +111,8 @@ class SqliteTutorSessionRepository(TutorSessionRepository):
         message_rows = self._conn.execute(
             """
             SELECT id, session_id, role, content, created_at,
-                   utterance_type, dialogue_move, interpretation_state
+                   utterance_type, dialogue_move, interpretation_state,
+                   responded_at
             FROM messages
             WHERE session_id = ?
             ORDER BY created_at ASC, id ASC
