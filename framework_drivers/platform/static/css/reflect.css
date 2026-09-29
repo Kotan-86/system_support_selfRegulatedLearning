@@ -139,14 +139,30 @@ body {
   gap: 8px;
 }
 
+/* 仕様: docs/spec/reflect-chat-multiline-input.md#受入基準 (AC1-4, 10, 12, 16) */
 #message-form {
   display: flex;
   gap: 8px;
+  align-items: flex-end; /* 入力欄が伸びても送信ボタンは縦に伸ばさない */
 }
 
 #message-input {
   flex-grow: 1;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 10px;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  /* 枠線は border でなく内側の影で描く(JS が scrollHeight を height に使うため、border-box で枠分の差が出ないように) */
+  border: none;
+  box-shadow: inset 0 0 0 1px #767676;
+  border-radius: 2px;
+  resize: none;
+  overflow-y: hidden;
+  overflow-x: hidden;
+  /* 上限: 8行分 = line-height x 8 + 上下 padding。JS はこの値を上限として読む */
+  max-height: calc(1.5em * 8 + 20px);
 }
 
 #message-form button[type="submit"] {
@@ -160,6 +176,9 @@ body {
   border-radius: 12px;
   background: #e3f2fd;
   border: 1px solid #90caf9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .tutor-message {

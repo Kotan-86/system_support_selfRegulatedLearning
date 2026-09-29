@@ -42,22 +42,53 @@
     }
   }
 
+  // 仕様: docs/spec/reflect-chat-multiline-input.md#受入基準 (AC3, AC4, AC10)
+  // 入力欄の高さを内容に合わせる。上限は CSS の max-height から読む。
+  function adjustHeight(messageInput) {
+    try {
+      if (
+        !messageInput ||
+        !messageInput.style ||
+        typeof global.getComputedStyle !== "function"
+      ) {
+        return;
+      }
+      messageInput.style.height = "auto";
+      var scrollHeight = messageInput.scrollHeight;
+      var maxHeight = parseFloat(global.getComputedStyle(messageInput).maxHeight);
+      if (typeof scrollHeight !== "number" || !isFinite(scrollHeight)) {
+        return;
+      }
+      var limit = isFinite(maxHeight) ? maxHeight : Infinity;
+      messageInput.style.height = Math.min(scrollHeight, limit) + "px";
+      messageInput.style.overflowY = scrollHeight > limit ? "auto" : "hidden";
+    } catch (e) {
+      // 高さの調整に失敗しても入力・送信は妨げない
+    }
+  }
+
+  // 仕様: docs/spec/reflect-chat-multiline-input.md#受入基準 (AC5〜AC14, AC17)
   function bindForm() {
     var messageForm = document.getElementById("message-form");
     var messageInput = document.getElementById("message-input");
     if (!messageForm || !messageInput) {
       return;
     }
+    var sending = false;
 
-    messageForm.addEventListener("submit", function (event) {
-      event.preventDefault();
+    function sendMessage() {
+      if (sending) {
+        return;
+      }
       var userMessage = messageInput.value.trim();
       if (!userMessage || !participantId) {
         return;
       }
+      sending = true;
 
       appendMessage(userMessage, "user-message");
       messageInput.value = "";
+      adjustHeight(messageInput);
       var submitBtn = messageForm.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       showLoading();
@@ -99,8 +130,37 @@
           appendMessage("エラー: " + err.message, "tutor-message");
         })
         .finally(function () {
+          sending = false;
           submitBtn.disabled = false;
         });
+    }
+
+    messageForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      sendMessage();
+    });
+
+    messageInput.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") {
+        return;
+      }
+      // IME 変換中(Safari は keyCode 229)は確定に任せる
+      if (event.isComposing || event.keyCode === 229) {
+        return;
+      }
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey) {
+        return; // 既定の改行
+      }
+      event.preventDefault();
+      sendMessage();
+    });
+
+    messageInput.addEventListener("input", function () {
+      adjustHeight(messageInput);
     });
   }
 

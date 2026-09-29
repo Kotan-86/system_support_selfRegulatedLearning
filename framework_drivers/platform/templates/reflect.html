@@ -64,7 +64,8 @@
       <h2>AI チューター</h2>
       <div id="chat-box"></div>
       <form id="message-form">
-        <input type="text" id="message-input" placeholder="メッセージを入力..." autocomplete="off">
+        {# 仕様: docs/spec/reflect-chat-multiline-input.md#受入基準 (AC1-4) #}
+        <textarea id="message-input" rows="1" placeholder="メッセージを入力..." autocomplete="off"></textarea>
         <button type="submit">送信</button>
       </form>
     </section>
