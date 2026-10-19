@@ -10,6 +10,7 @@ secrets/
 .env
 .env.*
 !.env.example
+Key.txt
 
 # ローカル DB（コンテナ内で再初期化）
 db/data/*.db
