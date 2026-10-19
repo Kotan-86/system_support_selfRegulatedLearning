@@ -26,8 +26,8 @@
 - ViewModel・ingress 規約（[interfaces-layer.md](./interfaces-layer.md)）
 - Mapper / SQL の実装詳細（[framework-drivers-implementation-plan.md](./framework-drivers-implementation-plan.md) の各 Phase）
 - LAD 固定文・Looker 互換 UI の CSS 詳細
-- Research Export
-- 認証必須化（ADR: 任意。将来拡張）
+- Research Export（`ExportResearchData`。対話ログだけの研究用ダウンロードは [research-dialog-download.md](./research-dialog-download.md) で別に扱う）
+- 認証必須化（ADR: 任意。将来拡張。研究用ダウンロードの `/research/*` だけ Basic 認証を必須とする。参加者の画面と API は認証なし）
 
 ## 関連仕様
 
@@ -257,7 +257,8 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 | `LearningSessionIdGenerator` 等 | `framework_drivers/db/learning/id_generators.py`                        | `db`           | —                                                      |
 | `TutorSessionRepository`        | `framework_drivers/db/tutoring/sqlite_tutor_session_repository.py`      | `db`           | `tutor.db`                                             |
 | `TutorSessionIdGenerator`       | `framework_drivers/db/tutoring/id_generators.py`                        | `db`           | —                                                      |
-| `DialogLogRepository`           | `framework_drivers/db/tutoring/sqlite_dialog_log_repository.py`         | `db`           | `tutor.db`（`dialog_logs`。JSON 組み立ては同ディレクトリの `dialog_log_json.py`） |
+| `DialogLogRepository`           | `framework_drivers/db/tutoring/sqlite_dialog_log_repository.py`         | `db`           | `tutor.db`（`dialog_logs`。JSON 組み立ては同ディレクトリの `dialog_log_json.py`。発言1件の変換は `interfaces/tutoring/dialog_log_json_format.py` を使う） |
+| `DialogLogExportQuery`          | `framework_drivers/db/tutoring/sqlite_dialog_log_export_query.py`       | `db`           | `tutor.db`（`sessions`・`messages`・`dialog_logs`）と `learning.db`（`learning_sessions`）を読むだけ（研究用ダウンロード） |
 | `LlmGateway`                    | `framework_drivers/external/vertex/vertex_llm_gateway.py`               | `external`     | Vertex AI                                              |
 | `VideoDurationResolver`         | `framework_drivers/external/youtube/youtube_video_duration_resolver.py` | `external`     | YouTube API（キャッシュ付き）                          |
 
@@ -299,8 +300,12 @@ interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表
 | `GET /api/last-updated`          | `GetLastUpdatedController`      | `/reflect`（任意）                           |
 | `POST /chat`                     | `SendChatMessageController`     | `/reflect` Chat                              |
 | `POST /api/dialog-log`           | `SaveDialogLogController`       | `/reflect`（終了ボタン・離脱時。下記）       |
+| `GET /research/participants/{id}/dialog-logs` | `ExportDialogLogsController` | 研究者（Basic 認証。下記） |
+| `GET /research/dialog-logs`      | `ExportDialogLogsController`    | 研究者（Basic 認証。下記）                   |
 
 `POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}`（`end_method` は `end_button` / `page_leave`）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
+
+`/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
 
 **破壊的変更**: 旧 LAD レスポンス（生 `viewing_logs` dict）は返さない。`LadDashboardViewModel` のみ。
 
@@ -359,6 +364,7 @@ framework_drivers/db + external 具象
 | `YOUTUBE_API_KEY`                | 動画長取得時       | YouTube Data API キー（LAD 区間チャート用）                                                                       |
 | `USE_HTTP_PROXY`                 | 任意               | 学内プロキシ経由が必要なとき `true`。学外では `false` とし、`HTTP_PROXY` / `HTTPS_PROXY` は無効化して直接接続する |
 | `HTTP_PROXY` / `HTTPS_PROXY`     | 学内時             | 学内ゲートウェイ URL。`USE_HTTP_PROXY=true` のときのみ有効                                                        |
+| `RESEARCHER_BASIC_AUTH_USER` / `RESEARCHER_BASIC_AUTH_PASSWORD` | 研究用ダウンロード利用時 | 研究者の Basic 認証。どちらかが未設定・空なら `/research/*` は常に 401 |
 
 ### ローカル秘密情報（What）
 
@@ -444,7 +450,7 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 | `POST /api/viewing-logs` バッチ | 近い実験では単件 POST で開始。必要時に追加                                         |
 | API キー必須化                  | ADR: 推奨だが必須ではない                                                          |
 | 複数講義 UI                     | `participant_id` マップで 3 講義をカバー。将来は `lecture_id` クエリ拡張で対応可能 |
-| Research Export Infrastructure  | 別コンテキスト                                                                     |
+| Research Export Infrastructure  | 別コンテキスト（`ExportResearchData`。対話ログだけの研究用ダウンロードは本件の範囲に含めた） |
 
 ---
 

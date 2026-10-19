@@ -113,8 +113,35 @@ Google Apps Script（小テスト Form 等）から呼び出す場合は、ス�
 | `SECRET_KEY` | 推奨 | Flask セッション用（未設定時は開発用デフォルト） |
 | `TUTOR_DB_PATH` / `LEARNING_DB_PATH` | 任意 | 未設定時 `db/data/*.db` |
 | `DEFAULT_LECTURE_ID` | 任意 | マップ外 `participant_id` のフォールバック講義 ID（既定 `lecture-1`） |
+| `RESEARCHER_BASIC_AUTH_USER` | 研究用ダウンロード利用時 | 研究者の Basic 認証のユーザー名 |
+| `RESEARCHER_BASIC_AUTH_PASSWORD` | 研究用ダウンロード利用時 | 研究者の Basic 認証のパスワード |
 
 Cloud Run では `GOOGLE_APPLICATION_CREDENTIALS` は不要（実行サービスアカウントの ADC を使用）。
+
+`RESEARCHER_BASIC_AUTH_USER` / `RESEARCHER_BASIC_AUTH_PASSWORD` は、**どちらかが未設定または空文字なら、研究用ダウンロードは常に 401 で拒否される**（設定の有無は外から区別できない）。パスワードは Secret Manager（`--set-secrets`）で渡すことを推奨する。
+
+### 研究用の対話ログのダウンロード
+
+仕様: [docs/spec/research-dialog-download.md](docs/spec/research-dialog-download.md)
+
+研究者だけが、対話ログ(終了の保存の有無によらず、記録された発言 `messages` を元にした対話セッション)を JSON（対話セッションのリスト）で取得できる。
+
+| 取得 | URL |
+|------|-----|
+| 参加者別 | `GET /research/participants/<participant_id>/dialog-logs` |
+| 全参加者一括 | `GET /research/dialog-logs` |
+
+- ブラウザ: URL を開くと資格情報の入力欄が出る。研究者のユーザー名・パスワードを入力する。
+- curl（`-u` で Basic 認証）:
+  ```bash
+  curl -u "<user>:<password>" "https://<service-url>/research/dialog-logs" -o dialog-logs.json
+  curl -u "<user>:<password>" "https://<service-url>/research/participants/1/dialog-logs"
+  ```
+- 対象データがなければ `[]`（状態 200）。応答は `Cache-Control: no-store`。
+
+**注意（セキュリティ）**: 上記のデプロイは `--allow-unauthenticated` を前提としており、研究用ダウンロードを守るのは **この Basic 認証だけ**である。Cloud Run の IAM 認証を有効にすると、ブラウザからの Basic 認証による取得と両立しない。HTTP（ローカル起動）では資格情報は暗号化されない。資格情報は研究者で共有する1組のため、誰が取得したかは区別できず、取得の記録も残さない。
+
+**既知の限界**: 再デプロイ・再起動の前のデータは取得できない（SQLite がエフェメラル）。複数インスタンスでは、要求を受けたインスタンスのデータだけが返る。`/` を含む参加者ID、空の参加者IDは参加者別 URL で指定できない（一括には含まれる）。
 
 ### SQLite 永続化の注意
 

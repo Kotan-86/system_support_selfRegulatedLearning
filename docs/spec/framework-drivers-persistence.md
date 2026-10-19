@@ -356,6 +356,7 @@ TutorSession は `learning_session_id` で Learning を参照する（[domain-mo
 
 - 書き込み: `SqliteDialogLogRepository.save` が `INSERT ... ON CONFLICT(session_id) DO UPDATE`（upsert）で行い、成功で commit、失敗で rollback して例外を送出する。JSON の組み立ては `dialog_log_json.dialog_log_to_json_dict`。
 - 過去の保存の履歴は残さない（上書き）。
+- 読み出し専用アダプタ `SqliteDialogLogExportQuery`（`framework_drivers/db/tutoring/sqlite_dialog_log_export_query.py`。研究用ダウンロード、[research-dialog-download.md](./research-dialog-download.md)）: `tutor.db` の `sessions`・`messages`（受け付けた時刻、同じなら `id` の昇順）・`dialog_logs`（`ended_at`・`end_method` のみ。`log_json` は使わない）と、`learning.db` の `learning_sessions`（参加者ID・講義ID）を別々に読んで突き合わせる。DB に書かない。
 
 ---
 

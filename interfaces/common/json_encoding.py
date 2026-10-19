@@ -20,6 +20,9 @@ from interfaces.learning.view_models.record_responses import (
 )
 from interfaces.tutoring.view_models.chat_response import ChatResponseViewModel
 from interfaces.tutoring.view_models.dialog_log_saved import DialogLogSavedViewModel
+from interfaces.tutoring.view_models.research_dialog_logs import (
+    ResearchDialogLogsViewModel,
+)
 
 
 def datetime_to_json(value: datetime | None) -> str | None:
@@ -125,6 +128,28 @@ def record_viewing_event_success_to_json_dict(
 ) -> dict[str, Any]:
     """RecordViewingEventSuccessViewModel を JSON 化可能な dict へ変換する。"""
     return {"ok": view_model.ok}
+
+
+def research_dialog_logs_view_model_to_json_list(
+    view_model: ResearchDialogLogsViewModel,
+) -> list[dict[str, Any]]:
+    """研究用ダウンロードの ViewModel を JSON 化可能なリストへ変換する。
+
+    キーの順は仕様の例の順(format_version ... messages)。0件は []。
+    """
+    return [
+        {
+            "format_version": log.format_version,
+            "participant_id": log.participant_id,
+            "lecture_id": log.lecture_id,
+            "learning_session_id": log.learning_session_id,
+            "tutor_session_id": log.tutor_session_id,
+            "ended_at": log.ended_at,
+            "end_method": log.end_method,
+            "messages": list(log.messages),
+        }
+        for log in view_model.logs
+    ]
 
 
 def dialog_log_saved_view_model_to_json_dict(

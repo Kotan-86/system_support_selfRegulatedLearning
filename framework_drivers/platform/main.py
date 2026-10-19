@@ -9,7 +9,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, g, redirect, render_template, request, url_for
+from flask import Flask, Response, g, redirect, render_template, request, url_for
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 from domain.shared.ids import LectureId
@@ -19,8 +19,14 @@ from framework_drivers.db.learning.static_lecture_catalog import StaticLectureCa
 from framework_drivers.db.tutoring.sqlite_connection import connect_tutor_db
 from framework_drivers.external.youtube.youtube_video_id import extract_youtube_video_id
 from interfaces.common.learner_lecture_mapping import resolve_lecture_id_for_participant
-from framework_drivers.platform.http_response import controller_result_to_flask_response
+from framework_drivers.platform.http_response import (
+    controller_result_to_flask_response,
+    http_status_for_error,
+)
+from framework_drivers.platform.research_auth import register_research_auth
+from interfaces.learning.view_models.errors import ErrorViewModel
 from framework_drivers.platform.wiring import (
+    build_export_dialog_logs_controller,
     build_get_last_updated_controller,
     build_get_learning_snapshot_controller,
     build_record_quiz_attempt_controller,
@@ -131,6 +137,9 @@ def create_app() -> Flask:
         ]
     )
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "tutor_secret_key")
+
+    # 研究者の認証は DB 接続の before_request より前(未認証なら DB を開かない)
+    register_research_auth(app)
 
     @app.before_request
     def _open_db_connections() -> None:
@@ -278,6 +287,30 @@ def create_app() -> Flask:
         lecture_id = request.args.get("lecture_id")
         result = controller.execute(participant_id, lecture_id=lecture_id)
         return controller_result_to_flask_response(result)
+
+    def _research_response(execute):
+        """研究用の応答。予期しない例外・エラーは本文や値を出さない固定の応答にする(R9)。"""
+        try:
+            controller = build_export_dialog_logs_controller(
+                learning_connection=g.learning_conn,
+                tutor_connection=g.tutor_conn,
+            )
+            result = execute(controller)
+            if isinstance(result, ErrorViewModel):
+                return Response("Error", status=http_status_for_error(result), mimetype="text/plain")
+            return controller_result_to_flask_response(result)
+        except Exception:  # noqa: BLE001 - 例外の文言に本文が入りうるため記録しない
+            return Response("Internal Server Error", status=500, mimetype="text/plain")
+
+    @app.route("/research/participants/<participant_id>/dialog-logs", methods=["GET"])
+    def research_participant_dialog_logs(participant_id: str):
+        """GET: 参加者別の対話ログ(仕様: research-dialog-download.md)。"""
+        return _research_response(lambda c: c.execute_for_participant(participant_id))
+
+    @app.route("/research/dialog-logs", methods=["GET"])
+    def research_all_dialog_logs():
+        """GET: 全参加者一括の対話ログ(仕様: research-dialog-download.md)。"""
+        return _research_response(lambda c: c.execute_all())
 
     return app
 

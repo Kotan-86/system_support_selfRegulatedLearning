@@ -3,11 +3,13 @@
 """ViewModel を Flask レスポンスへ変換する。"""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from flask import Response, jsonify
 
 from interfaces.common.json_encoding import (
+    research_dialog_logs_view_model_to_json_list,
     chat_response_view_model_to_json_dict,
     dialog_log_saved_view_model_to_json_dict,
     error_view_model_to_json_dict,
@@ -25,6 +27,9 @@ from interfaces.learning.view_models.record_responses import (
 )
 from interfaces.tutoring.view_models.chat_response import ChatResponseViewModel
 from interfaces.tutoring.view_models.dialog_log_saved import DialogLogSavedViewModel
+from interfaces.tutoring.view_models.research_dialog_logs import (
+    ResearchDialogLogsViewModel,
+)
 
 _HTTP_STATUS_BY_KIND: dict[StatusKind, int] = {
     StatusKind.NOT_FOUND: 404,
@@ -40,6 +45,7 @@ ControllerResult = (
     | RecordQuizAttemptSuccessViewModel
     | ChatResponseViewModel
     | DialogLogSavedViewModel
+    | ResearchDialogLogsViewModel
     | ErrorViewModel
 )
 
@@ -76,6 +82,17 @@ def controller_result_to_flask_response(
 
     if isinstance(result, DialogLogSavedViewModel):
         return jsonify(dialog_log_saved_view_model_to_json_dict(result)), 200
+
+    if isinstance(result, ResearchDialogLogsViewModel):
+        # 仕様: docs/spec/research-dialog-download.md#json-の形
+        # 研究用だけ: 日本語を \u にせず、キーの順を保つ(DR-001 論点3 = B)
+        text = json.dumps(
+            research_dialog_logs_view_model_to_json_list(result), ensure_ascii=False
+        )
+        return (
+            Response(text, status=200, content_type="application/json; charset=utf-8"),
+            200,
+        )
 
     raise TypeError(f"Unsupported controller result type: {type(result)!r}")
 
