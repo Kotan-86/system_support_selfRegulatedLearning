@@ -344,6 +344,7 @@ PBI-A-2 の後に着手する。PBI-A-1 の保存 API(`end_method` = `page_leave
 - **共有IF**: 「共通: 保存される対話ログ(JSON)の形と保存 API」。PBI-A-1 が作り、PBI-A-2・PBI-B(保存要求を送る側)と、研究者のアクセスの別 Issue(読み出し)が使う。PBI-A-2・PBI-B は、この形を変えない。
 - **所有の順序**: PBI-A-2 と PBI-B は同じ画面の JS を変更するため、直列に進める(A-2 → B)。
 - **実装後に同期が要る既存仕様**(feasibility-11 §4。内容はこの仕様の共有IF に従う): [framework-drivers-persistence.md](./framework-drivers-persistence.md)(`messages.responded_at`、`dialog_logs`、変更前の DB への対応)、[domain-model.md](./domain-model.md)#Message(AI の応答の生成を終えた時刻)、[application-usecase.md](./application-usecase.md)(対話ログの保存のユースケース)、[interfaces-layer.md](./interfaces-layer.md) と [framework-drivers-layer.md](./framework-drivers-layer.md)(保存 API)。
+- **実装の置き場の変更(#25、2026-10-19)**: 発言1件の JSON 化と `FORMAT_VERSION` は `interfaces/tutoring/dialog_log_json_format.py` に移り、保存側の `framework_drivers/db/tutoring/dialog_log_json.py` はそれを使う(出力は変わらない)。研究用ダウンロード([research-dialog-download.md](./research-dialog-download.md))が同じ形の読み出し側として使う。〔PO 決定 DR-001 論点1=B〕
 - **既存仕様・文書との食い違い(本仕様では解消しない。消えない保存基盤の別 Issue で扱う)**:
 
   | 対象 | 記述 | 食い違い |

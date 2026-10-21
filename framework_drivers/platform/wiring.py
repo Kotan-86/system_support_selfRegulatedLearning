@@ -16,6 +16,16 @@ from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
 from application.tutoring.ports.llm_gateway import LlmGateway
+from application.tutoring.use_cases.export_dialog_logs import ExportDialogLogsUseCase
+from framework_drivers.db.tutoring.sqlite_dialog_log_export_query import (
+    SqliteDialogLogExportQuery,
+)
+from interfaces.tutoring.controllers.export_dialog_logs_controller import (
+    ExportDialogLogsController,
+)
+from interfaces.tutoring.presenters.research_dialog_logs_presenter import (
+    ResearchDialogLogsPresenter,
+)
 from application.tutoring.use_cases.run_tutoring_pipeline import RunTutoringPipelineUseCase
 from application.tutoring.use_cases.save_dialog_log import SaveDialogLogUseCase
 from application.tutoring.use_cases.send_chat_message import SendChatMessageUseCase
@@ -283,6 +293,24 @@ def build_send_chat_message_controller(
     return SendChatMessageController(
         use_case=use_case,
         presenter=ChatResponsePresenter(),
+    )
+
+
+def build_export_dialog_logs_controller(
+    *,
+    learning_connection: sqlite3.Connection,
+    tutor_connection: sqlite3.Connection,
+) -> ExportDialogLogsController:
+    """ExportDialogLogsController を組み立てる(2つの DB を読むだけ)。"""
+    # 仕様: docs/spec/research-dialog-download.md
+    return ExportDialogLogsController(
+        use_case=ExportDialogLogsUseCase(
+            SqliteDialogLogExportQuery(
+                tutor_connection=tutor_connection,
+                learning_connection=learning_connection,
+            )
+        ),
+        presenter=ResearchDialogLogsPresenter(),
     )
 
 

@@ -524,7 +524,7 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 
 - `SaveDialogLogController.execute(payload, *, received_at)`: `payload`（リクエスト本文を JSON として読んだもの。JSON でなければ `None`）が JSON オブジェクトでない、`participant_id` が文字列でない・空・空白だけ、`end_method` が不正、のいずれかは `ValidationError`（エラー ViewModel。HTTP 400）。`participant_id` は前後の空白を除いた値で `LearnerId` と講義（[default_lecture](#default_lecture)）を解決する。それ以外は `SaveDialogLogUseCase` の結果を `DialogLogSavedPresenter` で ViewModel にする（失敗は `ErrorPresenter`）
 - JSON への変換は `interfaces/common/json_encoding.py` の `dialog_log_saved_view_model_to_json_dict`（3 キーだけ）。Flask への変換は `controller_result_to_flask_response`（成功は 200）。
-- 保存する対話ログ本体の JSON（`log_json`）の組み立ては、この層ではなく `framework_drivers/db/tutoring/dialog_log_json.py`（[framework-drivers-persistence.md#dialog_logs テーブル](./framework-drivers-persistence.md)）。
+- 保存する対話ログ本体の JSON（`log_json`）の組み立ては `framework_drivers/db/tutoring/dialog_log_json.py`（[framework-drivers-persistence.md#dialog_logs テーブル](./framework-drivers-persistence.md)）。発言1件の JSON 化と `FORMAT_VERSION` は、保存と研究用ダウンロードで共有するため `interfaces/tutoring/dialog_log_json_format.py` に置く（`dialog_log_json.py` がそれを使う。〔PO 決定 DR-001 論点1=B〕）。
 
 ---
 
@@ -538,6 +538,7 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 | `POST /api/quiz-attempts`        | `RecordQuizAttemptController`   | `RecordQuizAttemptPresenter`  | 成功 / Error            |
 | `POST /chat`                     | `SendChatMessageController`     | `ChatResponsePresenter`       | `ChatResponseViewModel` |
 | `POST /api/dialog-log`（新設）   | `SaveDialogLogController`       | `DialogLogSavedPresenter`     | `DialogLogSavedViewModel` / Error |
+| `GET /research/participants/{id}/dialog-logs`、`GET /research/dialog-logs`（[research-dialog-download.md](./research-dialog-download.md)） | `ExportDialogLogsController` | `ResearchDialogLogsPresenter` | `ResearchDialogLogsViewModel` / Error |
 
 ---
 
