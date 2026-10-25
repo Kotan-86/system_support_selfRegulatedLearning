@@ -41,3 +41,14 @@ build/
 # --- その他 ---
 .DS_Store
 settings.local.json
+
+# --- 実機確認で作った検証用ファイル（リポジトリ直下のみ） ---
+/restored/
+/lifecycle.json
+/lad-before.json
+/lad-after.json
+/before.json
+/before2.json
+/after.json
+/after2.json
+/after3.json

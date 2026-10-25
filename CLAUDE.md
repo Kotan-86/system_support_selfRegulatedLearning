@@ -6,7 +6,7 @@
   - 静的解析: なし(未設定)
   - 型検査: なし(未設定)
   - ビルド: なし(`uv sync` で依存解決)
-  - テスト: `uv run pytest tests/ -v`(実呼び出しは `-m real_llm`、認証が必要)
+  - テスト: `uv run pytest tests/ -v`(実呼び出しは `-m real_llm`、認証が必要)。**Windows では `PYTHONUTF8=1` を付ける**(付けないと cp932 の文字化けで node 系の reflect テストが 4 failed / 6 errors になる。Mac からの移行の影響と見られる。PO指示 2026-10-26)
 - UI確認の準備: `uv run flask --app framework_drivers.platform.main run`。Vertex認証は `.env.local`(README参照)
 - UI以外の実動作の確認方法: `uv run pytest tests/ -v`
 - Gitホストと提出手順: GitHub PR、ベースブランチ: develop
