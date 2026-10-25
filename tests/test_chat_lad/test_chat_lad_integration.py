@@ -1,8 +1,8 @@
 """
-Phase 3 結合テスト: 学習データ登録 → チャットでプロンプトに反映 / participant_id 欠損で 400
+Phase 3 結合テスト: 学習データ登録 → チャットでプロンプトに反映 / participant_id 省略時はログインした本人
 
 - シナリオ 3.1: viewing-log → quiz-attempts → POST /chat(participant_id) → プロンプトに LAD が含まれる
-- シナリオ 3.2: POST /chat で session_id も participant_id も送らない → 400
+- シナリオ 3.2: POST /chat で session_id も participant_id も送らない → ログインした本人として 200(旧: 400)
 """
 import pytest
 
@@ -74,11 +74,11 @@ class TestChatLadIntegration:
             or "視聴ログ要約" in prompt
         ), "プロンプトに学習データが含まれること"
 
-    def test_chat_without_participant_id_returns_400(self, chat_lad_client) -> None:
-        """POST /chat で message のみ（session_id も participant_id も無し）だと 400。"""
+    def test_chat_without_participant_id_uses_logged_in_participant(self, chat_lad_client) -> None:
+        """AC14(participant-login): message のみ(participant_id なし)でも、ログインした本人として 200。(旧: 400)"""
         r = chat_lad_client.post(
             "/chat",
             json={"message": "こんにちは"},
             content_type="application/json",
         )
-        assert r.status_code == 400
+        assert r.status_code == 200

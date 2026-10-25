@@ -22,13 +22,8 @@
   </style>
 </head>
 <body>
-  {% if missing_participant_id %}
-  <div class="error-box">
-    <h3>参加者 ID が必要です</h3>
-    <p>このページには <code>?participant_id=</code> クエリパラメータが必須です。</p>
-    <p>例: <code>/lecture?participant_id=1</code></p>
-  </div>
-  {% elif lecture_error %}
+  <form method="post" action="/logout" id="logout-form"><button type="submit" id="logout-button">ログアウト</button></form>
+  {% if lecture_error %}
   <div class="error-box">
     <h3>講義を表示できません</h3>
     <p>{{ lecture_error }}</p>
@@ -74,11 +69,12 @@
     <div id="quiz-error" hidden role="alert"></div>
     <div id="quiz-result" hidden>
       <p>小テストの回答を送信しました。お疲れさまでした。</p>
-      <p><a id="quiz-reflect-link" href="/reflect?participant_id={{ participant_id }}">振り返り画面へ進む</a></p>
+      <p><a id="quiz-reflect-link" href="/reflect">振り返り画面へ進む</a></p>
     </div>
   </section>
 
   <script>
+    window.__PARTICIPANT_ID__ = {{ participant_id | tojson }};
     window.__LECTURE_VIDEO_ID__ = {{ youtube_video_id | tojson }};
     window.__QUIZ_ANSWER_KEY__ = {{ quiz_answer_key | tojson }};
     window.__LECTURE_SUBTITLES__ = {{ subtitle_cues | tojson }};

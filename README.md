@@ -9,6 +9,8 @@ uv sync
 uv run flask --app framework_drivers.platform.main run
 ```
 
+起動には `SECRET_KEY` と参加者の設定ファイルの指定が必須（[参加者ログイン](#参加者ログインid--パスワード)を参照）。
+
 ## 環境変数（Gemini Enterprise Agent Platform / 旧 Vertex AI）
 
 - **GOOGLE_APPLICATION_CREDENTIALS** … サービスアカウント JSON のパス（未設定時は gcloud ADC を使用）
@@ -43,6 +45,84 @@ uv run python scripts/verify_gcp_agent_platform.py
 
 詳細は [tests/README_TDD.md](tests/README_TDD.md) を参照。
 
+## 参加者ログイン（ID / パスワード）
+
+仕様: [docs/spec/participant-login.md](docs/spec/participant-login.md)
+
+研究協力者は、研究者から配布された ID（`P01`〜`P30`）とパスワードでログインしてから使う。未ログインで画面を開くとログイン画面（`/login`）へ移動し、API は 401 を返す。ログイン後の画面は `/lecture`（ログアウトは画面のログアウト操作）。ログインは12時間有効。研究用ダウンロード（`/research/`）の Basic 認証は、これとは別系統で変わらない。
+
+### SECRET_KEY（必須）
+
+Flask のセッションの署名に使う。**未設定・空・`tutor_secret_key` のときは起動しない。** 推測されにくい値を各自が生成して設定する（リポジトリには入れない）:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+ローカルは `.env.local` に `SECRET_KEY=<生成した値>` と書く（`.env.example` 参照）。本番は Secret Manager で渡す（下記）。
+
+### 設定ファイルと作成スクリプト
+
+ID とパスワードの**ハッシュ**は、JSON の設定ファイルに保存する。項目は ID・発行日/更新日・状態（有効/停止）・備考・ハッシュだけで、パスワードの平文や個人を特定する情報は入らない。
+
+- 置き場は `secrets/participants.json`（既定）。`secrets/` は `.gitignore` と `.dockerignore` で除外済み。**リポジトリにもイメージにも入れない。** 研究者の手元と Secret Manager にだけ置く。
+- アプリにはその場所を環境変数 `PARTICIPANT_CREDENTIALS_FILE` で伝える。ない・読めない・壊れているときは起動しない。
+- 作成スクリプトは `scripts/manage_participants.py`。場所は `--file` > 環境変数 `PARTICIPANT_CREDENTIALS_FILE` > `secrets/participants.json` の順で決まる。
+
+```bash
+# 新規: 次の未使用の ID（P01〜P30）を払い出す。--note は任意の備考
+uv run python scripts/manage_participants.py add --note "メモ"
+# 再発行: 有効な ID のパスワードを作り直す（未登録・停止の ID は失敗し、ファイルは変わらない）
+uv run python scripts/manage_participants.py reissue P01
+# 停止: 以後その ID はログインできない（停止した番号は再利用しない。解除の指示はない）
+uv run python scripts/manage_participants.py suspend P01
+```
+
+- パスワード（16文字以上のランダムな文字列）は、**作成・再発行したとき標準出力に1回だけ**表示される。ファイルにはハッシュだけが残るため、後から確認できない。表示されたら安全な方法で協力者に配布する。
+- 停止しても、すでに発行されたセッションは有効期限（12時間）まで有効。
+
+### ローカルでの実行
+
+1. `.env.local` に `SECRET_KEY`、必要なら `PARTICIPANT_CREDENTIALS_FILE` を書く（`.env.example` 参照）。
+2. 上記のスクリプトで `secrets/participants.json` に ID を作る。
+3. `./scripts/run_dev_server.sh` で起動する（`SESSION_COOKIE_SECURE_DISABLED` は既定で `1`。`PARTICIPANT_CREDENTIALS_FILE` の既定は `secrets/participants.json`）。
+4. ブラウザで `http://127.0.0.1:5001/login` を開き、ID とパスワードでログインする。
+
+`flask run` で直接起動する場合は、`SECRET_KEY` と `PARTICIPANT_CREDENTIALS_FILE` を環境変数で与え、HTTP で動かすときだけ `SESSION_COOKIE_SECURE_DISABLED=1` を加える。Cookie は既定で `Secure` が付くため、HTTP のままでは Cookie が送られずログインできない。**`SESSION_COOKIE_SECURE_DISABLED=1` はローカルの HTTP 実行だけに使い、本番（HTTPS）では設定しない。**
+
+### 本番（Cloud Run）への反映
+
+設定ファイルは Secret Manager のシークレットとして登録し、Cloud Run に**ファイルとしてマウント**する。そのパスを `PARTICIPANT_CREDENTIALS_FILE` で渡す。更新（ID の追加・再発行・停止）は、シークレットに新しいバージョンを追加して**再デプロイ**することで反映する。
+
+```bash
+# 初回: シークレットを作る
+gcloud secrets create participant-credentials --data-file=secrets/participants.json
+# 更新: 新しいバージョンを追加してから再デプロイ
+gcloud secrets versions add participant-credentials --data-file=secrets/participants.json
+
+# SECRET_KEY 用のシークレット（値は生成したものを標準入力から渡す）
+python -c "import secrets; print(secrets.token_hex(32))" | gcloud secrets create session-secret-key --data-file=-
+```
+
+「Cloud Run デプロイ」の `gcloud run deploy` のコマンドには、次がすでに含まれている（`DB_REPLICA_BUCKET` など複製の設定と同じコマンドで渡す）:
+
+```text
+  --set-env-vars "...,PARTICIPANT_CREDENTIALS_FILE=/secrets/participant-credentials/participants.json"
+  --set-secrets "...,SECRET_KEY=session-secret-key:latest,/secrets/participant-credentials/participants.json=participant-credentials:latest"
+```
+
+- マウント先は、イメージ内の `/app` とその下（`deploy/` を含む）と重ならない専用のディレクトリ（`/secrets/participant-credentials/`）にする。重なると、マウント先の既存の中身が見えなくなるため。
+- 実行サービスアカウントに、**対象のシークレットだけ**への読み取り権限（`roles/secretmanager.secretAccessor`）を付ける（プロジェクト全体には付けない）:
+  ```bash
+  gcloud secrets add-iam-policy-binding participant-credentials \
+    --member "serviceAccount:<実行サービスアカウント>" --role roles/secretmanager.secretAccessor
+  gcloud secrets add-iam-policy-binding session-secret-key \
+    --member "serviceAccount:<実行サービスアカウント>" --role roles/secretmanager.secretAccessor
+  ```
+- 起動手順（コンテナの起動スクリプト）は、設定ファイルを登録しない。Secret Manager から渡されたファイルをアプリが読むだけ。
+- 本番は HTTPS のため、`SESSION_COOKIE_SECURE_DISABLED` は設定しない。
+- （未確認）上記の `--set-secrets` のファイルマウントの書式、マウント先の制約、シークレットの大きさの上限は、公式ドキュメントを参照できていない。デプロイ前に Cloud Run の公式ドキュメントで確認すること。
+
 ## Cloud Run デプロイ
 
 仕様: [docs/spec/framework-drivers-layer.md](docs/spec/framework-drivers-layer.md#デプロイ運用what)
@@ -64,11 +144,16 @@ uv run python scripts/verify_gcp_agent_platform.py
 
 ```powershell
 docker build -t sssrl-backend .
-docker run -p 8080:8080 -e DB_REPLICA_DISABLED=1 sssrl-backend
-curl.exe "http://localhost:8080/lecture?participant_id=1"
+docker run -p 8080:8080 -e DB_REPLICA_DISABLED=1 -e SECRET_KEY=<自分で生成した値> `
+  -v "${PWD}/secrets/participants.json:/secrets/participants.json:ro" `
+  -e PARTICIPANT_CREDENTIALS_FILE=/secrets/participants.json sssrl-backend
 ```
 
-ローカルの `docker run` では GCS に接続しないため、`DB_REPLICA_DISABLED=1`（復元も複製もしない）が必要。指定しないと「複製先の設定がない」で起動が失敗する。なお、このビルドは SQLite のバージョン確認（修正済みの版でなければ失敗）を含み、この文書の作成時点で `docker build` は実行して確かめていない。
+ローカルの `docker run` では GCS に接続しないため、`DB_REPLICA_DISABLED=1`（復元も複製もしない）が必要。指定しないと「複製先の設定がない」で起動が失敗する。
+
+`SECRET_KEY` と参加者の設定ファイルの指定も必須のため、設定ファイルを入れない（イメージには含めない）ので、上記のようにボリュームで渡し `PARTICIPANT_CREDENTIALS_FILE` でそのパスを指定する。これらがないとイメージは起動しない。HTTP で確認する場合のみ `-e SESSION_COOKIE_SECURE_DISABLED=1` を加える。
+
+このビルドは SQLite のバージョン確認（修正済みの版でなければ失敗）を含む。
 
 `secrets/` はイメージに含めない（実行時は Cloud Run の付属サービスアカウント + ADC で Vertex 認証）。
 
@@ -89,9 +174,11 @@ gcloud run deploy "${SERVICE_NAME}" `
   --min-instances=1 `
   --no-cpu-throttling `
   --allow-unauthenticated `
-  --set-env-vars "VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION},DB_REPLICA_BUCKET=${REPLICA_BUCKET}" `
-  --set-secrets "YOUTUBE_API_KEY=youtube-api-key:latest"
+  --set-env-vars "VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION},DB_REPLICA_BUCKET=${REPLICA_BUCKET},PARTICIPANT_CREDENTIALS_FILE=/secrets/participant-credentials/participants.json" `
+  --set-secrets "YOUTUBE_API_KEY=youtube-api-key:latest,SECRET_KEY=session-secret-key:latest,/secrets/participant-credentials/participants.json=participant-credentials:latest"
 ```
+
+`SECRET_KEY` と参加者の設定ファイル（ファイルマウント）用のシークレットは、デプロイの前に作っておく（[参加者ログイン: 本番への反映](#本番cloud-runへの反映)）。
 
 デプロイの条件（変えない）:
 
@@ -99,23 +186,19 @@ gcloud run deploy "${SERVICE_NAME}" `
 - **`--max-instances=1`**: 複数のインスタンスが同じ複製先へ書くと、複製が壊れるか、片方の書き込みが失われる。
 - **`--no-cpu-throttling`** と **`--min-instances=1`**: リクエストがない間も Litestream が複製を続け、インスタンスが落ちる機会を減らすため。
 - **`DB_REPLICA_BUCKET` を必ず渡す**: 未設定または空のままコンテナを起動すると、起動を失敗させ、ログに「複製先の設定がない」と残す（永続化なしで稼働するのを防ぐため）。
-- 上の例は永続化に関わる部分だけを示す。`SECRET_KEY` や `PARTICIPANT_CREDENTIALS_FILE` など、アプリが読む他の環境変数は、起動の手順（`deploy/entrypoint.sh`）が消さずにそのままアプリへ渡す。
+- `SECRET_KEY` と `PARTICIPANT_CREDENTIALS_FILE` など、アプリが読む環境変数は、起動の手順（`deploy/entrypoint.sh`）が消さずにそのままアプリへ渡す。
 
 Secret Manager に `youtube-api-key` が未整備の場合は、一時的に `--set-env-vars` で `YOUTUBE_API_KEY` を渡してもよい（本番では Secret Manager の利用を推奨）。
 
-デプロイ完了後、表示されたサービス URL で疎通確認する:
+デプロイ完了後、表示されたサービス URL で疎通確認する（ログイン画面が 200 で表示されれば起動している）:
 
 ```powershell
-curl.exe "https://<service-url>/lecture?participant_id=1"
+curl.exe -i "https://<service-url>/login"
 ```
 
-LAD API（YouTube API キー設定時）:
+LAD API など `/api/` は、ログイン済みのセッションが必要（未ログインは 401）。ブラウザでログインしてから使う。
 
-```powershell
-curl.exe "https://<service-url>/api/participants/1/lad"
-```
-
-Google Apps Script（小テスト Form 等）から呼び出す場合は、スクリプトプロパティの **`API_BASE_URL`** にサービス URL（末尾スラッシュなし）を設定する。
+Google Apps Script（小テスト Form 等）など、ログインしない外部のプログラムからは `/api/` を呼び出せない（401 になる）。呼び出す場合は、ログインのセッション Cookie を扱う仕組みが別に必要になる（現在は未対応）。
 
 ### Cloud Run 環境変数
 
@@ -126,7 +209,9 @@ Google Apps Script（小テスト Form 等）から呼び出す場合は、ス�
 | `DB_REPLICA_BUCKET` | Cloud Run では必須 | 複製先の GCS バケット名（`gs://` を付けない名前だけ）。`learning.db` と `tutor.db` はこのバケットの中の別々の場所（`learning/`、`tutor/`）に複製される。未設定または空だとコンテナの起動が失敗する |
 | `DB_REPLICA_DISABLED` | ローカル専用 | `1` のときだけ有効。復元も複製もせずにアプリを起動する（ログに「複製しない」と残る）。**Cloud Run では設定しない**（設定すると永続化なしで稼働する）。それ以外の値と未設定は「指定なし」 |
 | `YOUTUBE_API_KEY` | LAD 利用時 | YouTube Data API キー |
-| `SECRET_KEY` | 推奨 | Flask セッション用（未設定時は開発用デフォルト） |
+| `SECRET_KEY` | 必須 | Flask セッション用。未設定・空・`tutor_secret_key` では起動しない（[参加者ログイン](#参加者ログインid--パスワード)） |
+| `PARTICIPANT_CREDENTIALS_FILE` | 必須 | 参加者の ID/パスワード（ハッシュ）の設定ファイルのパス。ない・読めない・壊れているときは起動しない |
+| `SESSION_COOKIE_SECURE_DISABLED` | ローカルの HTTP のみ | `1` で Cookie の `Secure` を外す。本番（HTTPS）では設定しない |
 | `TUTOR_DB_PATH` / `LEARNING_DB_PATH` | 任意 | 未設定時 `db/data/*.db` |
 | `DEFAULT_LECTURE_ID` | 任意 | マップ外 `participant_id` のフォールバック講義 ID（既定 `lecture-1`） |
 | `RESEARCHER_BASIC_AUTH_USER` | 研究用ダウンロード利用時 | 研究者の Basic 認証のユーザー名 |

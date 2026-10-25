@@ -40,10 +40,10 @@ class TestPostQuizAttempts:
         assert data is not None
         assert "attempt_id" in data, "レスポンスに attempt_id を含むこと"
 
-    def test_quiz_attempts_missing_participant_id_returns_400(
+    def test_quiz_attempts_missing_participant_id_uses_logged_in_participant(
         self, phase2_client
     ) -> None:
-        """participant_id を欠くと 400 を返す。"""
+        """AC14(participant-login): participant_id を省略すると、ログインした本人として 201。(旧: 400)"""
         payload = _valid_payload()
         del payload["participant_id"]
         r = phase2_client.post(
@@ -51,6 +51,4 @@ class TestPostQuizAttempts:
             json=payload,
             content_type="application/json",
         )
-        assert r.status_code == 400, (
-            "必須項目欠損時は 400 を返すこと"
-        )
+        assert r.status_code == 201

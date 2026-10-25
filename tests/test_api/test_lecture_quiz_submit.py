@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.login_helpers import login_as
+
 from framework_drivers.db.learning.quiz_definitions import (
     lecture_1,
     lecture_2,
@@ -70,9 +72,11 @@ def test_lecture_quiz_correct_payload_returns_201(
     payload_builder,
 ) -> None:
     """各講義の正答 payload で POST /api/quiz-attempts は 201 と attempt_id を返す。"""
+    payload = payload_builder()
+    login_as(phase2_client, str(payload["participant_id"]))
     response = phase2_client.post(
         "/api/quiz-attempts",
-        json=payload_builder(),
+        json=payload,
         content_type="application/json",
     )
     assert response.status_code == 201

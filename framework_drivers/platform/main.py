@@ -1,17 +1,22 @@
 # 仕様: docs/spec/framework-drivers-layer.md#HTTP-契約
+# 仕様: docs/spec/participant-login.md#3-参加者の特定fr-52
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-4-platform-配線
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-5-講義動画フロント
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-6-LAD-AI-統合フロント
 """Flask アプリ factory — 全 API を Controller 経由で配線する。"""
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, Response, g, redirect, render_template, request, url_for
 from jinja2 import ChoiceLoader, FileSystemLoader
 
+from application.common.errors import ErrorCode
 from domain.shared.ids import LectureId
 from framework_drivers.db.learning.quiz_definitions import lecture_1, lecture_2, lecture_3
 from framework_drivers.db.learning.sqlite_connection import connect_learning_db
@@ -23,6 +28,17 @@ from framework_drivers.platform.http_response import (
     controller_result_to_flask_response,
     http_status_for_error,
 )
+from framework_drivers.platform.participant_auth import (
+    DEFAULT_AFTER_LOGIN_PATH,
+    current_participant_id,
+    load_secret_key,
+    register_participant_auth,
+)
+from framework_drivers.platform.participant_credentials import (
+    PARTICIPANT_CREDENTIALS_FILE_ENV,
+    load_credentials_file,
+)
+from framework_drivers.platform.participant_scope import resolve_claimed_participant_id
 from framework_drivers.platform.research_auth import register_research_auth
 from interfaces.learning.view_models.errors import ErrorViewModel
 from framework_drivers.platform.wiring import (
@@ -60,6 +76,8 @@ _REFLECT_FIXED_TEXT = {
     ),
 }
 
+
+_TUTOR_SESSION_NOT_FOUND_CODE = ErrorCode.TUTOR_SESSION_NOT_FOUND.value
 
 _STATIC_LECTURE_CATALOG = StaticLectureCatalog()
 
@@ -142,8 +160,39 @@ def _subtitle_cues_for_lecture(lecture_id: str) -> list[dict[str, object]]:
     ]
 
 
-def create_app() -> Flask:
-    """Flask アプリを生成し、Composition Root 経由でルートを登録する。"""
+def _reject_foreign_claim(claimed: object) -> Response | None:
+    """送られた participant_id が本人と異なる/不正な型なら、DB・LLM の前に 403/400 を返す。"""
+    status = resolve_claimed_participant_id(claimed, current_participant_id())
+    if status is None:
+        return None
+    return Response(
+        json.dumps({"error": "forbidden" if status == 403 else "invalid_participant_id"}),
+        status=status,
+        mimetype="application/json",
+    )
+
+
+def _own_payload(payload: object) -> tuple[object, Response | None]:
+    """本文の participant_id を検査し、ログインした ID を入れた本文を返す。
+
+    本文が JSON オブジェクトでないときは、そのまま Controller の検証に任せる。
+    """
+    if not isinstance(payload, dict):
+        return payload, None
+    rejection = _reject_foreign_claim(payload.get("participant_id"))
+    if rejection is not None:
+        return payload, rejection
+    return {**payload, "participant_id": current_participant_id()}, None
+
+
+def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
+    """Flask アプリを生成し、Composition Root 経由でルートを登録する。
+
+    SECRET_KEY・参加者の設定ファイルに不備があれば、DB を開く前に例外で止まる。
+    """
+    clock = clock or (lambda: datetime.now(timezone.utc))
+    secret_key = load_secret_key()
+    credentials = load_credentials_file(os.environ.get(PARTICIPANT_CREDENTIALS_FILE_ENV))
     init_databases()
 
     app = Flask(
@@ -157,10 +206,11 @@ def create_app() -> Flask:
             FileSystemLoader(str(_PROJECT_ROOT / "app" / "templates")),
         ]
     )
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "tutor_secret_key")
+    app.config["SECRET_KEY"] = secret_key
 
-    # 研究者の認証は DB 接続の before_request より前(未認証なら DB を開かない)
+    # 研究者の認証・参加者のログインは DB 接続の before_request より前(未認証なら DB を開かない)
     register_research_auth(app)
+    register_participant_auth(app, credentials=credentials, clock=clock)
 
     @app.before_request
     def _open_db_connections() -> None:
@@ -176,49 +226,22 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        """ルート: /reflect へリダイレクト（クエリ文字列を保持）。"""
-        target = url_for("reflect")
-        if request.query_string:
-            target = f"{target}?{request.query_string.decode()}"
-        return redirect(target)
+        """ルート: ログイン済みなら /lecture へ(未ログインは認証層がログイン画面へ)。"""
+        return redirect(DEFAULT_AFTER_LOGIN_PATH, 302)
 
     @app.route("/reflect")
     def reflect():
-        """GET /reflect: LAD + AI 振り返り統合画面（participant_id クエリ必須）。"""
-        participant_id = request.args.get("participant_id", "").strip()
-        if not participant_id:
-            return (
-                render_template(
-                    "reflect.html",
-                    missing_participant_id=True,
-                    participant_id="",
-                    **_REFLECT_FIXED_TEXT,
-                ),
-                400,
-            )
+        """GET /reflect: LAD + AI 振り返り統合画面(ログインした本人の画面。クエリの participant_id は無視)。"""
         return render_template(
             "reflect.html",
-            missing_participant_id=False,
-            participant_id=participant_id,
+            participant_id=current_participant_id(),
             **_REFLECT_FIXED_TEXT,
         )
 
     @app.route("/lecture")
     def lecture():
-        """GET /lecture: 講義動画ページ（participant_id クエリ必須）。"""
-        participant_id = request.args.get("participant_id", "").strip()
-        if not participant_id:
-            return (
-                render_template(
-                    "lecture.html",
-                    missing_participant_id=True,
-                    participant_id="",
-                    lecture_id="",
-                    youtube_video_id="",
-                    lecture_error="",
-                ),
-                400,
-            )
+        """GET /lecture: 講義動画ページ(ログインした本人の画面。クエリの participant_id は無視)。"""
+        participant_id = current_participant_id()
         try:
             lecture_id, youtube_video_id = _resolve_youtube_video_id_for_participant(
                 participant_id,
@@ -229,7 +252,6 @@ def create_app() -> Flask:
             return (
                 render_template(
                     "lecture.html",
-                    missing_participant_id=False,
                     participant_id=participant_id,
                     lecture_id="",
                     youtube_video_id="",
@@ -239,7 +261,6 @@ def create_app() -> Flask:
             )
         return render_template(
             "lecture.html",
-            missing_participant_id=False,
             participant_id=participant_id,
             lecture_id=lecture_id,
             youtube_video_id=youtube_video_id,
@@ -251,30 +272,40 @@ def create_app() -> Flask:
     @app.route("/chat", methods=["POST"])
     def chat():
         """POST /chat: SendChatMessageController 経由で AI 応答を返す。"""
-        data = request.get_json(silent=True) or {}
+        data, rejection = _own_payload(request.get_json(silent=True) or {})
+        if rejection is not None:
+            return rejection
         controller = build_send_chat_message_controller(
             learning_connection=g.learning_conn,
             tutor_connection=g.tutor_conn,
         )
         result = controller.execute(data, sent_at=datetime.now(timezone.utc))
+        if isinstance(result, ErrorViewModel) and result.error_code == _TUTOR_SESSION_NOT_FOUND_CODE:
+            # 他人のセッションと存在しないセッションを、応答からも区別させない(ID を本文に写さない)
+            result = replace(result, message="tutor session not found")
         return controller_result_to_flask_response(result)
 
     @app.route("/api/dialog-log", methods=["POST"])
     def api_dialog_log():
         """POST /api/dialog-log: 対話ログを保存する(仕様: dialog-log-save.md#保存-API)。"""
+        data, rejection = _own_payload(request.get_json(silent=True))
+        if rejection is not None:
+            return rejection
         controller = build_save_dialog_log_controller(
             learning_connection=g.learning_conn,
             tutor_connection=g.tutor_conn,
         )
         result = controller.execute(
-            request.get_json(silent=True), received_at=datetime.now(timezone.utc)
+            data, received_at=datetime.now(timezone.utc)
         )
         return controller_result_to_flask_response(result)
 
     @app.route("/api/quiz-attempts", methods=["POST"])
     def api_quiz_attempts():
         """POST /api/quiz-attempts: 小テスト 1 試行を記録する。"""
-        data = request.get_json(silent=True) or {}
+        data, rejection = _own_payload(request.get_json(silent=True) or {})
+        if rejection is not None:
+            return rejection
         controller = build_record_quiz_attempt_controller(g.learning_conn)
         result = controller.execute(data)
         return controller_result_to_flask_response(result)
@@ -282,7 +313,9 @@ def create_app() -> Flask:
     @app.route("/api/viewing-log", methods=["POST"])
     def api_viewing_log():
         """POST /api/viewing-log: 視聴ログ 1 件を記録する。"""
-        data = request.get_json(silent=True) or {}
+        data, rejection = _own_payload(request.get_json(silent=True) or {})
+        if rejection is not None:
+            return rejection
         controller = build_record_viewing_event_controller(g.learning_conn)
         result = controller.execute(data)
         return controller_result_to_flask_response(result)
@@ -290,13 +323,10 @@ def create_app() -> Flask:
     @app.route("/api/last-updated", methods=["GET"])
     def api_last_updated():
         """GET /api/last-updated: 学習データの最終更新時刻を返す。"""
-        participant_id = request.args.get("participant_id")
-        if not participant_id:
-            from interfaces.learning.view_models.last_updated import LastUpdatedViewModel
-
-            return controller_result_to_flask_response(
-                LastUpdatedViewModel(last_updated=None)
-            )
+        rejection = _reject_foreign_claim(request.args.get("participant_id"))
+        if rejection is not None:
+            return rejection
+        participant_id = current_participant_id()
         lecture_id = request.args.get("lecture_id")
         controller = build_get_last_updated_controller(g.learning_conn)
         result = controller.execute(participant_id, lecture_id=lecture_id)
@@ -305,6 +335,10 @@ def create_app() -> Flask:
     @app.route("/api/participants/<participant_id>/lad", methods=["GET"])
     def api_participants_lad(participant_id: str):
         """GET /api/participants/<participant_id>/lad: LAD ViewModel を返す。"""
+        rejection = _reject_foreign_claim(participant_id)
+        if rejection is not None:
+            return rejection
+        participant_id = current_participant_id()
         controller = build_get_learning_snapshot_controller(g.learning_conn)
         lecture_id = request.args.get("lecture_id")
         result = controller.execute(participant_id, lecture_id=lecture_id)

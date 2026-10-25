@@ -61,7 +61,7 @@ class _Page(HTMLParser):
 
 @pytest.fixture
 def page(phase2_client) -> _Page:
-    r = phase2_client.get("/reflect?participant_id=1")
+    r = phase2_client.get("/reflect")
     assert r.status_code == 200
     p = _Page()
     p.feed(r.get_data(as_text=True))

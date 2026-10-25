@@ -79,7 +79,7 @@ tests/
 | ------------------------------ | -------------------------------- | -------------------------------------------------------- | ------------------ |
 | `LectureNotFoundError`         | `LECTURE_NOT_FOUND`              | 講義カタログに `lecture_id` が無い                       | 404                |
 | `LearningSessionNotFoundError` | `LEARNING_SESSION_NOT_FOUND`     | 指定 `learning_session_id` の Session が無い             | 404                |
-| `TutorSessionNotFoundError`    | `TUTOR_SESSION_NOT_FOUND`        | 指定 `tutor_session_id` が無い                           | 404                |
+| `TutorSessionNotFoundError`    | `TUTOR_SESSION_NOT_FOUND`        | 指定 `tutor_session_id` が無い(`SendChatMessage` 継続時は他人のセッション・講義の不一致・スナップショット取得失敗を含む。#30 DR-30-T2) | 404                |
 | `ConflictError`                | `DUPLICATE_LEARNING_SESSION`     | 同一 `(learner_id, lecture_id)` の Learning Session 重複 | 409                |
 | `ConflictError`                | `TUTOR_SESSION_POLICY_VIOLATION` | 同一 `learning_session_id` の TutorSession 2 本目        | 409                |
 | `ValidationError`              | （サブコード各種）               | 入力・不変条件違反                                       | 400                |
@@ -823,9 +823,10 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 
 1. `user_message` が空なら **`err(ValidationError)`**（`EMPTY_USER_MESSAGE`）で終了
 2. **TutorSession 解決**
-   - `tutor_session_id` 指定時: `tutor_session = repository.find_by_id(...)`。無ければ **`err(TutorSessionNotFoundError)`**（`TUTOR_SESSION_NOT_FOUND`）
+   - `tutor_session_id` 指定時: 所有確認のため、先に `snapshot = learning_snapshot_query.get_by_learner_and_lecture(learner_id, lecture_id)` を 1 回取得し、`tutor_session = repository.find_by_id(...)` を得る。セッションが無い、`snapshot.session_id != tutor_session.learning_session_id`(他人のセッション・講義の不一致)、またはスナップショット取得が失敗したときは **`err(TutorSessionNotFoundError)`**（`TUTOR_SESSION_NOT_FOUND`）。書き込み・LLM 呼び出しの前に判定する
    - 未指定時: `learning = start_or_get_learning_session.execute(learner_id, lecture_id, ...)` → `start_or_get_tutor_session.execute(learning_session_id=learning.session_id, ...)`
-3. `snapshot = learning_snapshot_query.get_by_learner_and_lecture(learner_id, lecture_id)`
+   - > AC変更の注記(#30、PO決定 2026-10-26 DR-30-T2): 旧: 指定時は `repository.find_by_id(...)` のみで、無ければ `TutorSessionNotFoundError`。本人のセッションでの講義不一致・スナップショット取得失敗は、従来のエラー(スナップショットのエラー等)ではなく `TutorSessionNotFoundError` になる。
+3. 継続時は手順 2 で取得済みのスナップショットを使う(再取得しない)。初回時は `snapshot = learning_snapshot_query.get_by_learner_and_lecture(learner_id, lecture_id)`(失敗は `Err` を伝播)
 4. `lecture = lecture_catalog.find_by_id(lecture_id)`（プロンプト用。無ければ **`err(LectureNotFoundError)`** / `LECTURE_NOT_FOUND`）
 5. **初回・半角数字のみ特例**（既存挙動）: `messages` が空かつ `user_message` が `^[0-9]+$` のとき、定型文を `assistant_content` とし **パイプラインを呼ばない**（付帯メタデータはすべて `None`）
 6. 上記以外: `run_tutoring_pipeline.execute(...)` で 3 段 LLM（Student → Pedagogical → Interface）を実行。直前 assistant Message の `interpretationState` を `previous_state_card` として渡す
@@ -887,7 +888,7 @@ Tutoring は `LearningSnapshotQuery` Port 経由でのみ Learning を参照す�
 | 条件                      | AppError                    | ErrorCode                 | HTTP   |
 | ------------------------- | --------------------------- | ------------------------- | ------ |
 | `user_message` 空         | `ValidationError`           | `EMPTY_USER_MESSAGE`      | 400    |
-| 未知の `tutor_session_id` | `TutorSessionNotFoundError` | `TUTOR_SESSION_NOT_FOUND` | 404    |
+| 未知の `tutor_session_id`、または継続時の他人のセッション・講義の不一致・スナップショット取得失敗(#30、PO決定 2026-10-26 DR-30-T2。旧: 未知の `tutor_session_id` のみ) | `TutorSessionNotFoundError` | `TUTOR_SESSION_NOT_FOUND` | 404    |
 | 講義カタログ不在          | `LectureNotFoundError`      | `LECTURE_NOT_FOUND`       | 404    |
 | LLM 障害                  | `LlmGatewayError`           | `LLM_GATEWAY_ERROR`       | 502 等 |
 

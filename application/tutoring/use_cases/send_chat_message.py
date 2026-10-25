@@ -92,12 +92,16 @@ class SendChatMessageUseCase:
             return validated  # type: ignore[return-value]
 
         req = validated.value
-        tutor_session_result = self._resolve_tutor_session(req)
+        # 既存セッション指定時は、所有確認のため先にスナップショットを取る(取得は1回)。
+        early_snapshot = (
+            self._fetch_snapshot(req) if req.tutor_session_id is not None else None
+        )
+        tutor_session_result = self._resolve_tutor_session(req, early_snapshot)
         if tutor_session_result.is_err:
             return tutor_session_result  # type: ignore[return-value]
 
         tutor_session = tutor_session_result.value
-        snapshot_result = self._fetch_snapshot(req)
+        snapshot_result = early_snapshot or self._fetch_snapshot(req)
         if snapshot_result.is_err:
             return snapshot_result  # type: ignore[return-value]
 
@@ -150,11 +154,20 @@ class SendChatMessageUseCase:
         )
 
     def _resolve_tutor_session(
-        self, req: SendChatMessageRequest
+        self,
+        req: SendChatMessageRequest,
+        early_snapshot: Result[LearningSnapshot, AppError] | None = None,
     ) -> Result[TutorSession, AppError]:
         if req.tutor_session_id is not None:
             session = self._repository.find_by_id(req.tutor_session_id)
-            if session is None:
+            # 仕様: docs/spec/participant-login.md#3-参加者の特定fr-52 (AC15)
+            # 他の学習者のセッションは、存在しないセッションと同じエラーにする。
+            if (
+                session is None
+                or early_snapshot is None
+                or early_snapshot.is_err
+                or early_snapshot.value.session_id != session.learning_session_id
+            ):
                 return err(
                     TutorSessionNotFoundError(
                         f"tutor session not found: {req.tutor_session_id!s}"

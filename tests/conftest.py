@@ -13,6 +13,31 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# 仕様: docs/spec/participant-login.md#6-セッションの安全性の設定
+# main.py は読み込み時に create_app() を実行する。SECRET_KEY とテスト用の設定ファイルが
+# 必要なので、収集(import)の前に環境へ与える。
+from tests.login_helpers import (  # noqa: E402
+    TEST_PASSWORD,
+    apply_default_env,
+    ensure_login,
+    login_as,
+    post_login,
+    shared_credentials_path,
+)
+
+apply_default_env()
+
+
+@pytest.fixture(autouse=True)
+def _participant_login_env(monkeypatch):
+    """各テストに SECRET_KEY、設定ファイルの場所、Secure 無効(HTTP のテストクライアント用)を与える。
+
+    AC21 だけは、テストの中で SESSION_COOKIE_SECURE_DISABLED を外して既定の Secure を確かめる。
+    """
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-for-production")
+    monkeypatch.setenv("PARTICIPANT_CREDENTIALS_FILE", str(shared_credentials_path()))
+    monkeypatch.setenv("SESSION_COOKIE_SECURE_DISABLED", "1")
+
 
 def _project_root() -> Path:
     return PROJECT_ROOT
@@ -110,5 +135,7 @@ def app_client(env_tutor_db_path, tmp_path, monkeypatch, fake_llm_gateway):
 
     app = create_app()
     app.config["TESTING"] = True
-    return app.test_client()
+    client = app.test_client()
+    login_as(client, "1")
+    return client
 

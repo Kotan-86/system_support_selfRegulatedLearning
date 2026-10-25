@@ -18,6 +18,21 @@ set -a
 source .env.local
 set +a
 
+# 参加者ログイン(docs/spec/participant-login.md)。ローカルは HTTP のため Cookie の Secure を外す
+# (.env.local に値があればそれを優先)。本番(HTTPS)では設定しない。
+export SESSION_COOKIE_SECURE_DISABLED="${SESSION_COOKIE_SECURE_DISABLED:-1}"
+export PARTICIPANT_CREDENTIALS_FILE="${PARTICIPANT_CREDENTIALS_FILE:-secrets/participants.json}"
+
+if [[ -z "${SECRET_KEY:-}" ]]; then
+  echo "error: SECRET_KEY が未設定です。.env.local に設定してください(生成方法は README 参照)。" >&2
+  exit 1
+fi
+if [[ ! -f "$PARTICIPANT_CREDENTIALS_FILE" ]]; then
+  echo "error: 参加者の設定ファイルが見つかりません（$PARTICIPANT_CREDENTIALS_FILE）。" >&2
+  echo "  uv run python scripts/manage_participants.py add で作成してください(README 参照)。" >&2
+  exit 1
+fi
+
 case "${USE_HTTP_PROXY:-}" in
   1|true|yes|TRUE|True)
     echo "note: USE_HTTP_PROXY is enabled. Off-campus networks require USE_HTTP_PROXY=false in .env.local."

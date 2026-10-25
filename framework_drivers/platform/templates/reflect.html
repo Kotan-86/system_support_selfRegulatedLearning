@@ -9,16 +9,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/reflect.css') }}">
 </head>
 <body>
-  {% if missing_participant_id %}
-  <div class="error-box">
-    <h3>参加者 ID が必要です</h3>
-    <p>このページには <code>?participant_id=</code> クエリパラメータが必須です。</p>
-    <p>例: <code>/reflect?participant_id=1</code></p>
-  </div>
-  {% else %}
   <header class="reflect-header">
     <h1>学習振り返り</h1>
     <p class="participant-id">参加者 ID: <strong>{{ participant_id }}</strong></p>
+    <form method="post" action="/logout" id="logout-form"><button type="submit" id="logout-button">ログアウト</button></form>
   </header>
 
   <div class="reflect-layout">
@@ -78,6 +72,7 @@
   </div>
 
   <script>
+    window.__PARTICIPANT_ID__ = {{ participant_id | tojson }};
     window.__REFLECT_PARTICIPANT_ID__ = {{ participant_id | tojson }};
     window.__REFLECT_POLL_INTERVAL_MS__ = 5000;
   </script>
@@ -89,6 +84,5 @@
   <script src="{{ url_for('static', filename='js/reflect/dialog_log.js') }}"></script>
   <script src="{{ url_for('static', filename='js/reflect/leave_guard.js') }}"></script>
   <script src="{{ url_for('static', filename='js/reflect/reflect_app.js') }}"></script>
-  {% endif %}
 </body>
 </html>
