@@ -20,7 +20,7 @@ chmod 600 secrets/gcp-service-account.json
 ```bash
 GOOGLE_APPLICATION_CREDENTIALS=secrets/gcp-service-account.json
 VERTEX_PROJECT_ID=your-project-id
-VERTEX_LOCATION=us-east4
+VERTEX_LOCATION=asia-northeast1
 YOUTUBE_API_KEY=your-youtube-api-key
 ```
 

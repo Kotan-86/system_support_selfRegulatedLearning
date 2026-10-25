@@ -211,7 +211,7 @@ def main() -> int:
     if creds_path and not Path(creds_path).is_absolute():
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(_project_root() / creds_path)
 
-    location = os.environ.get("VERTEX_LOCATION", "us-east4")
+    location = os.environ.get("VERTEX_LOCATION", "asia-northeast1")
     model_name = os.environ.get("VERTEX_MODEL_NAME", "gemini-2.5-flash")
 
     session, default_project = _authorized_session()

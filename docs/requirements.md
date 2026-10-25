@@ -127,7 +127,7 @@ IDは本書内の通し番号。根拠欄は、詳細を定める既存ドキュ
 | NFR-11 | 保存先は SQLite 2ファイル(`learning.db`、`tutor.db`)。パスは `LEARNING_DB_PATH` / `TUTOR_DB_PATH` で変更可能 | [system-overview](./spec/system-overview.md) |
 | NFR-12 | 実験開始後は、学習データ用DBのスキーマを変更しない | ADR |
 | NFR-13 | 既存DBに対して、「なければ作る」方式のスキーマ適用で動作を壊さない(変更前DBへの対応) | [dialog-log-save](./spec/dialog-log-save.md) |
-| NFR-14 | **【変更】** Cloud Run のコンテナ内SQLiteは、再デプロイ・再起動で消える。**本スコープで永続化する**(PO決定、2026-10-21。方式は未定。新しいセッションで、想定する実験環境に基づいて議論する)。README と framework-drivers-layer の方針の食い違いも、そこで解消する | README, [dialog-log-save](./spec/dialog-log-save.md) |
+| NFR-14 | **【変更】** Cloud Run のコンテナ内SQLiteは、再デプロイ・再起動で消える。**本スコープで永続化する**(PO決定、2026-10-21)。**方式は決定済み**(#28、2026-10-26): Litestream で2つのSQLiteをGCSへ継続複製し、起動時に復元する(Cloud Run は `--max-instances=1`)。README と framework-drivers-layer の食い違いは #29 で解消した | [db-persistence](./spec/db-persistence.md), README, [dialog-log-save](./spec/dialog-log-save.md) |
 | NFR-16 | 【追加】スキーマの変更(ユーザー、コンテンツ選択ほか)は、実験開始(10/27)の前に確定する(ADR: 実験開始後は学習データ用DBのスキーマを変更しない) | ADR |
 | NFR-15 | 全参加者の学習セッション・対話セッションは、`participant_id` を共通キーとして一貫してたどれる | [system-overview](./spec/system-overview.md) |
 
@@ -166,7 +166,7 @@ IDは本書内の通し番号。根拠欄は、詳細を定める既存ドキュ
 | ID | 要件 | 根拠 |
 |---|---|---|
 | NFR-50 | ローカルは `uv` と Flask で起動できる。Cloud Run へコンテナでデプロイできる。**【追加】デプロイ先は、研究室(watalab)の Google アカウントの Google Cloud Run。Gemini API の料金請求も、そのアカウント宛にする(認証情報の連携が必要。10/26(月)9:00-10:00 に作業)** | README, PO |
-| NFR-51 | 設定は環境変数で与える(`VERTEX_PROJECT_ID`、`VERTEX_LOCATION`、`VERTEX_MODEL_NAME`、`YOUTUBE_API_KEY`、`GOOGLE_APPLICATION_CREDENTIALS`、DBパス) | README |
+| NFR-51 | 設定は環境変数で与える(`VERTEX_PROJECT_ID`、`VERTEX_LOCATION`、`VERTEX_MODEL_NAME`、`YOUTUBE_API_KEY`、`GOOGLE_APPLICATION_CREDENTIALS`、DBパス、複製先バケット `DB_REPLICA_BUCKET`、複製しない指定 `DB_REPLICA_DISABLED`(ローカル用。`1` のときだけ有効)) | README, [db-persistence](./spec/db-persistence.md) |
 | NFR-52 | 対応ブラウザ・画面サイズ`(要確認)`。ブラウザの離脱イベントの挙動差(Safariの戻る/進むでの復元など)に留意する | [dialog-log-save](./spec/dialog-log-save.md) |
 | NFR-53 | 画面は Vanilla JS / HTML / ECharts で構成する(フレームワークを増やさない) | [system-overview](./spec/system-overview.md) |
 
@@ -176,7 +176,7 @@ IDは本書内の通し番号。根拠欄は、詳細を定める既存ドキュ
 |---|---|---|
 | 1 | ~~成功指標が未定~~ → 2026-10-21 に決定(有効10人以上を12月末までに確認、上限30人)。「視聴した」は、1回の再生から有効(PO決定、2026-10-21) | [product-goal](./product-goal.md) |
 | 2 | ~~実験の実施環境~~ → Cloud Run(研究室アカウント)、開始 10/27 に決定。協力者の人数・同時利用・実験期間は未確認 | NFR-14, 50 |
-| 3 | 永続ストレージの方式(新しいセッションで議論) | NFR-14 |
+| 3 | ~~永続ストレージの方式~~ → 2026-10-26 に決定(#28): Litestream による GCS への継続複製。仕様は #29 | NFR-14, [db-persistence](./spec/db-persistence.md) |
 | 4 | ID/パスワードの発行・配布の方法、研究者用 Basic 認証との関係 | FR-53, 54 |
 | 7 | 10/26 までの範囲。入りきらないものの暫定運用(例: 字幕UI・文系3本は後追い) | §6 |
 | 8 | 字幕の時刻重なりの整理方針 | FR-73 |

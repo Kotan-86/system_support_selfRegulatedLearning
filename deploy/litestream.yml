@@ -1,0 +1,13 @@
+# 仕様: docs/spec/db-persistence.md (AC1, 継続複製)
+# Litestream v0.5.17。環境変数は Litestream が展開する。GCS の認証は ADC(鍵ファイルなし)。
+# DB のパスは、アプリの LEARNING_DB_PATH / TUTOR_DB_PATH と同じ値(Dockerfile の ENV)。
+# 停止時(SIGTERM)の最終同期の待ちの上限は約5秒(Cloud Run の猶予 10 秒に収める。AC11 で実測)。
+shutdown-sync-timeout: 5s
+
+dbs:
+  - path: ${LEARNING_DB_PATH}
+    replica:
+      url: gs://${DB_REPLICA_BUCKET}/learning
+  - path: ${TUTOR_DB_PATH}
+    replica:
+      url: gs://${DB_REPLICA_BUCKET}/tutor

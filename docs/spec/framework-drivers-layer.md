@@ -283,6 +283,7 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 - 現行 [db/schema_learning.sql](../../db/schema_learning.sql) は ADR 初期版（`participant_id` 直結）。**実験開始前**に目標スキーマへ揃え、以降は変更しない（ADR 準拠）
 - Mapper は **行 ↔ `LearningSession` 集約**の変換を担う（`framework_drivers/db/`）
 - 対話用・学習用 DB ファイルは **環境変数でパス指定**可能（[db/config.py](../../db/config.py)）
+- **再デプロイ・再起動で DB を失わない仕組み**: Litestream（v0.5.17）が 2 つの SQLite（`learning.db` / `tutor.db`）を GCS のバケットへ継続して複製し、コンテナの起動時（`deploy/entrypoint.sh`）に復元する。複製がなければ新規作成。復元に失敗したときと、複製先の設定がないときは、起動を失敗させる。詳細は [db-persistence.md](./db-persistence.md)
 
 ---
 
@@ -365,6 +366,8 @@ framework_drivers/db + external 具象
 | `USE_HTTP_PROXY`                 | 任意               | 学内プロキシ経由が必要なとき `true`。学外では `false` とし、`HTTP_PROXY` / `HTTPS_PROXY` は無効化して直接接続する |
 | `HTTP_PROXY` / `HTTPS_PROXY`     | 学内時             | 学内ゲートウェイ URL。`USE_HTTP_PROXY=true` のときのみ有効                                                        |
 | `RESEARCHER_BASIC_AUTH_USER` / `RESEARCHER_BASIC_AUTH_PASSWORD` | 研究用ダウンロード利用時 | 研究者の Basic 認証。どちらかが未設定・空なら `/research/*` は常に 401 |
+| `DB_REPLICA_BUCKET` | 複製を行う起動時（Cloud Run） | 複製先の GCS バケット名（`gs://` を付けない名前だけ）。未設定・空は「複製先の設定がない」で、`DB_REPLICA_DISABLED=1` がなければ起動しない。詳細は [db-persistence.md](./db-persistence.md) |
+| `DB_REPLICA_DISABLED` | 任意（ローカル用） | `1` のときだけ、復元・複製なしでの起動を許す。それ以外の値と未設定は「指定なし」。詳細は [db-persistence.md](./db-persistence.md) |
 
 ### ローカル秘密情報（What）
 
@@ -419,11 +422,11 @@ API 未有効時は `--enable-api` で有効化を試行できる（`serviceusag
 | 項目         | 方針                                                                 |
 | ------------ | -------------------------------------------------------------------- |
 | デプロイ単位 | **Flask アプリ 1 本**（API + HTML + 静的 JS）                        |
-| プロセス     | gunicorn 等 WSGI サーバー                                            |
-| 永続化       | SQLite ファイル用 **永続ディスク**（ステートレスのみの PaaS は不可） |
+| プロセス     | gunicorn（`-w 1`）。起動の入口は `deploy/entrypoint.sh`（Dockerfile の CMD）で、復元 → WAL 化 → Litestream の複製 + gunicorn の順 |
+| 永続化       | **GCS への継続複製（Litestream）+ 起動時の復元**。Cloud Run（インスタンス 1 つ）で動かす。詳細は [db-persistence.md](./db-persistence.md) |
 | ビルド       | フロント **ビルド不要**（Vanilla JS ソースをそのまま配信）           |
-| バックアップ | `tutor.db` / `learning.db` の定期コピー                              |
-| 同時書き込み | SQLite の特性上、**書き込みワーカー数に上限**を設ける                |
+| バックアップ | GCS バケットのオブジェクトの世代（バージョニング + 30 日のライフサイクル）と、研究者ダウンロード（対話ログの JSON、#25）の併用 |
+| 同時書き込み | SQLite の特性上、書き込み元を 1 つに限る: gunicorn `-w 1`、Cloud Run `--max-instances=1`（`--no-cpu-throttling`、`min-instances=1`） |
 
 ---
 
