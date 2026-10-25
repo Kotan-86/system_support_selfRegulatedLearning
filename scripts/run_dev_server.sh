@@ -21,6 +21,8 @@ set +a
 # 参加者ログイン(docs/spec/participant-login.md)。ローカルは HTTP のため Cookie の Secure を外す
 # (.env.local に値があればそれを優先)。本番(HTTPS)では設定しない。
 export SESSION_COOKIE_SECURE_DISABLED="${SESSION_COOKIE_SECURE_DISABLED:-1}"
+# HTTPS の強制(docs/spec/https-enforcement.md)も、ローカルの HTTP 実行のため解除する。本番では設定しない。
+export HTTPS_ENFORCEMENT_DISABLED="${HTTPS_ENFORCEMENT_DISABLED:-1}"
 export PARTICIPANT_CREDENTIALS_FILE="${PARTICIPANT_CREDENTIALS_FILE:-secrets/participants.json}"
 
 if [[ -z "${SECRET_KEY:-}" ]]; then

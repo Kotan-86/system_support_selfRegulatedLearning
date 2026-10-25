@@ -16,6 +16,8 @@ from werkzeug.security import generate_password_hash
 SECRET_KEY_FOR_TESTS = "test-secret-key-not-for-production"
 CREDENTIALS_ENV = "PARTICIPANT_CREDENTIALS_FILE"
 SECURE_DISABLED_ENV = "SESSION_COOKIE_SECURE_DISABLED"
+# 仕様: docs/spec/https-enforcement.md#3-ローカルの開発とテストでの解除(論点4)
+HTTPS_DISABLED_ENV = "HTTPS_ENFORCEMENT_DISABLED"
 TEST_PASSWORD = "test-password-0123456789"
 
 # 既存テスト・新規テストが使う参加者 ID(アプリは ID の形式を確かめない)
@@ -76,6 +78,7 @@ def apply_default_env() -> None:
     os.environ[CREDENTIALS_ENV] = str(shared_credentials_path())
     os.environ["SECRET_KEY"] = SECRET_KEY_FOR_TESTS
     os.environ[SECURE_DISABLED_ENV] = "1"
+    os.environ[HTTPS_DISABLED_ENV] = "1"  # 既存テストは http のテストクライアントで送る
 
 
 def post_login(client, participant_id: str, password: str = TEST_PASSWORD, *, next_path=None):

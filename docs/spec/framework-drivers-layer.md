@@ -6,6 +6,7 @@
 - [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md) は Flask + SQLite 2 DB・Spreadsheet 非参照を決定済み。本仕様は **フロント技術選定** と **講義動画のホスティング方針の更新**（GAS → Flask）・**3 講義カタログ** を追記し、検討結果を1箇所に構造化する
 - 第一目的は **人手介入なしでログを DB に記録し、LAD 表示と AI プロンプトに反映**することである。フレームワーク選定はこの目的から逆算する
 - issue #30（2026-10-26 の PO 承認済み仕様 [participant-login.md](./participant-login.md) を反映）: 参加者の画面と API を、ログイン必須（ID/パスワード）にした。参加者は、URL のクエリ・本文の `participant_id` ではなく、ログインしたセッションから特定する。これに伴い、旧「認証必須化はスコープ外（参加者の画面と API は認証なし）」を取り下げ、導線・HTTP 契約（`participant_id` は省略可、不一致 403、型不正 400、未ログイン 401/302、`/login`・`/logout`）・環境変数（`SECRET_KEY`、`PARTICIPANT_CREDENTIALS_FILE`、`SESSION_COOKIE_SECURE_DISABLED`）を更新した。`/research/*` の Basic 認証は変更しない
+- issue #32（2026-10-26 の PO 承認済み仕様 [https-enforcement.md](./https-enforcement.md) を反映）: 本番で、元の方式が https でない要求（`X-Forwarded-Proto` が `http`、またはヘッダなし）を、すべてのパス（`/research/*` を含む）で処理しないようにした（`GET`・`HEAD` は 301 で `https://` へ、それ以外は 400）。https の応答に HSTS を付ける。HTTP 契約に「HTTPS の強制」の節を、環境変数に `HTTPS_ENFORCEMENT_DISABLED` を追記した。Basic 認証の照合そのものは変更しない
 
 ## スコープ
 
@@ -299,6 +300,21 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 
 ## HTTP 契約
 
+### HTTPS の強制（#32。詳細・AC は [https-enforcement.md](./https-enforcement.md)）
+
+以下の HTTP 契約（JSON API、HTML ページ、ログイン、`/research/*`）は、**元の方式が https の要求**についてのもの。元の方式は、前段（Cloud Run）が付ける `X-Forwarded-Proto` で判定する（複数の値のときは最後の値）。
+
+| 要求 | 応答 |
+|---|---|
+| http の要求（`X-Forwarded-Proto` が `http`、またはヘッダなし）の `GET`・`HEAD` | 301 で、同じホスト・パス・クエリの `https://` の URL へ。本文に学習データ・対話データ・画面を含めない |
+| http の要求の、それ以外のメソッド（`POST` など） | 400。DB に書かず、LLM を呼ばず、ログインを成立させず、セッション Cookie を発行しない（何も記録しない） |
+| https の要求 | 従来どおり処理する。応答に `Strict-Transport-Security: max-age=31536000`（`includeSubDomains`・`preload` なし）を付ける |
+
+- 対象は、すべてのパス（ログイン画面・ログインの送信、参加者の画面と API、静的ファイル、`/research/*`）。
+- http の判定は、研究者の Basic 認証・参加者のログインの確認・DB の接続より**前**に行う。http の要求には、Basic 認証の資格情報が正しくても 401・200 にならず、上表のとおり 301 になる。
+- http の要求への応答（301・400）には HSTS を付けない。
+- 解除: 環境変数 `HTTPS_ENFORCEMENT_DISABLED` が `1` のときだけ、上記を行わず、http の要求を従来どおり処理する（ローカルの HTTP 実行・テスト用。本番では設定しない）。
+
 ### JSON API
 
 interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表) に準拠。Flask 層は **ViewModel を JSON 化**し、`ErrorViewModel.status_kind` から HTTP ステータスを決定する。
@@ -346,7 +362,7 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 
 `POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
-`/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
+`/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須（以下は https の要求のとき。http の要求は、照合の前に上の「HTTPS の強制」で 301 になる）。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
 
 **破壊的変更**: 旧 LAD レスポンス（生 `viewing_logs` dict）は返さない。`LadDashboardViewModel` のみ。
 
@@ -415,6 +431,7 @@ framework_drivers/db + external 具象
 | `SECRET_KEY`                     | **必須**           | セッション Cookie の署名鍵。未設定・空・旧既定値 `tutor_secret_key` ではアプリが起動しない（#30）                 |
 | `PARTICIPANT_CREDENTIALS_FILE`   | **必須**           | 参加者の資格情報の設定ファイル（ハッシュ入り）の場所。未設定・ない・読めない・壊れているとアプリが起動しない（#30）。リポジトリにもイメージにも入れない |
 | `SESSION_COOKIE_SECURE_DISABLED` | 任意               | `1` のとき、セッション Cookie の `Secure` を外す（ローカルの HTTP 実行用。既定は `Secure` あり）（#30）           |
+| `HTTPS_ENFORCEMENT_DISABLED`     | 任意（ローカル用） | `1` のときだけ、HTTPS の強制（http の要求の 301/400、HSTS）を解除する。それ以外の値と未設定は強制（既定）。ローカルの HTTP 実行・テスト用で、本番では設定しない。`SESSION_COOKIE_SECURE_DISABLED` とは独立。詳細は [https-enforcement.md](./https-enforcement.md)（#32） |
 
 ### ローカル秘密情報（What）
 
@@ -516,4 +533,5 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 - [ ] HTTP API と HTML ページの一覧が interfaces 層契約と整合している
 - [ ] `participant_id` の全経路共通が導線として定義されている（値はログインした ID で決まる）
 - [ ] 参加者のログイン必須化（未ログインの 401/302、`participant_id` の省略可・不一致 403・型不正 400）が HTTP 契約に定義されている（#30。AC は participant-login.md）
+- [ ] HTTPS の強制（http の要求の `GET`・`HEAD` は 301、それ以外は 400、認証より前の判定、https の応答の HSTS、`HTTPS_ENFORCEMENT_DISABLED` での解除）が HTTP 契約と環境変数に定義されている（#32。AC は https-enforcement.md）
 - [ ] 実装計画 [framework-drivers-implementation-plan.md](./framework-drivers-implementation-plan.md) が存在する
