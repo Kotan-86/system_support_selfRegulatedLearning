@@ -343,8 +343,13 @@ function oracle(cues, t) { // 仕様の定義: 有効=開始<=t<終了、表示�
   for (const c of cues) if (c.start <= t && t < c.end && (best === null || c.start >= best.start)) best = c;
   return best ? best.text : "";
 }
+// 仕様: docs/spec/subtitle-formatting.md#受入基準 AC12(#36 の AC10 の改訂)
+// 整形済みファイル(subtitles.display.srt)がある講義はそれを、なければ従来どおり元の SRT を使う。
+// 整形済みファイルの作成の前後どちらでも成り立つ。
 for (const id of ["lecture-1", "lecture-2", "lecture-3"]) {
-  const cues = parseSrt(fs.readFileSync(path.join(lecturesDir, id, "subtitles.srt"), "utf8"));
+  const displayPath = path.join(lecturesDir, id, "subtitles.display.srt");
+  const hasDisplay = fs.existsSync(displayPath);
+  const cues = parseSrt(fs.readFileSync(hasDisplay ? displayPath : path.join(lecturesDir, id, "subtitles.srt"), "utf8"));
   const e = setup({ cues });
   e.click(); e.sandbox.play();
   const maxEnd = Math.max(...cues.map((c) => c.end));
@@ -357,8 +362,25 @@ for (const id of ["lecture-1", "lecture-2", "lecture-3"]) {
     const want = oracle(cues, t);
     if (e.shown !== want) { bad = { t, got: e.shown, want }; break; }
   }
-  check(`AC10(実データ ${id}): ${n} 地点で表示=有効なキューのうち開始が最も遅い1件`, bad === null, q(bad));
-  if (id === "lecture-1") {
+  const kind = hasDisplay ? "整形済みの件" : "キュー";
+  check(`AC10/AC12(実データ ${id}, ${kind}): ${n} 地点で表示=有効なもののうち開始が最も遅い1件`, bad === null, q(bad));
+  if (hasDisplay) {
+    // AC12: 同時に出る文は1件以下 = 表示は常に「有効な件の文」か空(上の oracle で検査済み)。
+    // 整形済みファイルは重ならない(AC3)ので、有効な件は常に高々1件。
+    let overlap = null;
+    for (let i = 0; i + 1 < cues.length; i++) if (cues[i].end > cues[i + 1].start) { overlap = [cues[i], cues[i + 1]]; break; }
+    check(`AC12(${id}): 整形済みの件は重ならない`, overlap === null, q(overlap));
+  }
+  if (id === "lecture-1" && hasDisplay) {
+    const want = "皆さんの多くは学校で球の表面積が4πr²であることを学んだでしょう";
+    const cue = cues.find((c) => c.text.includes(want));
+    e.player.pos = 6.0; e.tick();
+    check("AC12(lecture-1 整形済み): 6.0秒の表示は AC8 の1つ目の文字列を含む件の文",
+      cue !== undefined && cue.start <= 6.0 && 6.0 < cue.end && e.shown === cue.text, q({ shown: e.shown, cue }));
+    check("AC12(lecture-1 整形済み): 6.0秒の表示は元のキュー3の断片だけではない",
+      e.shown !== "が4πr²であることを学んだ" && e.shown.length > "が4πr²であることを学んだ".length, q(e.shown));
+  }
+  if (id === "lecture-1" && !hasDisplay) {
     check("AC10(前提 lecture-1): キュー2=2.9-8.149 / キュー3=5.779-9.05 の時刻構成",
       cues[1].start === 2.9 && cues[1].end === 8.149 && cues[2].start === 5.779 && cues[2].end === 9.05,
       q(cues.slice(0, 3)));

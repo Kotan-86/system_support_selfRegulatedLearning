@@ -150,10 +150,19 @@ def _subtitle_cues_for_lecture(lecture_id: str) -> list[dict[str, object]]:
     lecture = _STATIC_LECTURE_CATALOG.find_by_id(LectureId(lecture_id))
     if lecture is None:
         return []
+    # 仕様: docs/spec/subtitle-formatting.md#受入基準 (AC11, AC13)
+    # 整形済み(同じディレクトリの subtitles.display.srt)が読めて1件以上あれば優先、なければ元の SRT
+    srt_path = Path(lecture.srt_path)
+    segments: list[dict] = []
     try:
-        segments = parse_srt_file(Path(lecture.srt_path))
+        segments = parse_srt_file(srt_path.with_name("subtitles.display.srt"))
     except (OSError, ValueError):
-        return []
+        segments = []
+    if not segments:
+        try:
+            segments = parse_srt_file(srt_path)
+        except (OSError, ValueError):
+            return []
     return [
         {"start": s["start_sec"], "end": s["end_sec"], "text": s["text"]}
         for s in segments
