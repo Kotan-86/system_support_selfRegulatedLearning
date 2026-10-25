@@ -7,6 +7,8 @@ Phase 2 Step 2.2: POST /api/viewing-log
 
 import pytest
 
+from tests.login_helpers import login_as
+
 
 def _valid_viewing_log_payload():
     return {
@@ -38,6 +40,7 @@ class TestPostViewingLog:
         self, phase2_client
     ) -> None:
         """current_time / duration の小数は 0 方向へ切り捨てて保存する。"""
+        login_as(phase2_client, "truncate-test")
         payload = {
             "participant_id": "truncate-test",
             "time_stamp": "2026-02-23T11:18:42",

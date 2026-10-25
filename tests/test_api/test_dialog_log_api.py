@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.login_helpers import ensure_login, login_as
+
 from application.common.errors import LlmGatewayError
 from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
 
@@ -41,7 +43,9 @@ def _make_client(monkeypatch, tmp_path: Path, llm: FakeLlmGateway):
     app.config["TESTING"] = True
     # 未捕捉の例外(DB に書けないとき等)を、テストへの例外ではなく 500 の応答にする
     app.config["PROPAGATE_EXCEPTIONS"] = False
-    return app.test_client()
+    client = app.test_client()
+    login_as(client, "1")
+    return client
 
 
 @pytest.fixture
@@ -71,10 +75,12 @@ def learning_db(tmp_path: Path):
 
 
 def _chat(client, text: str, participant_id: str = "1"):
+    ensure_login(client, participant_id)
     return client.post("/chat", json={"message": text, "participant_id": participant_id})
 
 
 def _save(client, participant_id: str = "1", end_method: str = "end_button"):
+    ensure_login(client, participant_id)
     return client.post(
         "/api/dialog-log",
         json={"participant_id": participant_id, "end_method": end_method},
@@ -274,9 +280,8 @@ class TestRequestErrors:
     @pytest.mark.parametrize(
         "kwargs",
         [
-            {"json": {"end_method": "end_button"}},
-            {"json": {"participant_id": "", "end_method": "end_button"}},
-            {"json": {"participant_id": "   ", "end_method": "end_button"}},
+            # participant_id の欠落・空は「省略」で、ログインした本人として扱う(AC14/30)。
+            # 400 になるのは、他の必須項目(end_method)の不備や、JSON でない本文のとき。
             {"json": {"participant_id": "1"}},
             {"json": {"participant_id": "1", "end_method": "leave"}},
             {"json": {"participant_id": "1", "end_method": ""}},

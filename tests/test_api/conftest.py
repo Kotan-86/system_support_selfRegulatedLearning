@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.login_helpers import login_as
+
 
 @pytest.fixture
 def phase2_client(monkeypatch, tmp_path: Path):
@@ -27,4 +29,6 @@ def phase2_client(monkeypatch, tmp_path: Path):
 
     app = create_app()
     app.config["TESTING"] = True
-    return app.test_client()
+    client = app.test_client()
+    login_as(client, "1")  # 既定は参加者 "1" でログイン済み。他の参加者は login_as(client, id)
+    return client

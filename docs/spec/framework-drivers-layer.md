@@ -5,6 +5,7 @@
 - [interfaces-layer.md](./interfaces-layer.md) まで **Controller → Use Case → Presenter → ViewModel** の契約は確立済み。次は **Port の具象実装・HTTP 配線・フロント配信・外部連携** を Framework & Drivers 層として仕様化し、Looker Studio 手動 CSV 経由を廃止して **学習直後に LAD と AI が同一学習コンテキストを参照**できるようにする
 - [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md) は Flask + SQLite 2 DB・Spreadsheet 非参照を決定済み。本仕様は **フロント技術選定** と **講義動画のホスティング方針の更新**（GAS → Flask）・**3 講義カタログ** を追記し、検討結果を1箇所に構造化する
 - 第一目的は **人手介入なしでログを DB に記録し、LAD 表示と AI プロンプトに反映**することである。フレームワーク選定はこの目的から逆算する
+- issue #30（2026-10-26 の PO 承認済み仕様 [participant-login.md](./participant-login.md) を反映）: 参加者の画面と API を、ログイン必須（ID/パスワード）にした。参加者は、URL のクエリ・本文の `participant_id` ではなく、ログインしたセッションから特定する。これに伴い、旧「認証必須化はスコープ外（参加者の画面と API は認証なし）」を取り下げ、導線・HTTP 契約（`participant_id` は省略可、不一致 403、型不正 400、未ログイン 401/302、`/login`・`/logout`）・環境変数（`SECRET_KEY`、`PARTICIPANT_CREDENTIALS_FILE`、`SESSION_COOKIE_SECURE_DISABLED`）を更新した。`/research/*` の Basic 認証は変更しない
 
 ## スコープ
 
@@ -27,7 +28,8 @@
 - Mapper / SQL の実装詳細（[framework-drivers-implementation-plan.md](./framework-drivers-implementation-plan.md) の各 Phase）
 - LAD 固定文・Looker 互換 UI の CSS 詳細
 - Research Export（`ExportResearchData`。対話ログだけの研究用ダウンロードは [research-dialog-download.md](./research-dialog-download.md) で別に扱う）
-- 認証必須化（ADR: 任意。将来拡張。研究用ダウンロードの `/research/*` だけ Basic 認証を必須とする。参加者の画面と API は認証なし）
+- 研究者用ダウンロード `/research/*` の認証（Basic 認証のまま。別系統。[research-dialog-download.md](./research-dialog-download.md)）
+- 参加者のログインの詳細（ログイン・ログアウト、拒否の範囲、設定ファイル、作成スクリプト、AC）は [participant-login.md](./participant-login.md)（#30）が正。本仕様には HTTP 契約と導線の要点だけを書く
 
 ## 関連仕様
 
@@ -37,6 +39,7 @@
 - interfaces 層: [interfaces-layer.md](./interfaces-layer.md)
 - 段階的実装計画: [framework-drivers-implementation-plan.md](./framework-drivers-implementation-plan.md)
 - 学習データ永続化（SQLite 草案）: [framework-drivers-persistence.md](./framework-drivers-persistence.md)
+- 参加者のログイン（#30）: [participant-login.md](./participant-login.md)
 
 ### 層の対応（クリーンアーキテクチャ）
 
@@ -62,10 +65,15 @@
 framework_drivers/
   platform/                    # Flask・wiring・templates・static（目標）
     main.py                    # Phase 4: app/main.py から移行
+    participant_auth.py        # 参加者のログイン・ログアウト、未ログインの拒否、セッション設定（#30）
+    participant_scope.py       # クライアントが送る participant_id とログイン ID の照合（#30）
+    participant_credentials.py # 資格情報の設定ファイルの読み込み・ハッシュ照合（#30）
+    research_auth.py           # 研究者の Basic 認証（別系統）
     wiring.py                  # Composition Root
     templates/
       lecture.html
       reflect.html
+      login.html
     static/
       css/
       js/
@@ -93,7 +101,7 @@ framework_drivers/
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | シームレス Write   | 視聴ログ・小テスト送信後、人手（CSV アップロード等）を介さず DB に記録される                                                        |
 | 共有 Read          | LAD UI と AI は **同一 `GetLearningSnapshot`**（[application-usecase.md#共有学習コンテキスト](./application-usecase.md)）を参照する |
-| 同一識別子         | 動画・小テスト・LAD・AI で **`participant_id` を共通**とする                                                                        |
+| 同一識別子         | 動画・小テスト・LAD・AI で **`participant_id` を共通**とする。値は**ログインした ID** で決まる（#30）                               |
 | ingress 契約の安定 | 外部 JSON 形状（API 契約テスト）は維持し、ホスティング変更のみ許容する                                                              |
 | 近い実験の単純さ   | **3 講義**（`participant_id` で自動解決）・Flask モノリス・SQLite 2 ファイルで完結する                                              |
 
@@ -194,23 +202,25 @@ flowchart TB
 ## 参加者導線（近い実験）
 
 ```
-1. 参加者に participant_id を事前付与（1 → lecture-1、2 → lecture-2、3 → lecture-3）
-2. GET /lecture?participant_id={id}  … 割当講義の動画視聴（ログ自動 POST）
-3. `/lecture` 埋め込み小テスト UI で全問回答・送信 → `POST /api/quiz-attempts` で記録（同一ページに完了表示）
-4. GET /reflect?participant_id={id}  … LAD + AI 振り返り（同一 Session）
-5. 2〜4 を講義内で自由に往復
+1. 研究者が作成スクリプトで ID（P01〜P30）とパスワードを発行し、協力者へ配布する
+2. GET /login  … ID とパスワードでログイン（成功で、開こうとした画面または /lecture へ 302）
+3. GET /lecture  … 動画視聴（ログ自動 POST）。ログインした ID の講義画面
+4. `/lecture` 埋め込み小テスト UI で全問回答・送信 → `POST /api/quiz-attempts` で記録（同一ページに完了表示）
+5. GET /reflect  … LAD + AI 振り返り（同一 Session）
+6. 3〜5 を講義内で自由に往復。終わったら POST /logout（画面のログアウト操作）
 ```
 
-`participant_id` は **URL クエリ**で全ページに渡す。`lecture_id` は URL に含めない（サーバーが `participant_id` から解決）。AI チャット初回の ID 入力プロンプトは **廃止**する。
+参加者は**ログインしたセッションから特定**する。URL のクエリの `participant_id` は**無視**し、ログインした本人の画面を出す。`lecture_id` は URL に含めない（サーバーが `participant_id` から解決）。講義割当は現状の固定マップのまま（`P01`〜`P30` はマップにないため、`lecture_id` 指定がなければ全員 `lecture-1`。協力者が講義を選ぶ仕組みは別 Issue）。AI チャット初回の ID 入力プロンプトは **廃止**する。詳細は [participant-login.md](./participant-login.md)。
 
 ### 実験時の URL 例
 
-| URL                         | 解決される講義 | YouTube 動画 ID                         |
-| --------------------------- | -------------- | --------------------------------------- |
-| `/lecture?participant_id=1` | `lecture-1`    | `Y2HC0I8cTAI`                           |
-| `/lecture?participant_id=2` | `lecture-2`    | `1MuwwFipX9o`                           |
-| `/lecture?participant_id=3` | `lecture-3`    | `Sa06YB2oXyw`                           |
-| `/reflect?participant_id=2` | `lecture-2`    | LAD / AI は lecture-2 の Session を参照 |
+| URL                              | 解決される講義 | YouTube 動画 ID                         |
+| -------------------------------- | -------------- | --------------------------------------- |
+| `/lecture`（ログイン ID `P01`）  | `lecture-1`    | `Y2HC0I8cTAI`                           |
+| `/lecture?lecture_id=lecture-2`  | `lecture-2`    | `1MuwwFipX9o`（`lecture_id` の明示指定）|
+| `/reflect`（ログイン ID `P01`）  | `lecture-1`    | LAD / AI は lecture-1 の Session を参照 |
+
+旧来の固定マップ（`participant_id` 1/2/3 → `lecture-1/2/3`）は、ID が `1`/`2`/`3` のときに限り残っている（アプリは ID の形式を確かめない）。
 
 ---
 
@@ -304,7 +314,37 @@ interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表
 | `GET /research/participants/{id}/dialog-logs` | `ExportDialogLogsController` | 研究者（Basic 認証。下記） |
 | `GET /research/dialog-logs`      | `ExportDialogLogsController`    | 研究者（Basic 認証。下記）                   |
 
-`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}`（`end_method` は `end_button` / `page_leave`）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
+#### 参加者のログインと `participant_id` の扱い（#30。詳細・AC は [participant-login.md](./participant-login.md)）
+
+上表の参加者向け API（`/chat` と `/api/` 配下）と HTML ページ（`/`、`/lecture`、`/reflect`）は、**ログインが必須**。参加者は、ログインしたセッションから特定する。
+
+| 要求 | 応答 |
+|---|---|
+| 未ログインの API（`/chat`、`/api/` 配下） | 401。DB に書かない。LLM を呼ばない |
+| 未ログインの画面（`/`、`/lecture`、`/reflect`） | 302 でログイン画面（`/login`）へ |
+| 除外（ログイン不要） | `GET /login`、`POST /login`、`POST /logout`、静的ファイル（`/static/`）。`/research/*` は別系統の Basic 認証のまま（参加者のログインを要求せず、受け付けもしない） |
+| `GET /login` | 200 でログイン画面。ログイン済みなら `/lecture` へ 302。`next` は `/lecture`・`/reflect` のサイト内の移動先だけ有効 |
+| `POST /login`（ID・パスワード） | 成功: 302 で、開こうとした画面（`next`）または `/lecture` へ。失敗（ID 不在・パスワード違い・停止中・空）: 401 でログイン画面を同じ失敗の文言つきで再表示（理由を区別しない） |
+| `POST /logout` | セッションを消して 302 で `/login` へ |
+| ログイン済みの `/` | 302 で `/lecture` へ |
+| 画面（`/lecture`、`/reflect`）のクエリの `participant_id` | 無視する。ログインした本人の画面を 200 で出す |
+| 全応答（研究者向けと静的ファイルを除く） | `Cache-Control: no-store` |
+
+API にクライアントが送る `participant_id`（本文・クエリ・URL のパス）は、**省略可**。必須ではない（旧: 欠落・空は 400）。
+
+| 送られた値 | 扱い |
+|---|---|
+| 省略、`null`、空文字（本文・クエリ） | ログインした本人として処理する |
+| ログイン ID と一致（数値は10進の文字列にして比較） | そのまま処理する |
+| ログイン ID と不一致 | 403。2つの DB のどこにも記録せず、LLM を呼ばない。他人のデータを返さない |
+| 真偽値・配列・オブジェクト（本文） | 400。記録しない |
+
+- `GET /api/participants/{id}/lad` の `{id}` は URL のパスなので省略できない。ログイン ID と異なれば 403。
+- `POST /chat` の `session_id` がログインした本人の対話セッションでなければ、存在しないセッションと同じ 404（応答の文言も同一）。
+- セッション Cookie: `HttpOnly`、`SameSite=Lax`、既定で `Secure`（ローカルの HTTP 実行だけ環境変数で外せる）。有効期限はログインから12時間（要求のたびに延長しない）。
+- `lecture_id` は参加者の識別ではないため、従来どおり扱う。
+
+`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
 `/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
 
@@ -316,7 +356,11 @@ interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表
 | -------------- | --------------------------------------------------------------- | -------------------------------------- |
 | `GET /lecture` | `framework_drivers/platform/templates/lecture.html`（移行目標） | 講義動画 + 埋め込み小テスト            |
 | `GET /reflect` | `framework_drivers/platform/templates/reflect.html`（移行目標） | LAD + AI 統合                          |
-| `GET /`        | `/reflect` へリダイレクトまたは統合                             | 旧 `index.html` チャット単体は廃止方向 |
+| `GET /`        | ログイン済みなら `/lecture` へ 302（未ログインはログイン画面へ） | 旧 `index.html` チャット単体は廃止方向 |
+| `GET /login`・`POST /login` | `framework_drivers/platform/templates/login.html` | 参加者のログイン（#30） |
+| `POST /logout` | （画面なし。302 で `/login` へ）                                | 参加者のログアウト（#30）              |
+
+`/lecture`・`/reflect` はログインが必須。詳細は上の「参加者のログインと `participant_id` の扱い」。
 
 ### `/reflect` の対話ログ保存（Issue #11。仕様: [dialog-log-save.md](./dialog-log-save.md)）
 
@@ -368,6 +412,9 @@ framework_drivers/db + external 具象
 | `RESEARCHER_BASIC_AUTH_USER` / `RESEARCHER_BASIC_AUTH_PASSWORD` | 研究用ダウンロード利用時 | 研究者の Basic 認証。どちらかが未設定・空なら `/research/*` は常に 401 |
 | `DB_REPLICA_BUCKET` | 複製を行う起動時（Cloud Run） | 複製先の GCS バケット名（`gs://` を付けない名前だけ）。未設定・空は「複製先の設定がない」で、`DB_REPLICA_DISABLED=1` がなければ起動しない。詳細は [db-persistence.md](./db-persistence.md) |
 | `DB_REPLICA_DISABLED` | 任意（ローカル用） | `1` のときだけ、復元・複製なしでの起動を許す。それ以外の値と未設定は「指定なし」。詳細は [db-persistence.md](./db-persistence.md) |
+| `SECRET_KEY`                     | **必須**           | セッション Cookie の署名鍵。未設定・空・旧既定値 `tutor_secret_key` ではアプリが起動しない（#30）                 |
+| `PARTICIPANT_CREDENTIALS_FILE`   | **必須**           | 参加者の資格情報の設定ファイル（ハッシュ入り）の場所。未設定・ない・読めない・壊れているとアプリが起動しない（#30）。リポジトリにもイメージにも入れない |
+| `SESSION_COOKIE_SECURE_DISABLED` | 任意               | `1` のとき、セッション Cookie の `Secure` を外す（ローカルの HTTP 実行用。既定は `Secure` あり）（#30）           |
 
 ### ローカル秘密情報（What）
 
@@ -452,7 +499,7 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `POST /api/viewing-logs` バッチ | 近い実験では単件 POST で開始。必要時に追加                                         |
 | API キー必須化                  | ADR: 推奨だが必須ではない                                                          |
-| 複数講義 UI                     | `participant_id` マップで 3 講義をカバー。将来は `lecture_id` クエリ拡張で対応可能 |
+| 複数講義 UI                     | 固定マップ（`participant_id` 1/2/3）で 3 講義をカバー。協力者が講義を選ぶ仕組みは別 Issue（#30 の範囲外） |
 | Research Export Infrastructure  | 別コンテキスト（`ExportResearchData`。対話ログだけの研究用ダウンロードは本件の範囲に含めた） |
 
 ---
@@ -467,5 +514,6 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 - [ ] `framework_drivers/` の platform / db / external 分界が定義されている
 - [ ] Write（視聴・小テスト）→ Read（LAD・AI）のデータフローが記載されている
 - [ ] HTTP API と HTML ページの一覧が interfaces 層契約と整合している
-- [ ] `participant_id` の全経路共通が導線として定義されている
+- [ ] `participant_id` の全経路共通が導線として定義されている（値はログインした ID で決まる）
+- [ ] 参加者のログイン必須化（未ログインの 401/302、`participant_id` の省略可・不一致 403・型不正 400）が HTTP 契約に定義されている（#30。AC は participant-login.md）
 - [ ] 実装計画 [framework-drivers-implementation-plan.md](./framework-drivers-implementation-plan.md) が存在する

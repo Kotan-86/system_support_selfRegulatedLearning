@@ -7,6 +7,8 @@ JSON に last_updated キーがあること、データが無い場合は null �
 
 import pytest
 
+from tests.login_helpers import login_as
+
 
 class TestGetLastUpdated:
     """GET /api/last-updated の振る舞い。"""
@@ -22,3 +24,30 @@ class TestGetLastUpdated:
         assert "last_updated" in data, (
             "レスポンスに last_updated キーがあること（値は null 可）"
         )
+
+    def test_last_updated_without_participant_id_returns_own_time(
+        self, phase2_client
+    ) -> None:
+        """AC14(participant-login): participant_id を省略すると、ログインした本人の最終更新時刻を返す。
+
+        (旧: 未指定なら last_updated は null。AC14 で「null ではなく本人の時刻」に変わった。)
+        """
+        # 仕様: docs/spec/participant-login.md#受入基準
+        login_as(phase2_client, "A")
+        r = phase2_client.post(
+            "/api/viewing-log",
+            json={
+                "participant_id": "A",
+                "time_stamp": "2026-02-23T11:18:42",
+                "current_time": 10,
+                "action": "play",
+                "duration": 0,
+            },
+        )
+        assert r.status_code == 201
+        explicit = phase2_client.get("/api/last-updated?participant_id=A").get_json()
+        assert explicit["last_updated"] is not None
+
+        omitted = phase2_client.get("/api/last-updated")
+        assert omitted.status_code == 200
+        assert omitted.get_json()["last_updated"] == explicit["last_updated"]

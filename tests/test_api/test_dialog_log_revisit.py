@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.login_helpers import login_as
+
 from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
 
 PID = "1"
@@ -35,7 +37,9 @@ def revisit_env(monkeypatch, tmp_path: Path):
 
     app = create_app()
     app.config["TESTING"] = True
-    return app.test_client(), llm, tmp_path / "tutor.db"
+    client = app.test_client()
+    login_as(client, PID)
+    return client, llm, tmp_path / "tutor.db"
 
 
 def _chat(client, message: str) -> dict:

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.login_helpers import ensure_login, login_as
 from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
 
 USER_ENV = "RESEARCHER_BASIC_AUTH_USER"
@@ -86,7 +87,9 @@ class Env:
         app = create_app()
         app.config["TESTING"] = True
         app.config["PROPAGATE_EXCEPTIONS"] = False
-        return app.test_client()
+        client = app.test_client()
+        login_as(client, "1")  # 参加者としてログイン済み(研究者の Basic 認証とは別系統)
+        return client
 
     def tutor(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.tmp_path / "tutor.db"))
@@ -129,6 +132,7 @@ def client(env: Env):
 
 
 def chat(client, text: str, pid: str = "1", **extra):
+    ensure_login(client, pid)
     body = {"message": text, "participant_id": pid, **extra}
     response = client.post("/chat", json=body)
     assert response.status_code == 200, response.get_data(as_text=True)
@@ -136,6 +140,7 @@ def chat(client, text: str, pid: str = "1", **extra):
 
 
 def save(client, pid: str = "1", end_method: str = "end_button"):
+    ensure_login(client, pid)
     response = client.post(
         "/api/dialog-log", json={"participant_id": pid, "end_method": end_method}
     )
@@ -272,12 +277,14 @@ class TestR3UnsetCredentialsAlwaysReject:
     def test_r3_chat_and_reflect_still_work_when_unset(self, env: Env) -> None:
         client = env.start(None, None)
 
+        ensure_login(client, "1")
         assert client.post("/chat", json={"message": "こんにちは", "participant_id": "1"}).status_code == 200
         assert client.get("/reflect?participant_id=1").status_code == 200
         assert client.get("/").status_code in (200, 302)
 
     def test_r3_chat_and_reflect_work_without_credentials_when_set(self, client) -> None:
         # 参加者の画面と API は、これまでどおり認証なしで使える
+        ensure_login(client, "1")
         assert client.post("/chat", json={"message": "こんにちは", "participant_id": "1"}).status_code == 200
         assert client.get("/reflect?participant_id=1").status_code == 200
 

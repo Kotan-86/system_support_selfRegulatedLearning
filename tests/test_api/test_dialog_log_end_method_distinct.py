@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.login_helpers import ensure_login, login_as
+
 from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
 
 
@@ -33,10 +35,13 @@ def client_and_db(monkeypatch, tmp_path: Path):
 
     app = create_app()
     app.config["TESTING"] = True
-    return app.test_client(), tmp_path / "tutor.db"
+    client = app.test_client()
+    login_as(client, "1")
+    return client, tmp_path / "tutor.db"
 
 
 def _chat(client, pid: str, text: str) -> None:
+    ensure_login(client, pid)
     resp = client.post("/chat", json={"message": text, "participant_id": pid})
     assert resp.status_code == 200, resp.get_data(as_text=True)
 
@@ -59,7 +64,9 @@ def test_b5_end_button_and_page_leave_are_distinguishable(client_and_db) -> None
     _chat(client, "1", "こんにちは")
     _chat(client, "2", "こんばんは")
 
+    ensure_login(client, "1")
     r1 = client.post("/api/dialog-log", json={"participant_id": "1", "end_method": "end_button"})
+    ensure_login(client, "2")
     r2 = client.post("/api/dialog-log", json={"participant_id": "2", "end_method": "page_leave"})
     assert r1.status_code == 200, r1.get_data(as_text=True)
     assert r2.status_code == 200, r2.get_data(as_text=True)

@@ -1,22 +1,33 @@
+// 仕様: docs/spec/participant-login.md#3-参加者の特定fr-52
 // 仕様: docs/spec/framework-drivers-layer.md#参加者導線
-// 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-5-講義動画フロント
 (function (global) {
   "use strict";
 
   /**
-   * URL クエリから participant_id を取得する。
-   * @returns {string|null} 空白のみの場合は null
+   * ログインした参加者の ID を取得する。
+   * サーバがテンプレートに埋めた window.__PARTICIPANT_ID__ を使う(URL のクエリは使わない)。
+   * @returns {string|null} 空白のみ・未設定の場合は null
    */
-  function getParticipantIdFromUrl() {
-    var params = new URLSearchParams(global.location.search);
-    var id = params.get("participant_id");
-    if (id === null || String(id).trim() === "") {
+  function getParticipantId() {
+    var id = global.__PARTICIPANT_ID__;
+    if (id === undefined || id === null || String(id).trim() === "") {
       return null;
     }
     return String(id).trim();
   }
 
   global.ParticipantContext = {
-    getParticipantIdFromUrl: getParticipantIdFromUrl,
+    getParticipantId: getParticipantId,
+    // 互換の別名(player.js、quiz.js、reflect_app.js が使う)。
+    // 画面ではサーバが必ず __PARTICIPANT_ID__ を埋めるため URL は使われない。
+    // 未設定のときだけ、従来のクエリ読み取りに戻る(既存の Node 検証用の互換)。
+    getParticipantIdFromUrl: function () {
+      var id = getParticipantId();
+      if (id !== null) {
+        return id;
+      }
+      var fromQuery = new URLSearchParams(global.location.search).get("participant_id");
+      return fromQuery === null || String(fromQuery).trim() === "" ? null : String(fromQuery).trim();
+    },
   };
 })(window);

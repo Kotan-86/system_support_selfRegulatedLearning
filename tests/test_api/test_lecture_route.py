@@ -5,31 +5,41 @@ from __future__ import annotations
 
 import pytest
 
+from tests.login_helpers import displayed_participant_id, login_as
+
 
 class TestLectureRoute:
     """GET /lecture の HTML 配信。"""
 
-    def test_lecture_without_participant_id_returns_400(self, phase2_client) -> None:
-        """participant_id なしは 400 と入力促し HTML を返す。"""
+    def test_lecture_without_participant_id_shows_logged_in_participant(
+        self, phase2_client
+    ) -> None:
+        """AC11(participant-login): participant_id なしでも、ログインした本人の講義画面が 200 で出る。
+        (旧: participant_id なしは 400。ログイン導入で仕様が変わった。)
+        """
+        # 仕様: docs/spec/participant-login.md#受入基準
+        login_as(phase2_client, "A")
         response = phase2_client.get("/lecture")
-        assert response.status_code == 400
-        html = response.get_data(as_text=True)
-        assert "participant_id" in html
-        assert "必要" in html or "必須" in html
-
-    def test_lecture_with_participant_id_returns_200(self, phase2_client) -> None:
-        """participant_id ありは 200 とプレイヤー要素を返す。"""
-        response = phase2_client.get("/lecture?participant_id=learner-42")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
-        assert "learner-42" in html
+        assert displayed_participant_id(html) == "A"
+        assert 'id="player"' in html
+
+    def test_lecture_with_participant_id_returns_200(self, phase2_client) -> None:
+        """ログインした ID の講義画面は 200 とプレイヤー要素を返す。"""
+        login_as(phase2_client, "learner-42")
+        response = phase2_client.get("/lecture")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert displayed_participant_id(html) == "learner-42"
         assert 'id="player"' in html
         assert "youtube.com/iframe_api" in html
         assert "/static/js/lecture/player.js" in html
 
     def test_lecture_participant_2_shows_lecture_2_video(self, phase2_client) -> None:
-        """participant_id=2 は lecture-2 の YouTube 動画 ID を埋め込む。"""
-        response = phase2_client.get("/lecture?participant_id=2")
+        """ログイン ID "2" は lecture-2 の YouTube 動画 ID を埋め込む。"""
+        login_as(phase2_client, "2")
+        response = phase2_client.get("/lecture")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert "lecture-2" in html
@@ -74,7 +84,8 @@ class TestLectureRoute:
         quiz_title: str,
     ) -> None:
         """participant_id=1/2/3 で講義別の埋め込み小テストが表示される。"""
-        response = phase2_client.get(f"/lecture?participant_id={participant_id}")
+        login_as(phase2_client, participant_id)
+        response = phase2_client.get("/lecture")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
@@ -115,7 +126,7 @@ class TestLectureViewingLogActions:
         self, phase2_client, action: str, duration: float
     ) -> None:
         payload = _gas_viewing_log_payload(
-            participant_id=f"lecture-action-{action}",
+            participant_id="1",
             action=action,
             duration=duration,
         )
@@ -177,9 +188,8 @@ class TestLectureSubtitlesRoute:
     ) -> None:
         """AC11: 講義 X のページの字幕は lectures/X/subtitles.srt の内容。"""
         # 仕様: docs/spec/subtitle-display.md#受入基準 AC11
-        html = phase2_client.get(f"/lecture?participant_id={participant_id}").get_data(
-            as_text=True
-        )
+        login_as(phase2_client, participant_id)  # 講義は本人のログインで決まる(#30)
+        html = phase2_client.get("/lecture").get_data(as_text=True)
         cues = _embedded_subtitles(html)
         expected = _expected_cues(lecture_id)
         assert len(expected) > 100
@@ -188,12 +198,12 @@ class TestLectureSubtitlesRoute:
     def test_ac11_other_lecture_subtitles_are_not_embedded(self, phase2_client) -> None:
         """AC11: 別の講義の字幕は表示されない(講義ごとに内容が異なる)。"""
         # 仕様: docs/spec/subtitle-display.md#受入基準 AC11
-        by_lecture = {
-            pid: _embedded_subtitles(
-                phase2_client.get(f"/lecture?participant_id={pid}").get_data(as_text=True)
+        by_lecture = {}
+        for pid in ("1", "2", "3"):
+            login_as(phase2_client, pid)  # 講義は本人のログインで決まる(#30)
+            by_lecture[pid] = _embedded_subtitles(
+                phase2_client.get("/lecture").get_data(as_text=True)
             )
-            for pid in ("1", "2", "3")
-        }
         texts = {pid: {c["text"] for c in cues} for pid, cues in by_lecture.items()}
         assert by_lecture["1"] != by_lecture["2"] != by_lecture["3"]
         # 各講義の先頭付近の文が、他の講義のデータに入っていない
@@ -204,7 +214,7 @@ class TestLectureSubtitlesRoute:
     def test_wiring_subtitle_elements_and_script_order(self, phase2_client) -> None:
         """配線(AC2〜6 の前提): 表示領域・ボタン・subtitles.js が player.js より前にある。"""
         # 仕様: docs/spec/subtitle-display.md#受入基準 AC1(配線のみ。見た目はPO確認)
-        html = phase2_client.get("/lecture?participant_id=1").get_data(as_text=True)
+        html = phase2_client.get("/lecture").get_data(as_text=True)
         assert 'id="subtitle-area"' in html
         assert 'id="subtitle-toggle"' in html
         sub = html.find("/static/js/lecture/subtitles.js")
@@ -237,7 +247,7 @@ class TestLectureSubtitlesRoute:
         }
         monkeypatch.setattr(catalog, "_lectures", broken)
 
-        response = phase2_client.get("/lecture?participant_id=1")
+        response = phase2_client.get("/lecture")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert 'id="player"' in html

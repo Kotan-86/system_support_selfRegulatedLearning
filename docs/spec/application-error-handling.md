@@ -82,7 +82,7 @@ application/
 | ---------------------------- | ------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `LECTURE_NOT_FOUND`          | `LectureNotFoundError`         | 講義カタログに `lecture_id` が無い                                       | `RecordQuizAttempt`, `GetLearningSnapshot`, `SendChatMessage`, `ExportResearchData` |
 | `LEARNING_SESSION_NOT_FOUND` | `LearningSessionNotFoundError` | `learning_session_id` 指定で Session が無い（Export の明示スコープのみ） | `ExportResearchData`                                                                |
-| `TUTOR_SESSION_NOT_FOUND`    | `TutorSessionNotFoundError`    | 指定 `tutor_session_id` が無い                                           | `SendChatMessage`（継続時）、`SaveDialogLog`（対話セッションが読めないとき）       |
+| `TUTOR_SESSION_NOT_FOUND`    | `TutorSessionNotFoundError`    | 指定 `tutor_session_id` が無い(`SendChatMessage` 継続時は、他の学習者のセッション・講義の不一致・Snapshot 取得失敗も含む。#30、PO決定 2026-10-26 DR-30-T2) | `SendChatMessage`（継続時）、`SaveDialogLog`（対話セッションが読めないとき）       |
 
 ### Conflict 系（HTTP 409）
 
@@ -312,6 +312,8 @@ Tutoring の Interactor は **Learning Entity を import しない**（[applicat
 | 9    | `repository.save(updated)`                                                         | 続行                                          | —                                      | 手順 1〜8 成功後のみ                                 |
 | 10   | —                                                                                  | **`ok(SendChatMessageResponse(...))`** で終了 | —                                      |                                                      |
 
+> 手順の実行順の注記(#30、DR-30-T2): 継続（`tutor_session_id` 指定）の場合、手順 2 の Snapshot 取得は手順 1 の中で先に 1 回だけ行われ、手順 2 では再取得しない。初回の場合は、番号どおり手順 1、手順 2 の順に実行する。
+
 #### Request 検証（手順 0 の詳細）
 
 | 条件                                                                             | `err`                                     |
@@ -321,12 +323,18 @@ Tutoring の Interactor は **Learning Entity を import しない**（[applicat
 | 継続（`tutor_session_id` 指定）で `tutor_session_id` が無効                      | 手順 1 で `TutorSessionNotFoundError`     |
 | Snapshot 取得に必要な `learner_id` / `lecture_id` が空（継続時も未指定の場合）   | `ValidationError`                         |
 
+> AC変更の注記(#30、PO決定 2026-10-26 DR-30-T2): 継続時は、所有確認のため Snapshot を手順 1 の前に取得する(下記「TutorSession 解決」)。
+
 #### TutorSession 解決（手順 1 の詳細）
 
 | パターン                            | 処理                                                                                         | 成功時                                    | 失敗時（`err`）                 |
 | ----------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------- |
-| **継続**（`tutor_session_id` あり） | `repository.find_by_id(tutor_session_id)`                                                    | `tutor_session` を得て続行                | `TutorSessionNotFoundError`     |
+| **継続**（`tutor_session_id` あり） | 先に Snapshot を 1 回取得（手順 2 では再取得しない）し、`repository.find_by_id(tutor_session_id)` で得た `tutor_session` が、その学習者の `snapshot.session_id == tutor_session.learning_session_id` であることを確認する | 一致すれば `tutor_session` を得て続行 | `TutorSessionNotFoundError`（セッションが無い / 他の学習者のセッション / 本人でも講義が一致しない / Snapshot 取得が失敗） |
 | **初回**（`tutor_session_id` なし） | `start_or_get_learning.execute(...)` → `start_or_get_tutor.execute(learning_session_id=...)` | 両方 `Ok` なら `tutor_session` を得て続行 | 内部 UC の `Err` をそのまま伝播 |
+
+> AC変更の注記(#30、PO決定 2026-10-26 DR-30-T2): 継続時の所有確認を追加した。書き込み・LLM 呼び出しの前に判定する。
+> 旧: 継続は `repository.find_by_id(tutor_session_id)` のみで、無ければ `TutorSessionNotFoundError`。Snapshot 取得失敗は手順 2 で `Err` を伝播し、本人の別講義のセッションも続行できた。
+> 変更後は、本人のセッションでも「講義の不一致」「Snapshot 取得の失敗」は `TutorSessionNotFoundError`(HTTP 404、`TUTOR_SESSION_NOT_FOUND`)になり、従来の Snapshot エラー(`LectureNotFoundError` 等)にならない。初回(`tutor_session_id` なし)の Snapshot 失敗は従来どおり手順 2 で `Err` を伝播する。
 
 内部 UC から伝播しうる例: `ValidationError`, `ConflictError`（Learning / Tutoring の Session 確保）
 
@@ -452,7 +460,8 @@ Tutoring / Learning の **Write Repository は注入しない**。
 | `RecordQuizAttempt`       | `StartOrGetLearningSession`                      | 同上                                                                   |
 | `SendChatMessage`（初回） | `StartOrGetLearningSession`                      | `ValidationError`, `ConflictError`                                     |
 | `SendChatMessage`（初回） | `StartOrGetTutorSession`                         | `ValidationError`, `ConflictError`（`TUTOR_SESSION_POLICY_VIOLATION`） |
-| `SendChatMessage`         | `GetLearningSnapshot`（`LearningSnapshotQuery`） | `LectureNotFoundError`, `ValidationError`                              |
+| `SendChatMessage`（初回） | `GetLearningSnapshot`（`LearningSnapshotQuery`） | `LectureNotFoundError`, `ValidationError`                              |
+| `SendChatMessage`（継続） | `GetLearningSnapshot`（`LearningSnapshotQuery`） | `TutorSessionNotFoundError`（Snapshot 取得失敗は所有確認の失敗として扱う。DR-30-T2） |
 
 内部 UC が `Ok` を返した場合のみ、呼び出し元の後続手順（ID 生成・追記・`save`）に進む。
 
