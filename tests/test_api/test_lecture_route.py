@@ -169,7 +169,11 @@ def _embedded_subtitles(html: str) -> list[dict]:
 def _expected_cues(lecture_id: str) -> list[dict]:
     from interfaces.tutoring.srt import parse_srt_file
 
-    segments = parse_srt_file(_PROJECT_ROOT / "lectures" / lecture_id / "subtitles.srt")
+    # 仕様: docs/spec/subtitle-formatting.md#受入基準 AC11(#36 の AC11 の改訂)
+    # 整形済みファイルがあればその各件、なければ元の SRT の各キュー(AC13)。
+    lecture_dir = _PROJECT_ROOT / "lectures" / lecture_id
+    display = lecture_dir / "subtitles.display.srt"
+    segments = parse_srt_file(display if display.is_file() else lecture_dir / "subtitles.srt")
     return [
         {"start": s["start_sec"], "end": s["end_sec"], "text": s["text"]}
         for s in segments
@@ -255,3 +259,131 @@ class TestLectureSubtitlesRoute:
         assert "/static/js/lecture/player.js" in html
         assert "1MuwwFipX9o" not in html  # lecture-2 の動画ではない(参加者1=lecture-1)
         assert _embedded_subtitles(html) == []
+
+
+# ---------------------------------------------------------------------------
+# 字幕の整形 (PBI #44): 整形済みファイルを表示に使う / ないときは元の SRT
+# 仕様: docs/spec/subtitle-formatting.md#受入基準 (AC11, AC13)
+#
+# test-writer が定めた公開IF(tests.md 参照。新しい公開名は作らない):
+#   講義の整形済みファイルは、講義の srt_path(Lecture.srt_path)と同じディレクトリの
+#   `subtitles.display.srt`。_subtitle_cues_for_lecture はそれがあれば(読めて、件が1つ以上)
+#   それを parse_srt_file で読み、なければ・読めなければ・件が0なら srt_path の元の SRT を読む。
+#   テストは lecture-1 の srt_path だけを一時ディレクトリの subtitles.srt に差し替えて再現する。
+# ---------------------------------------------------------------------------
+
+_TMP_ORIG = [
+    (0.0, 4.0, "これは元の字幕の一つ目です"),
+    (3.0, 8.0, "これは元の字幕の二つ目です"),
+]
+_TMP_DISPLAY = [
+    (0.0, 5.0, "整形済みの一件目の文"),
+    (5.0, 9.5, "整形済みの二件目の文"),
+]
+
+
+def _write_srt(path: Path, cues) -> None:
+    def ts(sec: float) -> str:
+        ms = round(sec * 1000)
+        return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+    path.write_bytes(
+        "\r\n\r\n".join(
+            f"{i}\r\n{ts(s)} --> {ts(e)}\r\n{t}" for i, (s, e, t) in enumerate(cues, 1)
+        ).encode("utf-8")
+    )
+
+
+def _cues_of(cues) -> list[dict]:
+    return [{"start": s, "end": e, "text": t} for s, e, t in cues]
+
+
+def _use_tmp_lecture_1(monkeypatch, directory: Path, with_srt: bool = True) -> None:
+    """lecture-1 の srt_path だけを directory/subtitles.srt に差し替える。"""
+    from framework_drivers.platform import main as platform_main
+
+    directory.mkdir(parents=True, exist_ok=True)
+    if with_srt:
+        _write_srt(directory / "subtitles.srt", _TMP_ORIG)
+    catalog = platform_main._STATIC_LECTURE_CATALOG
+    patched = dict(catalog._lectures)
+    for lid, lecture in catalog._lectures.items():
+        if str(lid) == "lecture-1":
+            patched[lid] = replace(lecture, srt_path=str(directory / "subtitles.srt"))
+    monkeypatch.setattr(catalog, "_lectures", patched)
+
+
+def _lecture_1_html(client) -> str:
+    login_as(client, "1")
+    response = client.get("/lecture")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'id="player"' in html
+    assert 'id="quiz-form"' in html
+    assert "/static/js/lecture/player.js" in html
+    return html
+
+
+class TestLectureSubtitlesDisplayFile:
+    def test_ac11_display_file_is_used_instead_of_original_srt(
+        self, phase2_client, monkeypatch, tmp_path: Path
+    ) -> None:
+        """AC11: 整形済みファイルがあれば、ページの字幕はその各件(開始、終了、文)になる。"""
+        # 仕様: docs/spec/subtitle-formatting.md#受入基準 AC11
+        _use_tmp_lecture_1(monkeypatch, tmp_path / "lec")
+        _write_srt(tmp_path / "lec" / "subtitles.display.srt", _TMP_DISPLAY)
+        cues = _embedded_subtitles(_lecture_1_html(phase2_client))
+        assert cues == _cues_of(_TMP_DISPLAY)
+        assert all("元の字幕" not in c["text"] for c in cues)
+
+    def test_ac11_display_file_of_other_lecture_is_not_used(
+        self, phase2_client, monkeypatch, tmp_path: Path
+    ) -> None:
+        """AC11: 別の講義の整形済みファイルの字幕は含まれない(lecture-1 だけに整形済みがある)。"""
+        # 仕様: docs/spec/subtitle-formatting.md#受入基準 AC11
+        _use_tmp_lecture_1(monkeypatch, tmp_path / "lec")
+        _write_srt(tmp_path / "lec" / "subtitles.display.srt", _TMP_DISPLAY)
+        login_as(phase2_client, "2")
+        cues = _embedded_subtitles(phase2_client.get("/lecture").get_data(as_text=True))
+        assert not any("整形済み" in c["text"] for c in cues)
+        assert cues == _expected_cues("lecture-2")
+
+    def test_ac13_without_display_file_original_srt_cues_are_used(
+        self, phase2_client, monkeypatch, tmp_path: Path
+    ) -> None:
+        """AC13: 整形済みファイルがない講義は、元の SRT の各キュー(#36 の AC11)。"""
+        # 仕様: docs/spec/subtitle-formatting.md#受入基準 AC13
+        _use_tmp_lecture_1(monkeypatch, tmp_path / "lec")
+        cues = _embedded_subtitles(_lecture_1_html(phase2_client))
+        assert cues == _cues_of(_TMP_ORIG)  # 重なり(0-4 と 3-8)も整理せずそのまま
+
+    @pytest.mark.parametrize(
+        "broken", ["invalid_utf8", "zero_blocks", "empty_file", "directory", "no_time_lines"]
+    )
+    def test_ac13_broken_display_file_falls_back_to_original_srt(
+        self, phase2_client, monkeypatch, tmp_path: Path, broken: str
+    ) -> None:
+        """AC13: 整形済みファイルが読めない・件が1つもないときは、ないときと同じ(元の SRT)。"""
+        # 仕様: docs/spec/subtitle-formatting.md#受入基準 AC13 (Q10 の推奨)
+        _use_tmp_lecture_1(monkeypatch, tmp_path / "lec")
+        target = tmp_path / "lec" / "subtitles.display.srt"
+        if broken == "invalid_utf8":
+            target.write_bytes(b"1\r\n00:00:00,000 --> 00:00:01,000\r\n\xff\xfe\x80\r\n")
+        elif broken == "zero_blocks":
+            target.write_bytes(b"\r\n\r\n\r\n")
+        elif broken == "empty_file":
+            target.write_bytes(b"")
+        elif broken == "directory":
+            target.mkdir()
+        else:
+            target.write_text("ただの文章で、SRT ではない\n二行目\n", encoding="utf-8")
+        cues = _embedded_subtitles(_lecture_1_html(phase2_client))
+        assert cues == _cues_of(_TMP_ORIG)
+
+    def test_ac13_no_srt_and_no_display_file_gives_empty_subtitles(
+        self, phase2_client, monkeypatch, tmp_path: Path
+    ) -> None:
+        """AC13: SRT も整形済みファイルもない講義でも、ページは従来どおりで字幕は空(#36 の AC12)。"""
+        # 仕様: docs/spec/subtitle-formatting.md#受入基準 AC13
+        _use_tmp_lecture_1(monkeypatch, tmp_path / "lec", with_srt=False)
+        assert _embedded_subtitles(_lecture_1_html(phase2_client)) == []
