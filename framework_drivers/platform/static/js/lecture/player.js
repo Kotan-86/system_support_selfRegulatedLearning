@@ -60,6 +60,15 @@
   function seekbarJumpto(value) {
     range.value = value;
     document.getElementById("time").innerHTML = formattime(range.value);
+    updateSubtitles(value);
+  }
+
+  // 仕様: docs/spec/subtitle-display.md#受入基準 AC3-AC5
+  // 字幕表示の更新のみ。ログ送信・再生操作はしない。
+  function updateSubtitles(position) {
+    if (global.LectureSubtitles) {
+      global.LectureSubtitles.update(position);
+    }
   }
 
   function syncSeekBar() {
@@ -107,7 +116,20 @@
     });
   }
 
+  // 動画内(YouTube側)の字幕を出さない。自前の字幕領域だけを使う。
+  // 字幕モジュールは再生開始時に遅れて読み込まれることがあるため、
+  // 準備完了時と再生開始時の両方で外す。ログ・seekTo・再生操作は呼ばない。
+  function hideYouTubeCaptions() {
+    try {
+      player.unloadModule("captions");
+      player.unloadModule("cc");
+    } catch (e) {
+      // 非公開モジュール名。失敗しても再生は続ける。
+    }
+  }
+
   function onPlayerReady(event) {
+    hideYouTubeCaptions();
     range = document.getElementById("seekbar");
     range.max = player.getDuration();
     event.target.playVideo();
@@ -118,6 +140,7 @@
   function onPlayerStateChange(event) {
     var position = player.getCurrentTime();
     if (event.data === YT.PlayerState.PLAYING) {
+      hideYouTubeCaptions();
       if (timer) {
         clearInterval(timer);
       }
@@ -136,6 +159,7 @@
       if (timer) {
         clearInterval(timer);
       }
+      updateSubtitles(position);
       if (isDragging) {
         return;
       }
@@ -151,7 +175,7 @@
       width: 1200,
       videoId: videoId,
       playerVars: {
-        cc_load_policy: 1,
+        cc_load_policy: 0,
         controls: 0,
         disablekb: 1,
         iv_load_policy: 3,

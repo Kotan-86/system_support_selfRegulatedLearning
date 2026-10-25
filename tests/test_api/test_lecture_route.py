@@ -127,3 +127,121 @@ class TestLectureViewingLogActions:
         assert response.status_code == 201, (
             f"action={action!r} の payload は 201 を返すこと"
         )
+
+
+# ---------------------------------------------------------------------------
+# 字幕の表示・非表示 (PBI #36)
+# 仕様: docs/spec/subtitle-display.md#受入基準 (AC11, AC12)
+#
+# test-writer が定めた公開IF(tests.md 参照):
+#   講義ページは <script> の中に `window.__LECTURE_SUBTITLES__ = <JSON>;` を1行で埋め込む。
+#   JSON は [{"start": 秒, "end": 秒, "text": 文}, ...] で、SRT の各キューを
+#   重なりの整理なしにファイルの順で並べたもの(interfaces/tutoring/srt.py の parse_srt_file と同じ値)。
+#   SRT が読めないときは [] 。
+# ---------------------------------------------------------------------------
+
+import json
+import re
+from dataclasses import replace
+from pathlib import Path
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SUBTITLES_RE = re.compile(r"window\.__LECTURE_SUBTITLES__\s*=\s*(.+?);?\s*$", re.M)
+
+
+def _embedded_subtitles(html: str) -> list[dict]:
+    match = _SUBTITLES_RE.search(html)
+    assert match, "ページに window.__LECTURE_SUBTITLES__ の埋め込みがない"
+    return json.loads(match.group(1))
+
+
+def _expected_cues(lecture_id: str) -> list[dict]:
+    from interfaces.tutoring.srt import parse_srt_file
+
+    segments = parse_srt_file(_PROJECT_ROOT / "lectures" / lecture_id / "subtitles.srt")
+    return [
+        {"start": s["start_sec"], "end": s["end_sec"], "text": s["text"]}
+        for s in segments
+    ]
+
+
+class TestLectureSubtitlesRoute:
+    """字幕データの配信(AC11)と SRT がない講義(AC12)。"""
+
+    @pytest.mark.parametrize(
+        ("participant_id", "lecture_id"),
+        [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3")],
+    )
+    def test_ac11_embedded_subtitles_match_lecture_srt(
+        self, phase2_client, participant_id: str, lecture_id: str
+    ) -> None:
+        """AC11: 講義 X のページの字幕は lectures/X/subtitles.srt の内容。"""
+        # 仕様: docs/spec/subtitle-display.md#受入基準 AC11
+        html = phase2_client.get(f"/lecture?participant_id={participant_id}").get_data(
+            as_text=True
+        )
+        cues = _embedded_subtitles(html)
+        expected = _expected_cues(lecture_id)
+        assert len(expected) > 100
+        assert cues == expected
+
+    def test_ac11_other_lecture_subtitles_are_not_embedded(self, phase2_client) -> None:
+        """AC11: 別の講義の字幕は表示されない(講義ごとに内容が異なる)。"""
+        # 仕様: docs/spec/subtitle-display.md#受入基準 AC11
+        by_lecture = {
+            pid: _embedded_subtitles(
+                phase2_client.get(f"/lecture?participant_id={pid}").get_data(as_text=True)
+            )
+            for pid in ("1", "2", "3")
+        }
+        texts = {pid: {c["text"] for c in cues} for pid, cues in by_lecture.items()}
+        assert by_lecture["1"] != by_lecture["2"] != by_lecture["3"]
+        # 各講義の先頭付近の文が、他の講義のデータに入っていない
+        for pid, other in (("1", "2"), ("1", "3"), ("2", "1"), ("3", "1")):
+            own_unique = {c["text"] for c in by_lecture[pid][1:4]} - texts[other]
+            assert own_unique, f"講義(参加者{pid})の字幕が参加者{other}と区別できない"
+
+    def test_wiring_subtitle_elements_and_script_order(self, phase2_client) -> None:
+        """配線(AC2〜6 の前提): 表示領域・ボタン・subtitles.js が player.js より前にある。"""
+        # 仕様: docs/spec/subtitle-display.md#受入基準 AC1(配線のみ。見た目はPO確認)
+        html = phase2_client.get("/lecture?participant_id=1").get_data(as_text=True)
+        assert 'id="subtitle-area"' in html
+        assert 'id="subtitle-toggle"' in html
+        sub = html.find("/static/js/lecture/subtitles.js")
+        ply = html.find("/static/js/lecture/player.js")
+        assert sub != -1, "subtitles.js が読み込まれていない"
+        assert sub < ply
+        assert phase2_client.get("/static/js/lecture/subtitles.js").status_code == 200
+
+    @pytest.mark.parametrize("mode", ["missing", "directory", "invalid_utf8"])
+    def test_ac12_missing_or_unreadable_srt_keeps_page_working(
+        self, phase2_client, monkeypatch, tmp_path: Path, mode: str
+    ) -> None:
+        """AC12: SRT がない・読めない講義でも、講義ページは従来どおり表示される。"""
+        # 仕様: docs/spec/subtitle-display.md#受入基準 AC12
+        from framework_drivers.platform import main as platform_main
+
+        if mode == "missing":
+            bad_path = tmp_path / "no-such" / "subtitles.srt"
+        elif mode == "directory":
+            bad_path = tmp_path / "dir"
+            bad_path.mkdir()
+        else:
+            bad_path = tmp_path / "broken.srt"
+            bad_path.write_bytes(b"1\n00:00:00,000 --> 00:00:01,000\n\xff\xfe\x80\n")
+
+        catalog = platform_main._STATIC_LECTURE_CATALOG
+        broken = {
+            lid: replace(lecture, srt_path=str(bad_path))
+            for lid, lecture in catalog._lectures.items()
+        }
+        monkeypatch.setattr(catalog, "_lectures", broken)
+
+        response = phase2_client.get("/lecture?participant_id=1")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert 'id="player"' in html
+        assert 'id="quiz-form"' in html
+        assert "/static/js/lecture/player.js" in html
+        assert "1MuwwFipX9o" not in html  # lecture-2 の動画ではない(参加者1=lecture-1)
+        assert _embedded_subtitles(html) == []

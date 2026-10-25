@@ -121,6 +121,27 @@ def _resolve_youtube_video_id_for_participant(
     return str(resolved_lecture_id), video_id
 
 
+def _subtitle_cues_for_lecture(lecture_id: str) -> list[dict[str, object]]:
+    """講義の SRT を画面用の字幕キュー(秒)にする。読めないときは空。
+
+    仕様: docs/spec/subtitle-display.md#受入基準 (AC11, AC12)
+    重なりの整理はしない(画面側で行う)。
+    """
+    from interfaces.tutoring.srt import parse_srt_file
+
+    lecture = _STATIC_LECTURE_CATALOG.find_by_id(LectureId(lecture_id))
+    if lecture is None:
+        return []
+    try:
+        segments = parse_srt_file(Path(lecture.srt_path))
+    except (OSError, ValueError):
+        return []
+    return [
+        {"start": s["start_sec"], "end": s["end_sec"], "text": s["text"]}
+        for s in segments
+    ]
+
+
 def create_app() -> Flask:
     """Flask アプリを生成し、Composition Root 経由でルートを登録する。"""
     init_databases()
@@ -223,6 +244,7 @@ def create_app() -> Flask:
             lecture_id=lecture_id,
             youtube_video_id=youtube_video_id,
             lecture_error="",
+            subtitle_cues=_subtitle_cues_for_lecture(lecture_id),
             **quiz_context,
         )
 
