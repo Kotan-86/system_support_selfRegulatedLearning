@@ -45,6 +45,8 @@
   <button id="pause_button" type="button" onclick="pause()">一時停止</button>
   <button id="forward_skip_button" type="button" onclick="forwardSkip()">先送りスキップ</button>
   <button id="backward_skip_button" type="button" onclick="backwardSkip()">巻き戻しスキップ</button>
+  <div id="subtitle-area" aria-live="off" style="min-height: 2.5em; margin: 8px 0; font-size: 1.2em;"></div>
+  <button id="subtitle-toggle" type="button">字幕を表示する</button>
   <p>最初にこのページをリロードしてください。リロードしないまま始めると正常に動画再生ができない場合があります。</p>
 
   <section id="quiz-section">
@@ -79,10 +81,12 @@
   <script>
     window.__LECTURE_VIDEO_ID__ = {{ youtube_video_id | tojson }};
     window.__QUIZ_ANSWER_KEY__ = {{ quiz_answer_key | tojson }};
+    window.__LECTURE_SUBTITLES__ = {{ subtitle_cues | tojson }};
   </script>
   <script src="{{ url_for('static', filename='js/common/participant_context.js') }}"></script>
   <script src="{{ url_for('static', filename='js/common/api_client.js') }}"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="{{ url_for('static', filename='js/lecture/subtitles.js') }}"></script>
   <script src="{{ url_for('static', filename='js/lecture/player.js') }}"></script>
   <script src="{{ url_for('static', filename='js/lecture/quiz.js') }}"></script>
   {% endif %}
