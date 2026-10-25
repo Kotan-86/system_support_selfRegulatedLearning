@@ -49,7 +49,7 @@ uv run python scripts/verify_gcp_agent_platform.py
 
 仕様: [docs/spec/participant-login.md](docs/spec/participant-login.md)
 
-研究協力者は、研究者から配布された ID（`P01`〜`P30`）とパスワードでログインしてから使う。未ログインで画面を開くとログイン画面（`/login`）へ移動し、API は 401 を返す。ログイン後の画面は `/lecture`（ログアウトは画面のログアウト操作）。ログインは12時間有効。研究用ダウンロード（`/research/`）の Basic 認証は、これとは別系統で変わらない。
+研究協力者は、研究者から配布された ID（`P01`〜`P31`。研究協力者30人＋研究者の確認用1件）とパスワードでログインしてから使う。未ログインで画面を開くとログイン画面（`/login`）へ移動し、API は 401 を返す。ログイン後の画面は `/lecture`（ログアウトは画面のログアウト操作）。ログインは12時間有効。研究用ダウンロード（`/research/`）の Basic 認証は、これとは別系統で変わらない。
 
 ### SECRET_KEY（必須）
 
@@ -70,7 +70,7 @@ ID とパスワードの**ハッシュ**は、JSON の設定ファイルに保�
 - 作成スクリプトは `scripts/manage_participants.py`。場所は `--file` > 環境変数 `PARTICIPANT_CREDENTIALS_FILE` > `secrets/participants.json` の順で決まる。
 
 ```bash
-# 新規: 次の未使用の ID（P01〜P30）を払い出す。--note は任意の備考
+# 新規: 次の未使用の ID（P01〜P31、計31件）を払い出す。--note は任意の備考
 uv run python scripts/manage_participants.py add --note "メモ"
 # 再発行: 有効な ID のパスワードを作り直す（未登録・停止の ID は失敗し、ファイルは変わらない）
 uv run python scripts/manage_participants.py reissue P01

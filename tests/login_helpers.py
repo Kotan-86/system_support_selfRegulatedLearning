@@ -21,7 +21,7 @@ TEST_PASSWORD = "test-password-0123456789"
 # 既存テスト・新規テストが使う参加者 ID(アプリは ID の形式を確かめない)
 TEST_PARTICIPANT_IDS = (
     "1", "2", "3", "10", "foo", "truncate-test", "learner-42",
-    "A", "B", "P01", "P02", "P03", "P30",
+    "A", "B", "P01", "P02", "P03", "P30", "P31",
 )
 
 

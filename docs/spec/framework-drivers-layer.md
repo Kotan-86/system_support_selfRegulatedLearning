@@ -202,7 +202,7 @@ flowchart TB
 ## 参加者導線（近い実験）
 
 ```
-1. 研究者が作成スクリプトで ID（P01〜P30）とパスワードを発行し、協力者へ配布する
+1. 研究者が作成スクリプトで ID（P01〜P31）とパスワードを発行し、協力者へ配布する
 2. GET /login  … ID とパスワードでログイン（成功で、開こうとした画面または /lecture へ 302）
 3. GET /lecture  … 動画視聴（ログ自動 POST）。ログインした ID の講義画面
 4. `/lecture` 埋め込み小テスト UI で全問回答・送信 → `POST /api/quiz-attempts` で記録（同一ページに完了表示）
@@ -210,7 +210,7 @@ flowchart TB
 6. 3〜5 を講義内で自由に往復。終わったら POST /logout（画面のログアウト操作）
 ```
 
-参加者は**ログインしたセッションから特定**する。URL のクエリの `participant_id` は**無視**し、ログインした本人の画面を出す。`lecture_id` は URL に含めない（サーバーが `participant_id` から解決）。講義割当は現状の固定マップのまま（`P01`〜`P30` はマップにないため、`lecture_id` 指定がなければ全員 `lecture-1`。協力者が講義を選ぶ仕組みは別 Issue）。AI チャット初回の ID 入力プロンプトは **廃止**する。詳細は [participant-login.md](./participant-login.md)。
+参加者は**ログインしたセッションから特定**する。URL のクエリの `participant_id` は**無視**し、ログインした本人の画面を出す。**変更(#33)**: 講義ページは、視聴ログと小テストの送信にページの講義IDを付ける。講義ページの「振り返り画面へ進む」は `/reflect?lecture_id=<ページの講義ID>` を開き、振り返りページは URL の講義IDを `/chat`・LAD の取得(`/api/participants/<id>/lad?lecture_id=`)・`/api/dialog-log` の本文に付ける。講義IDなしの要求は、従来どおりサーバーが `participant_id` の固定マップで解決する。未登録の講義IDの `/reflect` と `/api/dialog-log` は 404。講義割当は現状の固定マップのまま（`P01`〜`P31` はマップにないため、`lecture_id` 指定がなければ全員 `lecture-1`。協力者が講義を選ぶ仕組みは別 Issue）。AI チャット初回の ID 入力プロンプトは **廃止**する。詳細は [participant-login.md](./participant-login.md)。
 
 ### 実験時の URL 例
 

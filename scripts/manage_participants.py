@@ -34,7 +34,7 @@ from framework_drivers.platform.participant_credentials import (  # noqa: E402
     load_credentials_file,
 )
 
-MAX_PARTICIPANTS = 30
+MAX_PARTICIPANTS = 31  # 研究協力者30 + 研究者の確認用1(P01〜P31)
 _ID_PATTERN = re.compile(r"^P(\d+)$")
 DEFAULT_FILE = _PROJECT_ROOT / "secrets" / "participants.json"
 
