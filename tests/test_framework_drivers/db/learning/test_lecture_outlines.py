@@ -61,3 +61,62 @@ class TestStaticLectureCatalogOutline:
 
         assert lecture is not None
         assert lecture.outline.is_empty is False
+
+
+# ---------------------------------------------------------------------------
+# 文系レベル3講義 lecture-4〜6 の講義情報の構造 (PBI #33)
+# 仕様: docs/spec/humanities-lectures.md#受入基準 AC9
+# (内容の妥当性は AC10 = PO確認。ここでは構造だけを検査する。)
+# 字幕の最終終了時刻は仕様の表の値(tests/test_lectures/humanities_data.py)。
+# ---------------------------------------------------------------------------
+import importlib  # noqa: E402
+
+from tests.test_lectures.humanities_data import (  # noqa: E402
+    HUMANITIES_BY_ID,
+    HUMANITIES_IDS,
+)
+
+
+def _humanities_outline(lecture_id: str):
+    number = lecture_id.split("-")[1]
+    module = importlib.import_module(
+        f"framework_drivers.db.learning.lecture_outlines.lecture_{number}"
+    )
+    return module.build_lecture_outline()
+
+
+@pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+class TestHumanitiesLectureOutlineStructure:
+    def test_ac9_has_at_least_one_section_with_ascending_starts(self, lecture_id: str) -> None:
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC9
+        outline = _humanities_outline(lecture_id)
+        assert len(outline.sections) >= 1
+        assert all(section.id and section.title for section in outline.sections)
+        starts = [section.start_sec for section in outline.sections]
+        assert starts == sorted(starts), "章の開始秒が昇順でない"
+
+    def test_ac9_all_times_within_zero_and_last_subtitle_end(self, lecture_id: str) -> None:
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC9
+        last_end = HUMANITIES_BY_ID[lecture_id].srt_last_end_sec
+        outline = _humanities_outline(lecture_id)
+        assert len(outline.sections) >= 1
+        for section in outline.sections:
+            assert section.end_sec is not None, f"{section.id}: 終了秒がない"
+            assert 0 <= section.start_sec <= last_end, f"{section.id}: 開始秒が範囲外"
+            assert 0 <= section.end_sec <= last_end, f"{section.id}: 終了秒が範囲外"
+        for exercise in outline.in_video_exercises:  # 0 件でもよい
+            assert 0 <= exercise.timestamp_sec <= last_end, f"{exercise.id}: 位置が範囲外"
+
+    def test_ac9_one_rubric_note_for_each_of_questions_1_to_5(self, lecture_id: str) -> None:
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC9
+        outline = _humanities_outline(lecture_id)
+        indices = sorted(note.question_index for note in outline.quiz_rubric_notes)
+        assert indices == [1, 2, 3, 4, 5]
+        assert all(note.note.strip() for note in outline.quiz_rubric_notes)
+
+    def test_ac9_catalog_lecture_carries_the_outline(self, lecture_id: str) -> None:
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC9(カタログ経由で講義情報が付く)
+        lecture = StaticLectureCatalog().find_by_id(LectureId(lecture_id))
+        assert lecture is not None
+        assert lecture.outline.is_empty is False
+        assert sorted(n.question_index for n in lecture.outline.quiz_rubric_notes) == [1, 2, 3, 4, 5]

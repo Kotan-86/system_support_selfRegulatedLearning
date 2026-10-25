@@ -334,4 +334,5 @@ def build_save_dialog_log_controller(
     return SaveDialogLogController(
         use_case=use_case,
         presenter=DialogLogSavedPresenter(),
+        lecture_catalog=_lecture_catalog(),
     )

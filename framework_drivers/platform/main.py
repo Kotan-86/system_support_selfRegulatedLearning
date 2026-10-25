@@ -18,7 +18,14 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 
 from application.common.errors import ErrorCode
 from domain.shared.ids import LectureId
-from framework_drivers.db.learning.quiz_definitions import lecture_1, lecture_2, lecture_3
+from framework_drivers.db.learning.quiz_definitions import (
+    lecture_1,
+    lecture_2,
+    lecture_3,
+    lecture_4,
+    lecture_5,
+    lecture_6,
+)
 from framework_drivers.db.learning.sqlite_connection import connect_learning_db
 from framework_drivers.db.learning.static_lecture_catalog import StaticLectureCatalog
 from framework_drivers.db.tutoring.sqlite_connection import connect_tutor_db
@@ -85,6 +92,9 @@ _QUIZ_MODULES = {
     "lecture-1": lecture_1,
     "lecture-2": lecture_2,
     "lecture-3": lecture_3,
+    "lecture-4": lecture_4,
+    "lecture-5": lecture_5,
+    "lecture-6": lecture_6,
 }
 
 
@@ -241,9 +251,17 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
     @app.route("/reflect")
     def reflect():
         """GET /reflect: LAD + AI 振り返り統合画面(ログインした本人の画面。クエリの participant_id は無視)。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(任意の lecture_id。未登録は 404)
+        lecture_id = request.args.get("lecture_id")
+        # 空文字は LectureId を作れない(ValueError)ので、未登録と同じく 404 にする
+        if lecture_id is not None and (
+            lecture_id == "" or _STATIC_LECTURE_CATALOG.find_by_id(LectureId(lecture_id)) is None
+        ):
+            return Response("lecture not found", status=404, mimetype="text/plain")
         return render_template(
             "reflect.html",
             participant_id=current_participant_id(),
+            lecture_id=lecture_id,
             **_REFLECT_FIXED_TEXT,
         )
 

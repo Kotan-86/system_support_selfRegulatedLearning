@@ -219,6 +219,8 @@ flowchart TB
 | `/lecture`（ログイン ID `P01`）  | `lecture-1`    | `Y2HC0I8cTAI`                           |
 | `/lecture?lecture_id=lecture-2`  | `lecture-2`    | `1MuwwFipX9o`（`lecture_id` の明示指定）|
 | `/reflect`（ログイン ID `P01`）  | `lecture-1`    | LAD / AI は lecture-1 の Session を参照 |
+| `/reflect?lecture_id=lecture-4`  | `lecture-4`    | LAD / AI / 対話ログは lecture-4 の Session を参照(#33) |
+| `/lecture?lecture_id=lecture-4`  | `lecture-4`    | `a-EqZb_Mpvk`(文系。lecture-5: `lLcZEIsyHvg`、lecture-6: `psbIrfy09Pg`) |
 
 旧来の固定マップ（`participant_id` 1/2/3 → `lecture-1/2/3`）は、ID が `1`/`2`/`3` のときに限り残っている（アプリは ID の形式を確かめない）。
 
@@ -263,7 +265,7 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 | Port                            | 具象（目標パス）                                                        | サブパッケージ | 永続化 / 外部                                          |
 | ------------------------------- | ----------------------------------------------------------------------- | -------------- | ------------------------------------------------------ |
 | `LearningSessionRepository`     | `framework_drivers/db/learning/sqlite_learning_session_repository.py`   | `db`           | `learning.db`                                          |
-| `LectureCatalog`                | `framework_drivers/db/learning/static_lecture_catalog.py`               | `db`           | **3 講義**定数 + `lectures/{lecture-id}/subtitles.srt` |
+| `LectureCatalog`                | `framework_drivers/db/learning/static_lecture_catalog.py`               | `db`           | **6 講義**定数 + `lectures/{lecture-id}/subtitles.srt` |
 | `LearningSessionIdGenerator` 等 | `framework_drivers/db/learning/id_generators.py`                        | `db`           | —                                                      |
 | `TutorSessionRepository`        | `framework_drivers/db/tutoring/sqlite_tutor_session_repository.py`      | `db`           | `tutor.db`                                             |
 | `TutorSessionIdGenerator`       | `framework_drivers/db/tutoring/id_generators.py`                        | `db`           | —                                                      |
@@ -278,11 +280,11 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 
 | 項目     | 規約                                                                                                                |
 | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| 保持件数 | **3 講義**（`lecture-1` / `lecture-2` / `lecture-3`）                                                               |
+| 保持件数 | **6 講義**（`lecture-1`〜`lecture-6`。lecture-4〜6 は #33。参加者の割当は固定マップのまま）                          |
 | 解決     | `find_by_id(LectureId)` — 未知 ID は `None`                                                                         |
 | 動画 URL | 講義 ID ごとの YouTube URL 定数（[application-usecase.md#LectureCatalog](./application-usecase.md#lecturecatalog)） |
 | SRT パス | `_PROJECT_ROOT / "lectures" / {lecture_id} / "subtitles.srt"`                                                       |
-| 小テスト | 講義別 `QuizDefinition`（`quiz_definitions/lecture_1`〜`lecture_3`、各 5 問・実装済み）                             |
+| 小テスト | 講義別 `QuizDefinition`（`quiz_definitions/lecture_1`〜`lecture_6`、各 5 問・実装済み）                             |
 | 公開 API | `build_near_term_lectures()` — テスト・Composition Root から利用                                                    |
 
 `GET /lecture` は `participant_id` → `lecture_id` 解決後、本 Catalog から動画 URL を取得する（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。
@@ -499,14 +501,14 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `POST /api/viewing-logs` バッチ | 近い実験では単件 POST で開始。必要時に追加                                         |
 | API キー必須化                  | ADR: 推奨だが必須ではない                                                          |
-| 複数講義 UI                     | 固定マップ（`participant_id` 1/2/3）で 3 講義をカバー。協力者が講義を選ぶ仕組みは別 Issue（#30 の範囲外） |
+| 複数講義 UI                     | 固定マップ（`participant_id` 1/2/3）で理系 3 講義をカバー(文系 lecture-4〜6 は `lecture_id` の URL 指定。#33)。協力者が講義を選ぶ仕組みは別 Issue（#30 の範囲外） |
 | Research Export Infrastructure  | 別コンテキスト（`ExportResearchData`。対話ログだけの研究用ダウンロードは本件の範囲に含めた） |
 
 ---
 
 ## 受入基準（本仕様）
 
-- [ ] `StaticLectureCatalog` が 3 講義（`lecture-1`〜`lecture-3`）と SRT パス規約を返すことが定義されている
+- [ ] `StaticLectureCatalog` が 6 講義（`lecture-1`〜`lecture-6`）と SRT パス規約を返すことが定義されている
 - [ ] 講義動画・小テストの導線が Flask（`/lecture`・`POST /api/*`）のみと明記されている
 - [ ] `participant_id` 1/2/3 と講義・動画の対応が導線として定義されている
 - [ ] ADR との差分（講義動画ホスティング）が明示されている

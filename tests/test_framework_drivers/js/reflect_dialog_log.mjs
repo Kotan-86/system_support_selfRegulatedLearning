@@ -130,9 +130,9 @@ function setup(opts = {}) {
       chatPosts.push(body);
       return new Promise((resolve, reject) => chatPending.push({ resolve, reject }));
     },
-    postDialogLog(participantId, endMethod) {
+    postDialogLog(participantId, endMethod, lectureId) {
       events.push("postDialogLog");
-      dialogPosts.push({ participantId, endMethod });
+      dialogPosts.push({ participantId, endMethod, lectureId });
       return new Promise((resolve, reject) => dialogPending.push({ resolve, reject }));
     },
   };
@@ -140,7 +140,10 @@ function setup(opts = {}) {
   vm.runInContext(chatSrc, sandbox, { filename: "chat_panel.js" });
   vm.runInContext(dialogSrc, sandbox, { filename: "dialog_log.js" });
   sandbox.ChatPanel.init(PID);
-  if (opts.dialog !== false) sandbox.DialogLog.init(PID);
+  if (opts.dialog !== false) {
+    if (opts.lectureId === undefined) sandbox.DialogLog.init(PID);
+    else sandbox.DialogLog.init(PID, opts.lectureId);
+  }
 
   const okRes = { ok: true, status: 200, json: async () => ({ response: "了解", session_id: "s1" }) };
   const ngRes = { ok: false, status: 500, json: async () => ({ error: "boom" }) };
@@ -233,6 +236,26 @@ for (const rounds of [0, 2]) {
     check(`${tag} 完了後の押下で保存要求が増えない`, e.dialogPosts.length === 1, `n=${e.dialogPosts.length}`);
   });
 }
+
+// ---------- AC21(a) (PBI #33): 終了ボタンの保存要求に講義IDが渡る ----------
+// 仕様: docs/spec/humanities-lectures.md#受入基準 AC21(a)
+// 公開IF: DialogLog.init(participantId, lectureId?) → 押下で ApiClient.postDialogLog(participantId, "end_button", lectureId)
+await scenario("AC21 終了ボタンに講義ID", async () => {
+  const e = setup({ lectureId: "lecture-4" });
+  e.clickEnd();
+  await flush();
+  check("AC21 講義ID付きで init したとき、postDialogLog が(pid, end_button, lecture-4)で1回", e.dialogPosts.length === 1 && String(e.dialogPosts[0].participantId) === PID && e.dialogPosts[0].endMethod === "end_button" && e.dialogPosts[0].lectureId === "lecture-4", j(e.dialogPosts));
+  await e.respondSave(0, "ng");
+  e.clickEnd();
+  await flush();
+  check("AC21 失敗後の再押下でも講義IDを渡す", e.dialogPosts.length === 2 && e.dialogPosts[1].lectureId === "lecture-4", j(e.dialogPosts));
+});
+await scenario("AC21 講義IDなしの終了ボタン(従来どおり)", async () => {
+  const e = setup();
+  e.clickEnd();
+  await flush();
+  check("AC13(d) 講義IDなしで init したとき、postDialogLog に講義IDを渡さない", e.dialogPosts.length === 1 && e.dialogPosts[0].lectureId === undefined, j(e.dialogPosts));
+});
 
 // ---------- A10: 失敗(!ok / 例外)で失敗表示、完了にならず、再押下で再送、成功で完了 ----------
 for (const kind of ["ng", "reject"]) {

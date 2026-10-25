@@ -59,6 +59,12 @@ def test_a19_end_button_disabled_while_waiting_via_node(node_output) -> None:
     _assert_group(node_output, "A19")
 
 
+def test_ac21_end_button_passes_lecture_id_via_node(node_output) -> None:
+    # 仕様: docs/spec/humanities-lectures.md#受入基準 AC21(a)(PBI #33 の追加分)
+    _assert_group(node_output, "AC21")
+    _assert_group(node_output, "AC13(d)")
+
+
 def test_t5_public_interface_via_node(node_output) -> None:
     # 仕様: docs/spec/dialog-log-save.md#受入基準 A9・A10・A19 の前提(tasks.md 11-T5 の公開IF)
     _assert_group(node_output, "IF")
