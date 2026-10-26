@@ -346,7 +346,7 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 - セッション Cookie: `HttpOnly`、`SameSite=Lax`、既定で `Secure`（ローカルの HTTP 実行だけ環境変数で外せる）。有効期限はログインから12時間（要求のたびに延長しない）。
 - `lecture_id` は参加者の識別ではないため、従来どおり扱う。
 
-`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
+`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}` と任意の `lecture_id`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403。`lecture_id` は変更: #33、出典 [humanities-lectures.md](./humanities-lectures.md) AC21。省略時は参加者の固定割当の講義、未登録の講義 ID は 404 で何も保存せず、文字列以外は 400）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
 `/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
 

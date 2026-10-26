@@ -169,7 +169,7 @@ PBI-A-1 が作り、PBI-A-2(終了ボタンによる保存)と PBI-B(離脱時�
 |---|---|---|
 | `format_version` | 整数 `1` | 研究者のアクセスの別 Issue や、将来の項目の追加のときに、読み手が形を判別できるようにする |
 | `participant_id` | 文字列。画面を開いた participant_id(保存 API に送られた値) | `sessions.participant_id` は空文字のため(前提)、要求の値を使う。Q3 |
-| `lecture_id` | 文字列。保存要求の本文に `lecture_id` があればその講義、なければ参加者の固定割当の講義の学習セッションの講義ID(変更: #33) | Q3 |
+| `lecture_id` | 文字列。保存要求の本文に `lecture_id` があればその講義、なければ参加者の固定割当の講義の学習セッションの講義ID(変更: #33。出典 [humanities-lectures.md](./humanities-lectures.md) AC21) | Q3 |
 | `learning_session_id` | 文字列。`learning.db` の学習セッションID | Q3。研究データの結合キー `(learnerId, learningSessionId)` を含めるため |
 | `tutor_session_id` | 文字列。`tutor.db` の対話セッションID(`sessions.id`) | Q3。キー名は、他の識別子と見分けられるよう `session_id` ではなく `tutor_session_id` とする |
 | `ended_at` | 時刻の文字列(下記「時刻の形式」) | Q1 |
@@ -211,7 +211,7 @@ PBI-A-1 が作り、PBI-A-2(終了ボタンによる保存)と PBI-B(離脱時�
 | 項目 | 内容 |
 |---|---|
 | 要求 | `POST /api/dialog-log`、本文は JSON(`Content-Type: application/json`) |
-| 本文 | `{"participant_id": "<ID>", "end_method": "end_button" \| "page_leave"}` と、任意の `lecture_id`(変更: #33。付けたときはその講義の対話セッションを保存し、付けないときは従来どおり固定割当の講義。未登録の講義IDは 404 で何も保存しない。文字列以外は 400)だけ。対話の本文は送らない(サーバーが `tutor.db` の `messages` から作る)。**変更(#30)**: 参加者はログインしたセッションから特定するため、`participant_id` は省略可。送る場合はログインした ID と一致する値だけ受け付ける |
+| 本文 | `{"participant_id": "<ID>", "end_method": "end_button" \| "page_leave"}` と、任意の `lecture_id`(変更: #33。出典 [humanities-lectures.md](./humanities-lectures.md) AC21。付けたときはその講義の対話セッションを保存し、付けないときは従来どおり固定割当の講義。未登録の講義IDは 404 で何も保存しない。文字列以外は 400)だけ。対話の本文は送らない(サーバーが `tutor.db` の `messages` から作る)。**変更(#30)**: 参加者はログインしたセッションから特定するため、`participant_id` は省略可。送る場合はログインした ID と一致する値だけ受け付ける |
 | 成功 | 状態 200。本文は JSON `{"tutor_session_id": "...", "ended_at": "...", "end_method": "..."}`(保存した対話ログの値) |
 | 要求の誤り | `end_method` がない・2つの値以外、本文が JSON でない、`participant_id` の型が文字列・数値・`null` 以外(真偽値・配列・オブジェクト)、のいずれかは、状態 400。対話ログは保存・変更されない。**変更(#30。旧: `participant_id` がない・空・空白だけも 400)**: `participant_id` は省略可(省略・`null`・空文字はログインした参加者として処理する)。ログインした ID と異なる値は 403(記録しない)。未ログインは 401 |
 | 保存の失敗 | DB に書けないなど、サーバー側で保存できなかったときは、2xx 以外の状態を返す(本文の形は定めない)。対話ログは変更されない |

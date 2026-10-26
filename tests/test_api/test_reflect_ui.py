@@ -164,6 +164,12 @@ class TestReflectLectureIdCarryOver:
         login_as(phase2_client, "P01")
         assert phase2_client.get(f"/reflect?{query}").status_code == 404
 
+    def test_ac19d_reflect_with_empty_lecture_id_is_404(self, phase2_client) -> None:
+        """AC19(d): 空文字の lecture_id を付けた /reflect は 404。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(d)
+        login_as(phase2_client, "P01")
+        assert phase2_client.get("/reflect?lecture_id=").status_code == 404
+
     def test_ac19b_embedded_lecture_id_is_declared_before_reflect_scripts(self, phase2_client) -> None:
         """AC19(b): 講義IDの埋め込みは、それを読む JS(chat_panel.js, reflect_app.js)より前にある。"""
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(b)
