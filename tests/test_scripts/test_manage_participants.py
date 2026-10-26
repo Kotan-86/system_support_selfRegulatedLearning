@@ -210,8 +210,18 @@ class TestAc17NoPlaintextStored:
 
 
 class TestAc19LimitAndReissueTargets:
-    def test_ac19_the_31st_add_fails_and_the_file_is_unchanged(self, cli) -> None:
+    def test_ac19_the_31st_add_succeeds_and_allocates_p31(self, cli) -> None:
         seed_active(cli, 30)
+
+        code, out, err = cli.run("add")
+
+        assert code == 0, err
+        assert len(cli.entries()) == 31
+        assert cli.entries()[-1]["id"] == "P31"
+        assert password_in(out, cli.entry("P31")["password_hash"])
+
+    def test_ac19_the_32nd_add_fails_and_the_file_is_unchanged(self, cli) -> None:
+        seed_active(cli, 31)
         before = cli.raw()
 
         code, out, err = cli.run("add")
@@ -219,17 +229,21 @@ class TestAc19LimitAndReissueTargets:
         assert code != 0
         assert err.strip() != ""
         assert cli.raw() == before
-        assert len(cli.entries()) == 30
+        assert len(cli.entries()) == 31
+        assert "P32" not in [e["id"] for e in cli.entries()]
+        assert "P32" not in out
 
     def test_ac19_suspended_ids_still_count_toward_the_limit(self, cli) -> None:
-        seed_active(cli, 30)
+        seed_active(cli, 31)
         assert cli.run("suspend", "P05")[0] == 0
         before = cli.raw()
 
-        code, _, _ = cli.run("add")
+        code, out, _ = cli.run("add")
 
         assert code != 0
         assert cli.raw() == before
+        assert len(cli.entries()) == 31
+        assert "P32" not in out
 
     def test_ac19_reissue_of_an_unregistered_id_fails_and_the_file_is_unchanged(self, cli) -> None:
         seed_active(cli, 3)

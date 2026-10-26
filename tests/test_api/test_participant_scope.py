@@ -249,7 +249,7 @@ def _video_id_of(lecture_id: str) -> str:
 
 
 class TestAc25LectureAssignment:
-    @pytest.mark.parametrize("participant_id", ["P01", "P02", "P03", "P30"])
+    @pytest.mark.parametrize("participant_id", ["P01", "P02", "P03", "P30", "P31"])
     def test_ac25_everyone_gets_lecture_1_without_lecture_id(self, app_and_llm, participant_id) -> None:
         client = app_and_llm[0].test_client()
         login_as(client, participant_id)
