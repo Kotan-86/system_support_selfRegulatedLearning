@@ -59,7 +59,7 @@ uv run python scripts/verify_gcp_agent_platform.py
 
 仕様: [docs/spec/participant-login.md](docs/spec/participant-login.md)
 
-研究協力者は、研究者から配布された ID（`P01`〜`P31`。研究協力者30人＋研究者の確認用1件）とパスワードでログインしてから使う。未ログインで画面を開くとログイン画面（`/login`）へ移動し、API は 401 を返す。ログイン後の画面は `/lecture`（ログアウトは画面のログアウト操作）。ログインは12時間有効。研究用ダウンロード（`/research/`）の Basic 認証は、これとは別系統で変わらない。
+研究協力者は、研究者から配布された ID（`P01`〜`P31`。`P01` が研究者の確認用、`P02`〜`P31` が研究協力者30人）とパスワードでログインしてから使う。未ログインで画面を開くとログイン画面（`/login`）へ移動し、API は 401 を返す。ログイン後の画面は `/lecture`（ログアウトは画面のログアウト操作）。ログインは12時間有効。研究用ダウンロード（`/research/`）の Basic 認証は、これとは別系統で変わらない。
 
 ### SECRET_KEY（必須）
 
@@ -86,10 +86,26 @@ uv run python scripts/manage_participants.py add --note "メモ"
 uv run python scripts/manage_participants.py reissue P01
 # 停止: 以後その ID はログインできない（停止した番号は再利用しない。解除の指示はない）
 uv run python scripts/manage_participants.py suspend P01
+# 一括: 次の番号から N 件を一度に払い出し、配布用 CSV に書く（--count は必須）
+uv run python scripts/manage_participants.py bulk-add --count 30
 ```
 
-- パスワード（16文字以上のランダムな文字列）は、**作成・再発行したとき標準出力に1回だけ**表示される。ファイルにはハッシュだけが残るため、後から確認できない。表示されたら安全な方法で協力者に配布する。
+- パスワード（16文字以上のランダムな文字列）は、**`add` / `reissue` では作成・再発行したとき標準出力に1回だけ**表示される。ファイルにはハッシュだけが残るため、後から確認できない。表示されたら安全な方法で協力者に配布する。
 - 停止しても、すでに発行されたセッションは有効期限（12時間）まで有効。
+
+#### 一括発行（`bulk-add`）と配布用 CSV
+
+- `bulk-add --count N` は、登録済みの件（有効・停止）の次の番号から N 件を払い出す。`--count` は必須で、1以上の整数。台帳の登録件数と N の合計が上限（31）を超える指示は、全体が失敗し、何も変わらない。
+- パスワードは**端末に出ない**。成功すると、CSV の場所と件数だけが表示される。
+- 配布用 CSV の場所と形式:
+  - 場所と名前: 設定ファイルと同じディレクトリの `participants-distribution.csv`（既定なら `secrets/participants-distribution.csv`）
+  - 列: 1行目が見出し `id,password`、2行目以降に払い出した順で1件1行
+  - 文字コード: UTF-8（BOM なし）
+- 同名の CSV がすでにあると**失敗**する（上書きしない）。配布が済んだら CSV を**必ず削除**してから、次の一括発行をする。失敗したときは台帳も CSV も変わらない（片方だけ残らない）。
+- CSV には平文のパスワードが入る（NFR-08 の限定的な例外。台帳・DB・Cookie には平文を入れない）。配布が済んで削除するまでの間だけ、研究者の手元の `secrets/` に置く。
+  - 共有ドライブ・チャット・メールの添付に置かない。
+  - リポジトリにもイメージにも入れない（既定の場所なら `.gitignore` と `.dockerignore` の除外の内）。設定ファイルを `secrets/` の外に置くと CSV も外にできるので、除外されない場所に置かないこと。
+- 登録の上限は**31件**（停止中の ID も数える。`P31` の次は払い出さない）。このうち1件は**本番の通し確認の専用**（確認後に停止する）で、**協力者に配るのは30件まで**（`P02`〜`P31`。確認専用は `P01`）。スクリプトは確認専用かどうかを区別しない。運用の規則として守る。
 
 ### ローカルでの実行
 
@@ -131,7 +147,40 @@ python -c "import secrets; print(secrets.token_hex(32))" | gcloud secrets create
   ```
 - 起動手順（コンテナの起動スクリプト）は、設定ファイルを登録しない。Secret Manager から渡されたファイルをアプリが読むだけ。
 - 本番は HTTPS のため、`SESSION_COOKIE_SECURE_DISABLED` と `HTTPS_ENFORCEMENT_DISABLED` は設定しない。本番では、元の方式が http の要求（`X-Forwarded-Proto` が `http`、またはヘッダなし）をアプリが処理せず、GET・HEAD は https の同じ URL へ 301 で移し、それ以外（POST など）は 400 で拒否する。https の応答には `Strict-Transport-Security: max-age=31536000` を付ける（仕様: [docs/spec/https-enforcement.md](docs/spec/https-enforcement.md)）。
-- （未確認）上記の `--set-secrets` のファイルマウントの書式、マウント先の制約、シークレットの大きさの上限は、公式ドキュメントを参照できていない。デプロイ前に Cloud Run の公式ドキュメントで確認すること。
+- 公式ドキュメントでの確認結果（確認日 2026-10-28）:
+  - **ファイルマウントの書式**（確認済み）: `PATH=SECRET_NAME:VERSION`。`PATH` はマウント先のディレクトリとファイル名を合わせたもので、先頭に `/` が要る（例: `/etc/secrets/dbconfig/password`）。`VERSION` は `latest` か番号。出典: <https://cloud.google.com/run/docs/configuring/services/secrets>
+  - **`--set-secrets` でのファイルマウント**（本番で動作を確認、2026-10-28）: 上記ページがファイルマウントの例に使っているのは `--update-secrets` で、`--set-secrets` の例は環境変数の形（`ENV_VAR_NAME=SECRET_NAME:VERSION`）だけで、ファイルのパスを指定する形は明記されていない。一方、2026-10-28 の本番（Cloud Run）の通し確認では、上記の `gcloud run deploy` の形（`--set-secrets` / `--update-env-vars` による既存のデプロイ設定）で、マウントしたファイルから台帳が読まれ、版の追加＋再デプロイ（`gcloud run services update --update-env-vars SWAP_MARKER=...` による新リビジョンの作成）で反映されることを確認した（確認専用 `P01` でログイン成功、停止して版を追加し再デプロイした後はログイン不可）。実際にデプロイ時に設定された `--set-secrets` の中身までは、この記述以上は確認していない（既存のシークレット設定を置き換える `--set-secrets` の意味は、同ページに記載がある）。
+  - **マウント先の制約**（確認済み）: `/dev`、`/proc`、`/sys` とその下には、マウントできない。同じパスに複数のシークレットはマウントできない。マウント先の最後のディレクトリが既に存在すると、その中身は見えなくなる（回避するには専用のディレクトリを作る）。Regional secrets は非対応。第1世代の実行環境で `/tmp` にマウントするときは、同ページの既知の問題を参照。出典: 同上
+  - **シークレットの大きさの上限**（確認済み）: 1つのシークレットバージョンのペイロードは 64 KiB。出典: <https://cloud.google.com/secret-manager/quotas>（「Content limits」）
+
+### 本番での通しの確認（実験開始の前に行う）
+
+発行した ID で本番にログインできることを、確認専用の ID で確かめる。本番の操作（gcloud の認証、デプロイ、ブラウザでのログイン）は研究者が行う。
+
+1. **台帳の件数確認と `P01` の用意。** 台帳に `P01`（確認専用）があれば、それを使う。台帳が空なら、確認専用の ID を1件目として追加する: `uv run python scripts/manage_participants.py add --note "確認専用"`（`P01` が払い出される。端末に表示された ID とパスワードを、確認にだけ使う）。それ以外（`P01` 以外の件がある、または登録済み件数＋30 が31を超える）のときは作業を止めて、研究者（PO）に相談する。
+2. 協力者の人数分（`P02`〜`P31`）を一括発行する: `uv run python scripts/manage_participants.py bulk-add --count 30`。`participants-distribution.csv` ができる。
+3. Secret Manager に設定ファイルの新しい版を追加し（`gcloud secrets versions add ...`）、Cloud Run を再デプロイする。
+4. 本番のログイン画面で確認専用の ID とパスワードでログインし、ログイン後の画面にその ID が表示されることを確かめる。
+5. ログアウトする。
+6. 確認専用の ID を停止する: `uv run python scripts/manage_participants.py suspend <確認専用の ID>`。
+7. もう一度、シークレットに新しい版を追加して再デプロイする（停止の反映にも要る）。
+8. 確認専用の ID でログインできないこと（ログイン画面が失敗の文言で再表示される）を確かめる。
+9. CSV を使って協力者に配布し、配布が済んだら CSV を削除する。
+
+実運用で起きた注意（2026-10-28 の通し確認）:
+
+- 停止・追加などの台帳の変更は、手元のファイルを直しただけでは本番に反映されない。`gcloud secrets versions add` で版を追加し、再デプロイ（新リビジョン）してはじめて反映される。
+- `manage_participants.py` は**本物の台帳があるディレクトリ**で実行する（別の場所で実行すると、別の（空の）台帳を作ってしまう）。
+- 古い版を `disable` するときは、**有効な版が1つ以上残る**ことを確認してから行う（有効な版がないと、`latest` を読めず起動に失敗しうる）。
+
+失敗したときに見る点:
+
+- 起動に失敗するときは、Cloud Run の起動失敗のログに出る環境変数の名前（`SECRET_KEY`、`PARTICIPANT_CREDENTIALS_FILE`）が設定されているか。
+- 実行サービスアカウントに、対象シークレット（`participant-credentials`、`session-secret-key`）の読み取り権限（`roles/secretmanager.secretAccessor`）があるか。
+- マウント先のパス（`/secrets/participant-credentials/participants.json`）が、`PARTICIPANT_CREDENTIALS_FILE` と一致しているか。
+- 新しい版を追加したあとに、再デプロイしたか（`latest` は再デプロイで読み直される）。
+
+**分析のときの注意**: 確認専用の ID でログインすると、その ID の視聴ログなどが本番の DB に残りうる（講義画面は動画の準備ができると再生・一時停止の状態でログを送る）。分析では、確認専用の ID（`P01`）の記録を除くこと。
 
 ## Cloud Run デプロイ
 
