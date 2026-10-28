@@ -422,7 +422,7 @@ class TestHumanitiesLecturePage:
     def test_ac3_page_embeds_only_own_video_id(self, phase2_client, lecture_id: str) -> None:
         """AC3: 200 で、その講義の YouTube 動画ID が埋め込まれ、他の講義の動画IDは含まれない。"""
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC3
-        login_as(phase2_client, "P01")
+        login_as(phase2_client, "P01", lecture=lecture_id)  # 講義は選択で決まる(#34)
         response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
@@ -438,7 +438,7 @@ class TestHumanitiesLecturePage:
         """AC5: 小テストの題名・説明・5 問の問題文・各選択肢がページにある。"""
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC5
         expected = HUMANITIES_BY_ID[lecture_id]
-        login_as(phase2_client, "P01")
+        login_as(phase2_client, "P01", lecture=lecture_id)  # 講義は選択で決まる(#34)
         response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
@@ -455,7 +455,7 @@ class TestHumanitiesLecturePage:
     def test_ac5_page_has_no_explanation(self, phase2_client, lecture_id: str) -> None:
         """AC5: ページに解説は含まれない(付録A には解説の文がないため、「解説」の見出し語がないことで確かめる)。"""
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC5 / 実現内容3(解説は表示しない)
-        login_as(phase2_client, "P01")
+        login_as(phase2_client, "P01", lecture=lecture_id)  # 講義は選択で決まる(#34)
         response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
         assert response.status_code == 200
         assert "解説：" not in response.get_data(as_text=True)
@@ -476,18 +476,20 @@ class TestHumanitiesLecturePage:
             {"start": s["start_sec"], "end": s["end_sec"], "text": s["text"]}
             for s in parse_srt_file(srt)
         ]
-        login_as(phase2_client, "P01")
+        login_as(phase2_client, "P01", lecture=lecture_id)  # 講義は選択で決まる(#34)
         response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
         assert response.status_code == 200
         cues = _embedded_subtitles(response.get_data(as_text=True))
         assert len(expected) == HUMANITIES_BY_ID[lecture_id].srt_blocks
         assert cues == expected
 
-    def test_ac12_unregistered_lecture_is_404(self, phase2_client) -> None:
-        """AC12: 未登録の講義(lecture-7)は従来どおり 404。"""
-        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC12
+    def test_ac12_unregistered_lecture_id_is_ignored_for_a_selected_participant(self, phase2_client) -> None:
+        """AC12(置き換え): 未登録の講義(lecture-7)を付けても 404 にならず、選択した講義の画面になる。"""
+        # 仕様: docs/spec/lecture-selection.md#受入基準 AC15(旧: docs/spec/humanities-lectures.md AC12 の 404)
         login_as(phase2_client, "P01")
-        assert phase2_client.get("/lecture?lecture_id=lecture-7").status_code == 404
+        response = phase2_client.get("/lecture?lecture_id=lecture-7")
+        assert response.status_code == 200
+        assert _ALL_VIDEO_IDS["lecture-1"] in response.get_data(as_text=True)
 
     @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
     def test_ac19a_reflect_link_carries_page_lecture_id(
@@ -495,7 +497,7 @@ class TestHumanitiesLecturePage:
     ) -> None:
         """AC19(a): 「振り返り画面へ進む」のリンク先は /reflect?lecture_id=<ページの講義ID>。"""
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(a)
-        login_as(phase2_client, "P01")
+        login_as(phase2_client, "P01", lecture=lecture_id)  # 講義は選択で決まる(#34)
         html = phase2_client.get(f"/lecture?lecture_id={lecture_id}").get_data(as_text=True)
         assert _reflect_link_href(html) == f"/reflect?lecture_id={lecture_id}"
 
@@ -512,10 +514,10 @@ class TestHumanitiesLecturePage:
         ("participant_id", "lecture_id"),
         [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3")],
     )
-    def test_ac19a_reflect_link_for_fixed_assignment(
+    def test_ac19a_reflect_link_for_selected_lecture(
         self, phase2_client, participant_id: str, lecture_id: str
     ) -> None:
-        """AC19(a)・AC13(b): 固定割当の参加者のリンク先は、表示している講義のID。"""
+        """AC19(a)・AC13(b): 講義を選択済みの参加者のリンク先は、表示している講義のID。"""
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(a)
         login_as(phase2_client, participant_id)
         html = phase2_client.get("/lecture").get_data(as_text=True)
@@ -540,7 +542,7 @@ class TestLecturePageExistingBehavior:
         ("participant_id", "lecture_id"),
         [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3")],
     )
-    def test_ac13b_fixed_assignment_pages(
+    def test_ac13b_selected_lecture_pages(
         self, phase2_client, participant_id: str, lecture_id: str
     ) -> None:
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC13(b)

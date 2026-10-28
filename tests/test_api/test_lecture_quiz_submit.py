@@ -136,8 +136,8 @@ def test_ac6_ac18_humanities_correct_answers_are_recorded_as_that_lecture(
     phase2_client, lecture_id: str
 ) -> None:
     """AC6・AC18(サーバー側): lecture-4〜6 の全問正解で 201 と attempt_id。試行の講義IDは指定した講義。"""
-    # 仕様: docs/spec/humanities-lectures.md#受入基準 AC6, AC18
-    login_as(phase2_client, "P01")
+    # 仕様: docs/spec/humanities-lectures.md#受入基準 AC6, AC18 / docs/spec/lecture-selection.md#受入基準 AC10
+    login_as(phase2_client, "P01", lecture=lecture_id)
     response = phase2_client.post(
         "/api/quiz-attempts",
         json=_quiz_payload_for(lecture_id),
@@ -148,8 +148,8 @@ def test_ac6_ac18_humanities_correct_answers_are_recorded_as_that_lecture(
     assert _quiz_attempt_lectures("P01") == [lecture_id]
 
 
-def test_ac20_quiz_attempt_without_lecture_id_uses_fixed_assignment(phase2_client) -> None:
-    """AC20・AC13(a): 講義IDなしの送信は、従来どおり固定割当(P01 は lecture-1)で記録される。"""
+def test_ac20_quiz_attempt_without_lecture_id_uses_selected_lecture(phase2_client) -> None:
+    """AC20・AC13(a): 講義IDなしの送信は、選択済みの講義(P01 は lecture-1 を選択済み)で記録される。"""
     # 仕様: docs/spec/humanities-lectures.md#受入基準 AC20
     login_as(phase2_client, "P01")
     payload = _quiz_payload_for("lecture-4", with_lecture_id=False)

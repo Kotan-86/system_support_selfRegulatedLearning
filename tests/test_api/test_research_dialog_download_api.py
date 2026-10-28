@@ -139,6 +139,58 @@ def chat(client, text: str, pid: str = "1", **extra):
     return response
 
 
+def add_second_session_directly(env: "Env", pid: str, lecture_id: str, text: str) -> None:
+    """同じ参加者の別講義の対話セッション(発言2件)を、DB に直接置く。
+
+    仕様: docs/spec/lecture-selection.md#受入基準 AC14。講義の選択の後、アプリは選択した講義以外の
+    学習セッションを作らない(異なる lecture_id は 403)。ダウンロードが複数の対話セッションを
+    並べる処理(R5・R6)は、既存のデータの形として検証を続けるため、アプリを通さずに置く。
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    from tests.login_helpers import select_lecture_directly
+
+    select_lecture_directly(pid, lecture_id)
+    from datetime import timedelta
+
+    # 並びを決定的にする: 保存済みの選択は started_at が最も古い学習セッション(同時刻だと id の
+    # uuid で並びが不定になる)。追加するセッションは、既存のどれよりも後の時刻にする。
+    learning = env.learning()
+    try:
+        latest = learning.execute(
+            "SELECT started_at FROM learning_sessions WHERE learner_id=? AND lecture_id<>?",
+            (pid, lecture_id),
+        ).fetchall()
+        later = max(datetime.fromisoformat(r["started_at"]) for r in latest) + timedelta(seconds=10)
+        learning.execute(
+            "UPDATE learning_sessions SET started_at=? WHERE learner_id=? AND lecture_id=?",
+            (later.isoformat(), pid, lecture_id),
+        )
+        learning.commit()
+        ls_id = learning.execute(
+            "SELECT id FROM learning_sessions WHERE learner_id=? AND lecture_id=?", (pid, lecture_id)
+        ).fetchone()["id"]
+    finally:
+        learning.close()
+    now = (later + timedelta(seconds=1)).replace(microsecond=0).isoformat()
+    tutor = env.tutor()
+    try:
+        session_id = str(uuid.uuid4())
+        tutor.execute(
+            "INSERT INTO sessions (id, created_at, participant_id, learning_session_id) VALUES (?,?,?,?)",
+            (session_id, now, pid, ls_id),
+        )
+        for role, content in (("user", text), ("assistant", "スタブ応答")):
+            tutor.execute(
+                "INSERT INTO messages (session_id, role, content, created_at) VALUES (?,?,?,?)",
+                (session_id, role, content, now),
+            )
+        tutor.commit()
+    finally:
+        tutor.close()
+
+
 def save(client, pid: str = "1", end_method: str = "end_button"):
     ensure_login(client, pid)
     response = client.post(
@@ -387,7 +439,7 @@ class TestR5SessionsAndEndInfo:
     def test_r5_two_sessions_of_participant_2_with_one_saved(self, env: Env, client) -> None:
         # 仕様: docs/spec/research-dialog-download.md#受入基準 R5
         chat(client, "lecture-2 の質問", "2")
-        chat(client, "lecture-3 の質問", "2", lecture_id="lecture-3")
+        add_second_session_directly(env, "2", "lecture-3", "lecture-3 の質問")
         saved = save(client, "2").get_json()
 
         body = get_json(client, participant_url("2"))
@@ -442,7 +494,7 @@ class TestR6AllParticipants:
     def populated(self, env: Env, client):
         for pid in ("foo", "2", "10", "1"):
             chat(client, f"{pid}の質問", pid)
-        chat(client, "lecture-3 の質問", "2", lecture_id="lecture-3")
+        add_second_session_directly(env, "2", "lecture-3", "lecture-3 の質問")
         save(client, "1")
         save(client, "2")
         return client
@@ -625,7 +677,11 @@ class TestR9NoLogNoWriteNoRegression:
 
         assert response.status_code == 200
         assert response.get_json() == []
-        assert env.learning().execute("SELECT COUNT(*) AS n FROM learning_sessions").fetchone()["n"] == 0
+        # 仕様: docs/spec/lecture-selection.md#受入基準 AC19。ログイン済みの "1" の選択(1 行)だけがあり、
+        # 未知の参加者の学習セッションは作られない。
+        assert [
+            tuple(r) for r in env.learning().execute("SELECT learner_id, lecture_id FROM learning_sessions")
+        ] == [("1", "lecture-1")]
         assert env.tutor().execute("SELECT COUNT(*) AS n FROM sessions").fetchone()["n"] == 0
 
     def test_r9_participant_apis_still_work_without_credentials(self, client) -> None:

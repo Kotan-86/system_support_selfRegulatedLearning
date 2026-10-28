@@ -154,7 +154,7 @@ FastAPI への変更、PostgreSQL への移行、マイクロサービス分割�
 | 小テスト入力         | Google Form + GAS       | **`GET /lecture` 埋め込み UI** → `POST /api/quiz-attempts` |
 | バックエンド         | Flask + SQLite 2 DB     | **変更なし**                                               |
 | LAD 表示             | DB 参照（UI 未定）      | **自前 `/reflect` + ECharts**（Looker 廃止）               |
-| 講義数               | 1 講義想定              | **3 講義**（`participant_id` 1/2/3 で自動解決）            |
+| 講義数               | 1 講義想定              | **3 講義**（旧: `participant_id` 1/2/3 で自動解決。固定マップは廃止し、現在は登録された講義から協力者が選ぶ。[lecture-selection.md](./lecture-selection.md)） |
 
 視聴ログの **API payload 形状**（`participant_id`, `time_stamp`, `current_time`, `action`, `duration`）は ADR・GAS 契約テストと **同一**を維持する。
 
@@ -204,26 +204,29 @@ flowchart TB
 
 ```
 1. 研究者が作成スクリプトで ID（P01〜P31）とパスワードを発行し、協力者へ配布する
-2. GET /login  … ID とパスワードでログイン（成功で、開こうとした画面または /lecture へ 302）
-3. GET /lecture  … 動画視聴（ログ自動 POST）。ログインした ID の講義画面
+2. GET /login  … ID とパスワードでログイン（成功で、開こうとした画面または /lecture へ 302。講義が未選択なら選択の画面へ 302）
+2a. GET /select-lecture  … 未選択のときだけ。登録された講義を題名と系統つきで一覧し、1つを選ぶ（POST /select-lecture で確認の画面、POST /select-lecture/confirm で確定。一度確定したら変更できない）
+3. GET /lecture  … 動画視聴（ログ自動 POST）。ログインした ID が選んだ講義の画面
 4. `/lecture` 埋め込み小テスト UI で全問回答・送信 → `POST /api/quiz-attempts` で記録（同一ページに完了表示）
 5. GET /reflect  … LAD + AI 振り返り（同一 Session）
 6. 3〜5 を講義内で自由に往復。終わったら POST /logout（画面のログアウト操作）
 ```
 
-参加者は**ログインしたセッションから特定**する。URL のクエリの `participant_id` は**無視**し、ログインした本人の画面を出す。**変更(#33)**: 講義ページは、視聴ログと小テストの送信にページの講義IDを付ける。講義ページの「振り返り画面へ進む」は `/reflect?lecture_id=<ページの講義ID>` を開き、振り返りページは URL の講義IDを `/chat`・LAD の取得(`/api/participants/<id>/lad?lecture_id=`)・`/api/dialog-log` の本文に付ける。講義IDなしの要求は、従来どおりサーバーが `participant_id` の固定マップで解決する。未登録の講義IDの `/reflect` と `/api/dialog-log` は 404。講義割当は現状の固定マップのまま（`P01`〜`P31` はマップにないため、`lecture_id` 指定がなければ全員 `lecture-1`。協力者が講義を選ぶ仕組みは別 Issue）。AI チャット初回の ID 入力プロンプトは **廃止**する。詳細は [participant-login.md](./participant-login.md)。
+参加者は**ログインしたセッションから特定**する。URL のクエリの `participant_id` は**無視**し、ログインした本人の画面を出す。**変更(#33)**: 講義ページは、視聴ログと小テストの送信にページの講義IDを付ける。講義ページの「振り返り画面へ進む」は `/reflect?lecture_id=<ページの講義ID>` を開き、振り返りページは URL の講義IDを `/chat`・LAD の取得(`/api/participants/<id>/lad?lecture_id=`)・`/api/dialog-log` の本文に付ける。**置き換え(#34、[lecture-selection.md](./lecture-selection.md))**: 参加者の講義は、協力者が選択の画面で選び、1回で固定される保存された選択で決まる。`participant_id` の固定マップと既定の講義へのフォールバックは廃止した。講義IDなしの要求は、サーバーが保存された選択の講義で処理する。参加者の API は、未選択なら 409、`lecture_id` が選択と異なる（未登録の値を含む）なら 403、値の形の誤り（空文字など）は 400（検査の順序は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。`GET /lecture?lecture_id=` は、選択済みなら指定を無視して選択した講義を表示し、`GET /reflect?lecture_id=` は、選択済みで選択と異なる値なら 403、空の値は 404。未選択で `/`・`/lecture`・`/reflect` を開くと選択の画面へ 302。AI チャット初回の ID 入力プロンプトは **廃止**する。詳細は [participant-login.md](./participant-login.md)。
 
 ### 実験時の URL 例
 
-| URL                              | 解決される講義 | YouTube 動画 ID                         |
-| -------------------------------- | -------------- | --------------------------------------- |
-| `/lecture`（ログイン ID `P01`）  | `lecture-1`    | `Y2HC0I8cTAI`                           |
-| `/lecture?lecture_id=lecture-2`  | `lecture-2`    | `1MuwwFipX9o`（`lecture_id` の明示指定）|
-| `/reflect`（ログイン ID `P01`）  | `lecture-1`    | LAD / AI は lecture-1 の Session を参照 |
-| `/reflect?lecture_id=lecture-4`  | `lecture-4`    | LAD / AI / 対話ログは lecture-4 の Session を参照(#33) |
-| `/lecture?lecture_id=lecture-4`  | `lecture-4`    | `cUCNymPtQ5Y`(文系。lecture-5: `lLcZEIsyHvg`、lecture-6: `psbIrfy09Pg`) |
+講義は、ログインした協力者が選択した講義で決まる（#34）。下の表は、ログイン ID が `lecture-4` を選択済みのときの例。
 
-旧来の固定マップ（`participant_id` 1/2/3 → `lecture-1/2/3`）は、ID が `1`/`2`/`3` のときに限り残っている（アプリは ID の形式を確かめない）。
+| URL                              | 結果                                                              |
+| -------------------------------- | ----------------------------------------------------------------- |
+| `/lecture`                       | 200。`lecture-4` の画面（動画 `cUCNymPtQ5Y`。文系。lecture-5: `lLcZEIsyHvg`、lecture-6: `psbIrfy09Pg`） |
+| `/lecture?lecture_id=lecture-2`  | 200。指定を無視して `lecture-4` の画面                            |
+| `/reflect`・`/reflect?lecture_id=lecture-4` | 200。LAD / AI / 対話ログは lecture-4 の Session を参照 |
+| `/reflect?lecture_id=lecture-2`  | 403（選択と異なる値）                                             |
+| 未選択で `/`・`/lecture`・`/reflect`（値の有無によらず） | 302（選択の画面 `/select-lecture`）                |
+
+旧来の固定マップ（`participant_id` 1/2/3 → `lecture-1/2/3`）は廃止した（アプリは ID の形式で講義を決めない）。
 
 ---
 
@@ -281,14 +284,16 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 
 | 項目     | 規約                                                                                                                |
 | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| 保持件数 | **6 講義**（`lecture-1`〜`lecture-6`。lecture-4〜6 は #33。参加者の割当は固定マップのまま）                          |
+| 保持件数 | **6 講義**（`lecture-1`〜`lecture-6`。lecture-4〜6 は #33。参加者の講義は協力者の選択で決まる。#34）                  |
+| 一覧     | `list_all()` — 登録された講義をカタログの順に返す（#34。選択の画面用） |
+| 系統     | 各講義の `track`（lecture-1〜3 は「理系」、lecture-4〜6 は「文系」）。DB には持たない（#34） |
 | 解決     | `find_by_id(LectureId)` — 未知 ID は `None`                                                                         |
 | 動画 URL | 講義 ID ごとの YouTube URL 定数（[application-usecase.md#LectureCatalog](./application-usecase.md#lecturecatalog)） |
 | SRT パス | `_PROJECT_ROOT / "lectures" / {lecture_id} / "subtitles.srt"`                                                       |
 | 小テスト | 講義別 `QuizDefinition`（`quiz_definitions/lecture_1`〜`lecture_6`、各 5 問・実装済み）                             |
 | 公開 API | `build_near_term_lectures()` — テスト・Composition Root から利用                                                    |
 
-`GET /lecture` は `participant_id` → `lecture_id` 解決後、本 Catalog から動画 URL を取得する（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。
+`GET /lecture` は、保存された選択の `lecture_id` を解決後、本 Catalog から動画 URL を取得する（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。
 
 ### 永続化方針（近い実験）
 
@@ -362,7 +367,7 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 - セッション Cookie: `HttpOnly`、`SameSite=Lax`、既定で `Secure`（ローカルの HTTP 実行だけ環境変数で外せる）。有効期限はログインから12時間（要求のたびに延長しない）。
 - `lecture_id` は参加者の識別ではないため、従来どおり扱う。
 
-`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}` と任意の `lecture_id`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403。`lecture_id` は変更: #33、出典 [humanities-lectures.md](./humanities-lectures.md) AC21。省略時は参加者の固定割当の講義、未登録の講義 ID は 404 で何も保存せず、文字列以外は 400）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
+`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}` と任意の `lecture_id`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403。`lecture_id` は変更: #33、出典 [humanities-lectures.md](./humanities-lectures.md) AC21。**置き換え(#34、[lecture-selection.md](./lecture-selection.md))**: 省略時と選択と一致する値は選択した講義で保存、未選択は 409、選択と異なる値（未登録の講義 ID を含む）は 403、空文字・文字列と数値以外は 400 で、いずれも何も保存しない）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
 `/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須（以下は https の要求のとき。http の要求は、照合の前に上の「HTTPS の強制」で 301 になる）。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
 
@@ -374,11 +379,13 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 | -------------- | --------------------------------------------------------------- | -------------------------------------- |
 | `GET /lecture` | `framework_drivers/platform/templates/lecture.html`（移行目標） | 講義動画 + 埋め込み小テスト            |
 | `GET /reflect` | `framework_drivers/platform/templates/reflect.html`（移行目標） | LAD + AI 統合                          |
-| `GET /`        | ログイン済みなら `/lecture` へ 302（未ログインはログイン画面へ） | 旧 `index.html` チャット単体は廃止方向 |
+| `GET /`        | ログイン済みで選択済みなら `/lecture` へ 302、未選択なら選択の画面へ 302（未ログインはログイン画面へ） | 旧 `index.html` チャット単体は廃止方向 |
+| `GET /select-lecture`・`POST /select-lecture` | `select_lecture.html`、`select_lecture_confirm.html` | 講義の選択（#34）。GET は題名と系統をカタログの順に一覧、POST（`lecture_id`）は確認の画面（保存しない）。選択済みなら `/lecture` へ 302。不正な値は 400 |
+| `POST /select-lecture/confirm` | （画面なし。302 で `/lecture` へ）                              | 選択の確定（#34）。選択済みの場合は保存済みの選択を変えず 302。不正な値は 400 |
 | `GET /login`・`POST /login` | `framework_drivers/platform/templates/login.html` | 参加者のログイン（#30） |
 | `POST /logout` | （画面なし。302 で `/login` へ）                                | 参加者のログアウト（#30）              |
 
-`/lecture`・`/reflect` はログインが必須。詳細は上の「参加者のログインと `participant_id` の扱い」。
+`/lecture`・`/reflect`・`/select-lecture` はログインが必須。`/lecture`・`/reflect` は講義が未選択なら選択の画面へ 302（#34）。詳細は上の「参加者のログインと `participant_id` の扱い」。
 
 ### `/reflect` の対話ログ保存（Issue #11。仕様: [dialog-log-save.md](./dialog-log-save.md)）
 
@@ -406,8 +413,8 @@ framework_drivers/db + external 具象
 
 | 設定                            | 解決元                                                                                                                                                                             |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `participant_id` → `lecture_id` | [interfaces/common/learner_lecture_mapping.py](../../interfaces/common/learner_lecture_mapping.py)（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)） |
-| `DEFAULT_LECTURE_ID`            | 環境変数 or 定数（マップ外フォールバック。既定 `lecture-1`）                                                                                                                       |
+| 参加者の講義                    | 保存された選択（`SelectLectureUseCase`。`build_select_lecture_use_case` で組み立てる）。`participant_id` の固定マップは廃止（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)） |
+| `DEFAULT_LECTURE_ID`            | 環境変数 or 定数（既定 `lecture-1`）。参加者の講義の決定には効かない（単体テスト・内部用の既定）                                                                                   |
 | DB パス                         | `TUTOR_DB_PATH` / `LEARNING_DB_PATH`                                                                                                                                               |
 | Vertex                          | `VERTEX_PROJECT_ID` / `VERTEX_LOCATION` / ADC                                                                                                                                      |
 
@@ -419,7 +426,7 @@ framework_drivers/db + external 具象
 | -------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
 | `TUTOR_DB_PATH`                  | 任意               | 対話 DB パス（未設定時 `db/data/tutor.db`）                                                                       |
 | `LEARNING_DB_PATH`               | 任意               | 学習 DB パス（未設定時 `db/data/learning.db`）                                                                    |
-| `DEFAULT_LECTURE_ID`             | 任意               | マップ外 `participant_id` のフォールバック講義 ID（既定 `lecture-1`）                                             |
+| `DEFAULT_LECTURE_ID`             | 任意               | 既定の講義 ID（既定 `lecture-1`）。参加者の講義の決定には効かない（#34。単体テスト・内部用）                       |
 | `VERTEX_PROJECT_ID`              | AI 利用時          | Vertex AI プロジェクト                                                                                            |
 | `VERTEX_LOCATION`                | AI 利用時          | Vertex AI リージョン                                                                                              |
 | `GOOGLE_APPLICATION_CREDENTIALS` | AI 利用時          | サービスアカウント JSON の**ファイルパス**（未設定時 ADC）                                                        |
@@ -518,7 +525,7 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `POST /api/viewing-logs` バッチ | 近い実験では単件 POST で開始。必要時に追加                                         |
 | API キー必須化                  | ADR: 推奨だが必須ではない                                                          |
-| 複数講義 UI                     | 固定マップ（`participant_id` 1/2/3）で理系 3 講義をカバー(文系 lecture-4〜6 は `lecture_id` の URL 指定。#33)。協力者が講義を選ぶ仕組みは別 Issue（#30 の範囲外） |
+| 複数講義 UI                     | 実装済み（#34）。協力者が選択の画面で登録された講義から1つを選び、1回で固定される（[lecture-selection.md](./lecture-selection.md)）。旧: 固定マップ（`participant_id` 1/2/3）は廃止 |
 | Research Export Infrastructure  | 別コンテキスト（`ExportResearchData`。対話ログだけの研究用ダウンロードは本件の範囲に含めた） |
 
 ---
@@ -527,7 +534,7 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 
 - [ ] `StaticLectureCatalog` が 6 講義（`lecture-1`〜`lecture-6`）と SRT パス規約を返すことが定義されている
 - [ ] 講義動画・小テストの導線が Flask（`/lecture`・`POST /api/*`）のみと明記されている
-- [ ] `participant_id` 1/2/3 と講義・動画の対応が導線として定義されている
+- [ ] 協力者が選んだ講義と動画の対応が導線として定義されている（旧: `participant_id` 1/2/3 の固定対応。lecture-selection.md で置き換え）
 - [ ] ADR との差分（講義動画ホスティング）が明示されている
 - [ ] Port → Adapter 対応表が Application Port と 1:1 で対応している
 - [ ] `framework_drivers/` の platform / db / external 分界が定義されている

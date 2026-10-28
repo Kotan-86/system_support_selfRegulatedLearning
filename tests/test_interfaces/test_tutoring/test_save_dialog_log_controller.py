@@ -93,7 +93,7 @@ class TestController:
 
     @pytest.mark.parametrize(
         ("participant_id", "lecture_id"),
-        [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3"), ("abc", "lecture-1")],
+        [("1", "lecture-1"), ("2", "lecture-1"), ("3", "lecture-1"), ("abc", "lecture-1")],  # 固定マップ廃止(講義の選択 AC16): participant_id では決まらない
     )
     def test_lecture_is_resolved_from_participant(
         self, participant_id: str, lecture_id: str
@@ -232,9 +232,9 @@ class TestLectureIdInPayload:
 
     @pytest.mark.parametrize(
         ("participant_id", "expected"),
-        [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3"), ("abc", "lecture-1"), ("P01", "lecture-1")],
+        [("1", "lecture-1"), ("2", "lecture-1"), ("3", "lecture-1"), ("abc", "lecture-1"), ("P01", "lecture-1")],  # 固定マップ廃止(講義の選択 AC16)
     )
-    def test_ac13d_ac21c_without_lecture_id_fixed_mapping_still_applies(
+    def test_ac13d_ac21c_without_lecture_id_default_lecture_regardless_of_participant(
         self, participant_id: str, expected: str
     ) -> None:
         use_case = _FakeUseCase()

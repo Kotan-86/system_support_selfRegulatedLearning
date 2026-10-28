@@ -21,6 +21,7 @@ from tests.login_helpers import (
     post_login,
     quiz_payload,
     row_counts,
+    select_lecture_directly,
     viewing_payload,
 )
 
@@ -80,6 +81,7 @@ def logged_in(client):
     """https でログイン済みのクライアント。"""
     response = send(client, "post", "/login", "https", data={"participant_id": PID, "password": TEST_PASSWORD})
     assert response.status_code == 302
+    select_lecture_directly(PID, "lecture-1")  # 選択前は 409/302(講義の選択 AC)なので、選択済みにする
     return client
 
 
@@ -210,6 +212,7 @@ class TestAc5HttpsPassesThrough:
         login = send(client, "post", "/login", "https", data={"participant_id": PID, "password": TEST_PASSWORD})
         assert login.status_code == 302
         assert not login.headers["Location"].startswith("http://")
+        select_lecture_directly(PID, "lecture-1")  # 選択前は 302(講義の選択 AC)なので、選択済みにする
         assert send(client, "get", "/lecture", "https").status_code == 200
         before = row_counts(tmp_path)
         posted = send(client, "post", "/api/viewing-log", "https", json=viewing_payload(PID, current_time=55))
@@ -304,6 +307,7 @@ class TestAc8Disable:
         assert "Strict-Transport-Security" not in page.headers
         login = send(client, "post", "/login", "http", data={"participant_id": PID, "password": TEST_PASSWORD})
         assert login.status_code == 302
+        select_lecture_directly(PID, "lecture-1")  # 選択前は 302(講義の選択 AC)なので、選択済みにする
         assert send(client, "get", "/lecture", "http").status_code == 200
 
     def test_ac8_value_1_also_works_without_header(self, make_app) -> None:

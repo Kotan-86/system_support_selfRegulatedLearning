@@ -120,7 +120,7 @@ class TestReflectRoute:
 # test-writer が定めた公開IF(tests.md 参照):
 #   reflect.html は <script> の中に `window.__REFLECT_LECTURE_ID__ = <JSON>;` を埋め込む。
 #   URL に lecture_id があり登録済みならその文字列、なければ null。
-#   (講義IDなしのとき、固定割当の講義IDを埋め込まない = JS が /chat 等に講義IDを付けない。)
+#   (講義IDなしのとき、選択済みの講義IDを URL 由来として埋め込まない = JS が /chat 等に講義IDを付けない。)
 # ---------------------------------------------------------------------------
 import json  # noqa: E402
 import re  # noqa: E402
@@ -137,32 +137,33 @@ def _embedded_reflect_lecture_id(html: str):
 class TestReflectLectureIdCarryOver:
     @pytest.mark.parametrize("lecture_id", ["lecture-4", "lecture-5", "lecture-6", "lecture-2"])
     def test_ac19b_reflect_with_lecture_id_embeds_it(self, phase2_client, lecture_id: str) -> None:
-        """AC19(b): /reflect?lecture_id=<登録済み> は 200 で、ページがその講義IDを埋め込む。"""
-        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(b)
-        login_as(phase2_client, "P01")
+        """AC19(b): 選択した講義と一致する /reflect?lecture_id= は 200 で、ページがその講義IDを埋め込む。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(b) / docs/spec/lecture-selection.md#受入基準 AC15
+        login_as(phase2_client, "P01", lecture=lecture_id)
         response = phase2_client.get(f"/reflect?lecture_id={lecture_id}")
         assert response.status_code == 200
         assert _embedded_reflect_lecture_id(response.get_data(as_text=True)) == lecture_id
 
     @pytest.mark.parametrize("participant_id", ["P01", "2"])
-    def test_ac19c_reflect_without_lecture_id_embeds_none(
+    def test_ac19c_reflect_without_lecture_id_embeds_selected_lecture(
         self, phase2_client, participant_id: str
     ) -> None:
-        """AC19(c): 講義IDなしの /reflect は講義IDを埋め込まない(従来どおり固定割当)。"""
-        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(c)
-        login_as(phase2_client, participant_id)
+        """AC19(c)(置き換え): 講義IDなしの /reflect は、選択した講義の講義IDを埋め込む。"""
+        # 仕様: docs/spec/lecture-selection.md#受入基準 AC15(旧: humanities-lectures.md AC19(c) は埋め込まない)
+        login_as(phase2_client, participant_id)  # P01 は lecture-1、"2" は lecture-2 を選択済み
         response = phase2_client.get("/reflect")
         assert response.status_code == 200
-        assert _embedded_reflect_lecture_id(response.get_data(as_text=True)) is None
+        expected = "lecture-2" if participant_id == "2" else "lecture-1"
+        assert _embedded_reflect_lecture_id(response.get_data(as_text=True)) == expected
 
     @pytest.mark.parametrize("query", ["lecture_id=lecture-7", "lecture_id=lecture-99", "lecture_id=%E3%81%82"])
-    def test_ac19d_reflect_with_unregistered_lecture_id_is_404(
+    def test_ac19d_reflect_with_unregistered_lecture_id_is_403(
         self, phase2_client, query: str
     ) -> None:
-        """AC19(d): 未登録の講義IDを付けた /reflect は 404。"""
-        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(d)
+        """AC19(d)(置き換え): 選択済みで、選択と異なる(未登録の)講義IDを付けた /reflect は 403。"""
+        # 仕様: docs/spec/lecture-selection.md#受入基準 AC15(旧: humanities-lectures.md AC19(d) は 404)
         login_as(phase2_client, "P01")
-        assert phase2_client.get(f"/reflect?{query}").status_code == 404
+        assert phase2_client.get(f"/reflect?{query}").status_code == 403
 
     def test_ac19d_reflect_with_empty_lecture_id_is_404(self, phase2_client) -> None:
         """AC19(d): 空文字の lecture_id を付けた /reflect は 404。"""
@@ -173,7 +174,7 @@ class TestReflectLectureIdCarryOver:
     def test_ac19b_embedded_lecture_id_is_declared_before_reflect_scripts(self, phase2_client) -> None:
         """AC19(b): 講義IDの埋め込みは、それを読む JS(chat_panel.js, reflect_app.js)より前にある。"""
         # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(b)
-        login_as(phase2_client, "P01")
+        login_as(phase2_client, "P01", lecture="lecture-4")
         html = phase2_client.get("/reflect?lecture_id=lecture-4").get_data(as_text=True)
         declared = html.find("__REFLECT_LECTURE_ID__")
         assert declared != -1

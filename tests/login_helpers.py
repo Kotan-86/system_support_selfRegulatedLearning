@@ -88,13 +88,73 @@ def post_login(client, participant_id: str, password: str = TEST_PASSWORD, *, ne
     return client.post("/login", data=data)
 
 
-def login_as(client, participant_id: str, password: str = TEST_PASSWORD, *, next_path=None):
-    """ログインを送り、成功(302)を確かめる。クライアントに現在の ID を記録する。"""
+# 仕様: docs/spec/lecture-selection.md#影響ファイルの見込み(テスト) 回帰(AC19)
+# 旧仕様(participant_id の固定対応)で書かれた既存テストが、同じ講義で動き続けるための補助。
+# 講義の選択は learning_sessions の行で表す(PO決定 Q1=B)ので、画面の操作を経ずに行を直接置く。
+LEGACY_LECTURE_FOR = {"1": "lecture-1", "2": "lecture-2", "3": "lecture-3"}
+_AUTO = "auto"
+
+
+def legacy_lecture_for(participant_id: str) -> str:
+    """旧仕様の固定マップ(1/2/3 → lecture-1/2/3、それ以外は lecture-1)。テストの選択の既定にだけ使う。"""
+    return LEGACY_LECTURE_FOR.get(participant_id, "lecture-1")
+
+
+def select_lecture_directly(participant_id: str, lecture_id: str) -> None:
+    """その協力者が lecture_id を選択済みの状態にする(学習セッションの行を置く)。
+
+    LEARNING_DB_PATH の DB に、スキーマがなければ作り、(participant_id, lecture_id) の行を1つ置く。
+    すでにあれば何もしない。LEARNING_DB_PATH が未設定のときは何もしない(DB を使わないテスト用)。
+    """
+    import sqlite3
+    import uuid
+    from datetime import datetime, timezone
+
+    path = os.environ.get("LEARNING_DB_PATH")
+    if not path:
+        return
+    schema = Path(__file__).resolve().parent.parent / "db" / "schema_learning.sql"
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(schema.read_text(encoding="utf-8"))
+        conn.execute(
+            "INSERT OR IGNORE INTO learning_sessions (id, learner_id, lecture_id, started_at) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()),
+                participant_id,
+                lecture_id,
+                datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def login_as(
+    client,
+    participant_id: str,
+    password: str = TEST_PASSWORD,
+    *,
+    next_path=None,
+    lecture=_AUTO,
+):
+    """ログインを送り、成功(302)を確かめる。クライアントに現在の ID を記録する。
+
+    lecture: ログイン後に「選択済み」にする講義の ID。
+      既定(省略)は旧仕様の固定マップと同じ講義(legacy_lecture_for)を選択済みにする(既存テストの回帰用)。
+      None なら選択しない(未選択の協力者のテスト用)。
+    """
     response = post_login(client, participant_id, password, next_path=next_path)
     assert response.status_code == 302, (
         f"login_as({participant_id!r}) が成功しない: {response.status_code}"
     )
     client._login_id = participant_id  # noqa: SLF001 - テスト補助
+    if lecture is _AUTO:
+        lecture = legacy_lecture_for(participant_id)
+    if lecture is not None:
+        select_lecture_directly(participant_id, lecture)
     return response
 
 

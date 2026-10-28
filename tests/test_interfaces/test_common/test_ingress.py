@@ -9,7 +9,6 @@ import pytest
 from application.common.errors import ValidationError
 from application.common.result import Err, Ok
 from domain.shared.ids import LearnerId, LectureId
-from interfaces.common.default_lecture import DEFAULT_LECTURE_ID_VALUE
 from interfaces.common.ingress import (
     parse_attempted_at,
     parse_learner_id,
@@ -57,13 +56,9 @@ class TestParseLectureId:
         assert isinstance(result, Ok)
         assert result.value == LectureId("lecture-2")
 
-    def test_uses_default_when_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("DEFAULT_LECTURE_ID", raising=False)
-
-        result = parse_lecture_id(None)
-
-        assert isinstance(result, Ok)
-        assert result.value == LectureId(DEFAULT_LECTURE_ID_VALUE)
+    # 旧 test_uses_default_when_missing(未送信なら既定の講義)は、講義の選択(#34)で廃止。
+    # 参加者の要求の講義は保存された選択で決まり、既定の講義は使わない
+    # (仕様: docs/spec/lecture-selection.md#受入基準 AC16。API の結果は test_lecture_selection_flow.py)。
 
     def test_rejects_empty_string(self) -> None:
         result = parse_lecture_id("")

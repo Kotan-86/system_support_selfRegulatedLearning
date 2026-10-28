@@ -14,3 +14,10 @@ class LectureCatalog(ABC):
     @abstractmethod
     def find_by_id(self, lecture_id: LectureId) -> Lecture | None:
         """講義が存在すれば Lecture を返す。存在しなければ None。"""
+
+    def list_all(self) -> tuple[Lecture, ...]:
+        """登録された講義すべてを、登録順に返す(講義の選択の選択肢)。
+
+        仕様: docs/spec/lecture-selection.md#1-選択肢
+        """
+        raise NotImplementedError

@@ -30,36 +30,42 @@ from interfaces.common.default_lecture import DEFAULT_LECTURE_ID_VALUE
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-_NEAR_TERM_LECTURES: tuple[tuple[str, str, str], ...] = (
+_NEAR_TERM_LECTURES: tuple[tuple[str, str, str, str], ...] = (
     (
         "lecture-1",
         "線形代数入門（近い実験 1）",
         "https://www.youtube.com/watch?v=Y2HC0I8cTAI",
+        "理系",
     ),
     (
         "lecture-2",
         "線形代数入門（近い実験 2）",
         "https://www.youtube.com/watch?v=1MuwwFipX9o",
+        "理系",
     ),
     (
         "lecture-3",
         "線形代数入門（近い実験 3）",
         "https://www.youtube.com/watch?v=Sa06YB2oXyw",
+        "理系",
     ),
     (
         "lecture-4",
         "律令制",
         "https://www.youtube.com/watch?v=cUCNymPtQ5Y",
+        "文系",
     ),
     (
         "lecture-5",
         "心理カウンセリングの基礎",
         "https://www.youtube.com/watch?v=lLcZEIsyHvg",
+        "文系",
     ),
     (
         "lecture-6",
         "言語の仕組み(音声・音韻・語)",
         "https://www.youtube.com/watch?v=psbIrfy09Pg",
+        "文系",
     ),
 )
 
@@ -68,7 +74,7 @@ def _srt_path_for(lecture_id: str) -> str:
     return str(_PROJECT_ROOT / "lectures" / lecture_id / "subtitles.srt")
 
 
-def _lecture_definition_for(lecture_id: str) -> tuple[str, str, str] | None:
+def _lecture_definition_for(lecture_id: str) -> tuple[str, str, str, str] | None:
     for definition in _NEAR_TERM_LECTURES:
         if definition[0] == lecture_id:
             return definition
@@ -112,7 +118,7 @@ def build_near_term_lecture(*, lecture_id: str = DEFAULT_LECTURE_ID_VALUE) -> Le
     definition = _lecture_definition_for(lecture_id)
     if definition is None:
         raise ValueError(f"Unknown near-term lecture_id: {lecture_id!r}")
-    lid, title, video_url = definition
+    lid, title, video_url, track = definition
     return Lecture.create(
         id=LectureId(lid),
         title=title,
@@ -120,13 +126,14 @@ def build_near_term_lecture(*, lecture_id: str = DEFAULT_LECTURE_ID_VALUE) -> Le
         srt_path=_srt_path_for(lid),
         quiz_definition=_quiz_definition_for(lid),
         outline=_lecture_outline_for(lid),
+        track=track,
     )
 
 
 def build_near_term_lectures() -> tuple[Lecture, ...]:
     """近い実験の講義(lecture-1〜6)を構築する（テスト・Composition Root 向け）。"""
     return tuple(
-        build_near_term_lecture(lecture_id=lid) for lid, _, _ in _NEAR_TERM_LECTURES
+        build_near_term_lecture(lecture_id=lid) for lid, *_ in _NEAR_TERM_LECTURES
     )
 
 
@@ -141,3 +148,6 @@ class StaticLectureCatalog(LectureCatalog):
 
     def find_by_id(self, lecture_id: LectureId) -> Lecture | None:
         return self._lectures.get(lecture_id)
+
+    def list_all(self) -> tuple[Lecture, ...]:
+        return tuple(self._lectures.values())

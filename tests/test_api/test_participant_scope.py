@@ -1,5 +1,5 @@
 # 仕様: docs/spec/participant-login.md#受入基準
-# AC1(画面)、AC4(画面)、AC11、AC12、AC13、AC14、AC25、AC30。AC16 は既存テストの再実行で確かめる。
+# AC1(画面)、AC4(画面)、AC11、AC12、AC13、AC14、AC30。(AC25 は講義の選択 #34 の AC16 に置き換え)AC16 は既存テストの再実行で確かめる。
 """参加者の特定(FR-52)と、本人のデータだけを扱うこと(30-T3)。
 
 ログインした本人 = "A"。他人 = "truncate-test"(画面の本文に偶然含まれにくい文字列にして、漏れの検査を確かにする)。
@@ -8,9 +8,6 @@ from __future__ import annotations
 
 import pytest
 
-from domain.shared.ids import LectureId
-from framework_drivers.db.learning.static_lecture_catalog import StaticLectureCatalog
-from framework_drivers.external.youtube.youtube_video_id import extract_youtube_video_id
 from framework_drivers.platform.participant_scope import resolve_claimed_participant_id
 from tests.login_helpers import (
     build_app,
@@ -21,6 +18,7 @@ from tests.login_helpers import (
     login_as,
     post_login,
     quiz_payload,
+    select_lecture_directly,
     row_counts,
     viewing_payload,
     TEST_PASSWORD,
@@ -100,6 +98,7 @@ class TestScreensShowTheLoggedInParticipant:
         next_value = parse_qs(urlsplit(first.headers["Location"]).query)["next"][0]
 
         login = post_login(client, ME, TEST_PASSWORD, next_path=next_value)
+        select_lecture_directly(ME, "lecture-1")  # 選択前は 302(講義の選択 AC)なので、選択済みにする
 
         assert location_path(login) == "/reflect"
         page = client.get(login.headers["Location"])
@@ -109,6 +108,7 @@ class TestScreensShowTheLoggedInParticipant:
     def test_ac1_direct_login_lands_on_own_lecture(self, app_and_llm) -> None:
         client = app_and_llm[0].test_client()
         login = post_login(client, ME, TEST_PASSWORD)
+        select_lecture_directly(ME, "lecture-1")  # 選択前は 302(講義の選択 AC)なので、選択済みにする
         page = client.get(login.headers["Location"])
 
         assert page.status_code == 200
@@ -240,39 +240,11 @@ class TestAc14OmittedParticipantId:
         assert learners_of(tmp_path, "viewing_logs") == [ME]
 
 
-# ---------------------------------------------------------------- AC25 講義割当の維持
-
-
-def _video_id_of(lecture_id: str) -> str:
-    lecture = StaticLectureCatalog().find_by_id(LectureId(lecture_id))
-    return extract_youtube_video_id(lecture.video_url)
-
-
-class TestAc25LectureAssignment:
-    @pytest.mark.parametrize("participant_id", ["P01", "P02", "P03", "P30", "P31"])
-    def test_ac25_everyone_gets_lecture_1_without_lecture_id(self, app_and_llm, participant_id) -> None:
-        client = app_and_llm[0].test_client()
-        login_as(client, participant_id)
-
-        response = client.get("/lecture")
-
-        assert response.status_code == 200
-        html = response.get_data(as_text=True)
-        assert displayed_participant_id(html) == participant_id
-        assert "<strong>lecture-1</strong>" in html
-        assert _video_id_of("lecture-1") in html
-        assert _video_id_of("lecture-2") not in html
-
-    def test_ac25_explicit_lecture_id_still_wins(self, app_and_llm) -> None:
-        client = app_and_llm[0].test_client()
-        login_as(client, "P01")
-
-        response = client.get("/lecture?lecture_id=lecture-2")
-
-        assert response.status_code == 200
-        html = response.get_data(as_text=True)
-        assert "<strong>lecture-2</strong>" in html
-        assert _video_id_of("lecture-2") in html
+# ---------------------------------------------------------------- AC25 講義割当の維持(置き換え済み)
+#
+# 旧 AC25(P01〜P31 は講義IDなしで lecture-1、明示の lecture_id が勝つ)は、講義の選択(#34)で置き換わった。
+# 仕様: docs/spec/lecture-selection.md#受入基準 AC16(固定対応の廃止)・AC15(画面の lecture_id)
+# 新しい検証は tests/test_api/test_lecture_selection_flow.py にある。
 
 
 # ---------------------------------------------------------------- AC30 値の形
