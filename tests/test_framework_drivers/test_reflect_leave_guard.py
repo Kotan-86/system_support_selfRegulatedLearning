@@ -31,9 +31,10 @@ def _assert_ac(output: str, prefix: str) -> None:
     assert not failed, f"{prefix} の検証が失敗\n" + "\n".join(failed) + f"\n--- 全出力 ---\n{output}"
 
 
-@pytest.mark.parametrize("ac", ["B1", "B2", "B3", "B4", "B6"])
+@pytest.mark.parametrize("ac", ["B1", "B2", "B3", "B4", "B6", "AC21", "AC13(d)"])
 def test_leave_guard_logic_via_node(node_output: str, ac: str) -> None:
     # 仕様: docs/spec/dialog-log-save.md#受入基準 B1〜B4, B6
+    # 仕様: docs/spec/humanities-lectures.md#受入基準 AC21(a), AC13(d)(PBI #33 の追加分)
     _assert_ac(node_output, ac)
 
 

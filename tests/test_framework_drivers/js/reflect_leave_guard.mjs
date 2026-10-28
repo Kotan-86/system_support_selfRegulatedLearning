@@ -41,6 +41,7 @@ const j = (v) => JSON.stringify(v);
 function setup(opts = {}) {
   const listeners = {};
   const leavePosts = [];
+  const leaveCalls = []; // postDialogLogOnLeave に渡された引数の全体(PBI #33: 講義IDの確認用)
   const chatListeners = [];
   const state = { ended: false };
   const sandbox = { console };
@@ -55,13 +56,13 @@ function setup(opts = {}) {
     sandbox.DialogLog = { init() {}, isEnded: () => state.ended };
   }
   if (opts.apiClient !== false) {
-    sandbox.ApiClient = { postDialogLogOnLeave: (pid) => { leavePosts.push(pid); } };
+    sandbox.ApiClient = { postDialogLogOnLeave: function (pid) { leavePosts.push(pid); leaveCalls.push(Array.from(arguments)); } };
   }
   vm.createContext(sandbox);
   vm.runInContext(guardSrc, sandbox, { filename: "leave_guard.js" });
   return {
-    sandbox, listeners, leavePosts, state,
-    init: (pid = "1") => sandbox.LeaveGuard.init(pid),
+    sandbox, listeners, leavePosts, leaveCalls, state,
+    init: (pid = "1", lectureId) => (lectureId === undefined ? sandbox.LeaveGuard.init(pid) : sandbox.LeaveGuard.init(pid, lectureId)),
     // ChatPanel の契約: 送信が始まったとき true、応答・エラー表示後に false
     sendStart: () => chatListeners.forEach((fn) => fn(true)),
     sendEnd: () => chatListeners.forEach((fn) => fn(false)),
@@ -195,6 +196,24 @@ await scenario("B4 通信の失敗は握りつぶす", async () => {
   await flush(); await flush();
   check("B4 fetch が失敗しても例外を出さない", threw === false && typeof sandbox.ApiClient.postDialogLogOnLeave === "function", `threw=${threw}`);
   check("B4 fetch の失敗が未処理の rejection にならない", typeof sandbox.ApiClient.postDialogLogOnLeave === "function" && unhandled === before, `unhandled=${unhandled - before}`);
+});
+
+// ---------- AC21(a) (PBI #33): 講義IDを渡したとき、離脱時の保存要求に講義IDが渡る ----------
+// 仕様: docs/spec/humanities-lectures.md#受入基準 AC21(a)
+// 公開IF: LeaveGuard.init(participantId, lectureId?) → pagehide で ApiClient.postDialogLogOnLeave(participantId, lectureId)
+await scenario("AC21 離脱時に講義IDを渡す", async () => {
+  const e = setup(); e.init("1", "lecture-4");
+  e.sendStart(); e.sendEnd();
+  e.beforeunload();
+  e.pagehide();
+  check("AC21 講義ID付きで init したとき、pagehide で保存要求が1回", e.leaveCalls.length === 1, j(e.leaveCalls));
+  check("AC21 保存要求に participant_id と lecture_id(lecture-4)を渡す", e.leaveCalls.length === 1 && e.leaveCalls[0][0] === "1" && e.leaveCalls[0][1] === "lecture-4", j(e.leaveCalls));
+});
+await scenario("AC21 講義IDなしの離脱(従来どおり)", async () => {
+  const e = setup(); e.init("2");
+  e.sendStart(); e.sendEnd();
+  e.pagehide();
+  check("AC13(d) 講義IDなしで init したとき、保存要求に講義IDを渡さない", e.leaveCalls.length === 1 && e.leaveCalls[0][0] === "2" && e.leaveCalls[0][1] === undefined, j(e.leaveCalls));
 });
 
 // ---------- B6: 終了済みの後は確認も保存もしない ----------

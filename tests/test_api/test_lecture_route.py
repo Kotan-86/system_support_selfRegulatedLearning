@@ -387,3 +387,163 @@ class TestLectureSubtitlesDisplayFile:
         # 仕様: docs/spec/subtitle-formatting.md#受入基準 AC13
         _use_tmp_lecture_1(monkeypatch, tmp_path / "lec", with_srt=False)
         assert _embedded_subtitles(_lecture_1_html(phase2_client)) == []
+
+# 文系レベル3講義 lecture-4〜6 の講義ページ (PBI #33)
+# 仕様: docs/spec/humanities-lectures.md#受入基準 AC3・AC5・AC7・AC12・AC19(a)
+# 期待値は tests/test_lectures/humanities_data.py(仕様のみが出典)。
+# ---------------------------------------------------------------------------
+from tests.test_lectures.humanities_data import (  # noqa: E402
+    HUMANITIES_BY_ID,
+    HUMANITIES_IDS,
+)
+
+_ALL_VIDEO_IDS = {
+    "lecture-1": "Y2HC0I8cTAI",
+    "lecture-2": "1MuwwFipX9o",
+    "lecture-3": "Sa06YB2oXyw",
+    **{lid: lec.video_id for lid, lec in HUMANITIES_BY_ID.items()},
+}
+_REFLECT_LINK_RE = re.compile(
+    r'<a\b[^>]*\bid="quiz-reflect-link"[^>]*>|<a\b[^>]*\bhref="[^"]*"[^>]*\bid="quiz-reflect-link"[^>]*>'
+)
+_HREF_RE = re.compile(r'href="([^"]*)"')
+
+
+def _reflect_link_href(html: str) -> str:
+    tag = _REFLECT_LINK_RE.search(html)
+    assert tag, "ページに id=quiz-reflect-link のリンクがない"
+    href = _HREF_RE.search(tag.group(0))
+    assert href, "リンクに href がない"
+    return href.group(1).replace("&amp;", "&")
+
+
+class TestHumanitiesLecturePage:
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac3_page_embeds_only_own_video_id(self, phase2_client, lecture_id: str) -> None:
+        """AC3: 200 で、その講義の YouTube 動画ID が埋め込まれ、他の講義の動画IDは含まれない。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC3
+        login_as(phase2_client, "P01")
+        response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert _ALL_VIDEO_IDS[lecture_id] in html
+        for other_id, video_id in _ALL_VIDEO_IDS.items():
+            if other_id != lecture_id:
+                assert video_id not in html, f"他の講義 {other_id} の動画IDが含まれる"
+
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac5_page_shows_quiz_title_description_questions_choices(
+        self, phase2_client, lecture_id: str
+    ) -> None:
+        """AC5: 小テストの題名・説明・5 問の問題文・各選択肢がページにある。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC5
+        expected = HUMANITIES_BY_ID[lecture_id]
+        login_as(phase2_client, "P01")
+        response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert expected.quiz_title in html
+        assert expected.quiz_description in html
+        assert 'id="quiz-form"' in html
+        assert len(expected.questions) == 5
+        for question in expected.questions:
+            assert question.text in html
+            for choice in question.choices:
+                assert choice in html
+
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac5_page_has_no_explanation(self, phase2_client, lecture_id: str) -> None:
+        """AC5: ページに解説は含まれない(付録A には解説の文がないため、「解説」の見出し語がないことで確かめる)。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC5 / 実現内容3(解説は表示しない)
+        login_as(phase2_client, "P01")
+        response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
+        assert response.status_code == 200
+        assert "解説：" not in response.get_data(as_text=True)
+        assert "【解説】" not in response.get_data(as_text=True)
+        assert 'class="explanation"' not in response.get_data(as_text=True)
+
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac7_embedded_subtitles_equal_parse_of_subtitles_srt(
+        self, phase2_client, lecture_id: str
+    ) -> None:
+        """AC7: 埋め込まれる字幕は subtitles.srt を parse_srt_file で読んだ結果(開始・終了・文)と一致する。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC7
+        from interfaces.tutoring.srt import parse_srt_file
+
+        srt = _PROJECT_ROOT / "lectures" / lecture_id / "subtitles.srt"
+        assert srt.is_file()
+        expected = [
+            {"start": s["start_sec"], "end": s["end_sec"], "text": s["text"]}
+            for s in parse_srt_file(srt)
+        ]
+        login_as(phase2_client, "P01")
+        response = phase2_client.get(f"/lecture?lecture_id={lecture_id}")
+        assert response.status_code == 200
+        cues = _embedded_subtitles(response.get_data(as_text=True))
+        assert len(expected) == HUMANITIES_BY_ID[lecture_id].srt_blocks
+        assert cues == expected
+
+    def test_ac12_unregistered_lecture_is_404(self, phase2_client) -> None:
+        """AC12: 未登録の講義(lecture-7)は従来どおり 404。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC12
+        login_as(phase2_client, "P01")
+        assert phase2_client.get("/lecture?lecture_id=lecture-7").status_code == 404
+
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac19a_reflect_link_carries_page_lecture_id(
+        self, phase2_client, lecture_id: str
+    ) -> None:
+        """AC19(a): 「振り返り画面へ進む」のリンク先は /reflect?lecture_id=<ページの講義ID>。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(a)
+        login_as(phase2_client, "P01")
+        html = phase2_client.get(f"/lecture?lecture_id={lecture_id}").get_data(as_text=True)
+        assert _reflect_link_href(html) == f"/reflect?lecture_id={lecture_id}"
+
+    def test_ac19a_reflect_link_without_lecture_id_uses_displayed_lecture(
+        self, phase2_client
+    ) -> None:
+        """AC19(a): P01 が講義IDなしで開いた /lecture のリンク先は /reflect?lecture_id=lecture-1。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(a)
+        login_as(phase2_client, "P01")
+        html = phase2_client.get("/lecture").get_data(as_text=True)
+        assert _reflect_link_href(html) == "/reflect?lecture_id=lecture-1"
+
+    @pytest.mark.parametrize(
+        ("participant_id", "lecture_id"),
+        [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3")],
+    )
+    def test_ac19a_reflect_link_for_fixed_assignment(
+        self, phase2_client, participant_id: str, lecture_id: str
+    ) -> None:
+        """AC19(a)・AC13(b): 固定割当の参加者のリンク先は、表示している講義のID。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(a)
+        login_as(phase2_client, participant_id)
+        html = phase2_client.get("/lecture").get_data(as_text=True)
+        assert _reflect_link_href(html) == f"/reflect?lecture_id={lecture_id}"
+
+
+class TestLecturePageExistingBehavior:
+    """AC13: 講義IDなしの既存の挙動が変わらない。"""
+
+    def test_ac13a_p01_without_lecture_id_shows_lecture_1(self, phase2_client) -> None:
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC13(a)
+        login_as(phase2_client, "P01")
+        response = phase2_client.get("/lecture")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Y2HC0I8cTAI" in html
+        for other_id, video_id in _ALL_VIDEO_IDS.items():
+            if other_id != "lecture-1":
+                assert video_id not in html
+
+    @pytest.mark.parametrize(
+        ("participant_id", "lecture_id"),
+        [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3")],
+    )
+    def test_ac13b_fixed_assignment_pages(
+        self, phase2_client, participant_id: str, lecture_id: str
+    ) -> None:
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC13(b)
+        login_as(phase2_client, participant_id)
+        html = phase2_client.get("/lecture").get_data(as_text=True)
+        assert _ALL_VIDEO_IDS[lecture_id] in html

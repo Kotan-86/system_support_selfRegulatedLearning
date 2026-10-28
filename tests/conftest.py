@@ -37,6 +37,9 @@ def _participant_login_env(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-for-production")
     monkeypatch.setenv("PARTICIPANT_CREDENTIALS_FILE", str(shared_credentials_path()))
     monkeypatch.setenv("SESSION_COOKIE_SECURE_DISABLED", "1")
+    # 仕様: docs/spec/https-enforcement.md AC9。既存テストは http で送るので強制を解除する。
+    # test_https_enforcement.py だけが、テストの中でこれを外して強制を確かめる。
+    monkeypatch.setenv("HTTPS_ENFORCEMENT_DISABLED", "1")
 
 
 def _project_root() -> Path:

@@ -6,7 +6,17 @@ LLM チューター（Vertex AI Gemini）と対話履歴の SQLite 永続化。
 
 ```powershell
 uv sync
+$env:HTTPS_ENFORCEMENT_DISABLED="1"   # ローカルのみ。付けないと https へ301され、開発サーバーが 400 を返す
 uv run flask --app framework_drivers.platform.main run
+```
+
+ブラウザでは `http://127.0.0.1:5000/` を開く。
+
+Windows で `error: Failed to spawn: flask`（`os error 4551`、アプリケーション制御ポリシーによる flask.exe のブロック）になる場合は、Python 経由で起動する。
+
+```powershell
+$env:HTTPS_ENFORCEMENT_DISABLED="1"
+uv run python -m flask --app framework_drivers.platform.main run
 ```
 
 起動には `SECRET_KEY` と参加者の設定ファイルの指定が必須（[参加者ログイン](#参加者ログインid--パスワード)を参照）。
@@ -101,10 +111,10 @@ uv run python scripts/manage_participants.py bulk-add --count 30
 
 1. `.env.local` に `SECRET_KEY`、必要なら `PARTICIPANT_CREDENTIALS_FILE` を書く（`.env.example` 参照）。
 2. 上記のスクリプトで `secrets/participants.json` に ID を作る。
-3. `./scripts/run_dev_server.sh` で起動する（`SESSION_COOKIE_SECURE_DISABLED` は既定で `1`。`PARTICIPANT_CREDENTIALS_FILE` の既定は `secrets/participants.json`）。
+3. `./scripts/run_dev_server.sh` で起動する（`SESSION_COOKIE_SECURE_DISABLED` と `HTTPS_ENFORCEMENT_DISABLED` は既定で `1`。`PARTICIPANT_CREDENTIALS_FILE` の既定は `secrets/participants.json`）。
 4. ブラウザで `http://127.0.0.1:5001/login` を開き、ID とパスワードでログインする。
 
-`flask run` で直接起動する場合は、`SECRET_KEY` と `PARTICIPANT_CREDENTIALS_FILE` を環境変数で与え、HTTP で動かすときだけ `SESSION_COOKIE_SECURE_DISABLED=1` を加える。Cookie は既定で `Secure` が付くため、HTTP のままでは Cookie が送られずログインできない。**`SESSION_COOKIE_SECURE_DISABLED=1` はローカルの HTTP 実行だけに使い、本番（HTTPS）では設定しない。**
+`flask run` で直接起動する場合は、`SECRET_KEY` と `PARTICIPANT_CREDENTIALS_FILE` を環境変数で与え、HTTP で動かすときだけ `SESSION_COOKIE_SECURE_DISABLED=1` と `HTTPS_ENFORCEMENT_DISABLED=1` を加える。Cookie は既定で `Secure` が付くため、HTTP のままでは Cookie が送られずログインできない。また、既定ではアプリが http の要求を処理せず（GET・HEAD は https へ 301、それ以外は 400）、`HTTPS_ENFORCEMENT_DISABLED=1` のときだけ解除される。**この2つはローカルの HTTP 実行だけに使い、本番（HTTPS）では設定しない。**
 
 ### 本番（Cloud Run）への反映
 
@@ -136,7 +146,7 @@ python -c "import secrets; print(secrets.token_hex(32))" | gcloud secrets create
     --member "serviceAccount:<実行サービスアカウント>" --role roles/secretmanager.secretAccessor
   ```
 - 起動手順（コンテナの起動スクリプト）は、設定ファイルを登録しない。Secret Manager から渡されたファイルをアプリが読むだけ。
-- 本番は HTTPS のため、`SESSION_COOKIE_SECURE_DISABLED` は設定しない。
+- 本番は HTTPS のため、`SESSION_COOKIE_SECURE_DISABLED` と `HTTPS_ENFORCEMENT_DISABLED` は設定しない。本番では、元の方式が http の要求（`X-Forwarded-Proto` が `http`、またはヘッダなし）をアプリが処理せず、GET・HEAD は https の同じ URL へ 301 で移し、それ以外（POST など）は 400 で拒否する。https の応答には `Strict-Transport-Security: max-age=31536000` を付ける（仕様: [docs/spec/https-enforcement.md](docs/spec/https-enforcement.md)）。
 - 公式ドキュメントでの確認結果（確認日 2026-10-28）:
   - **ファイルマウントの書式**（確認済み）: `PATH=SECRET_NAME:VERSION`。`PATH` はマウント先のディレクトリとファイル名を合わせたもので、先頭に `/` が要る（例: `/etc/secrets/dbconfig/password`）。`VERSION` は `latest` か番号。出典: <https://cloud.google.com/run/docs/configuring/services/secrets>
   - **`--set-secrets` でのファイルマウント**（本番で動作を確認、2026-10-28）: 上記ページがファイルマウントの例に使っているのは `--update-secrets` で、`--set-secrets` の例は環境変数の形（`ENV_VAR_NAME=SECRET_NAME:VERSION`）だけで、ファイルのパスを指定する形は明記されていない。一方、2026-10-28 の本番（Cloud Run）の通し確認では、上記の `gcloud run deploy` の形（`--set-secrets` / `--update-env-vars` による既存のデプロイ設定）で、マウントしたファイルから台帳が読まれ、版の追加＋再デプロイ（`gcloud run services update --update-env-vars SWAP_MARKER=...` による新リビジョンの作成）で反映されることを確認した（確認専用 `P01` でログイン成功、停止して版を追加し再デプロイした後はログイン不可）。実際にデプロイ時に設定された `--set-secrets` の中身までは、この記述以上は確認していない（既存のシークレット設定を置き換える `--set-secrets` の意味は、同ページに記載がある）。
@@ -200,7 +210,7 @@ docker run -p 8080:8080 -e DB_REPLICA_DISABLED=1 -e SECRET_KEY=<自分で生成�
 
 ローカルの `docker run` では GCS に接続しないため、`DB_REPLICA_DISABLED=1`（復元も複製もしない）が必要。指定しないと「複製先の設定がない」で起動が失敗する。
 
-`SECRET_KEY` と参加者の設定ファイルの指定も必須のため、設定ファイルを入れない（イメージには含めない）ので、上記のようにボリュームで渡し `PARTICIPANT_CREDENTIALS_FILE` でそのパスを指定する。これらがないとイメージは起動しない。HTTP で確認する場合のみ `-e SESSION_COOKIE_SECURE_DISABLED=1` を加える。
+`SECRET_KEY` と参加者の設定ファイルの指定も必須のため、設定ファイルを入れない（イメージには含めない）ので、上記のようにボリュームで渡し `PARTICIPANT_CREDENTIALS_FILE` でそのパスを指定する。これらがないとイメージは起動しない。HTTP で確認する場合のみ `-e SESSION_COOKIE_SECURE_DISABLED=1 -e HTTPS_ENFORCEMENT_DISABLED=1` を加える（後者がないと http の要求は 301・400 になる）。
 
 このビルドは SQLite のバージョン確認（修正済みの版でなければ失敗）を含む。
 
@@ -261,6 +271,7 @@ Google Apps Script（小テスト Form 等）など、ログインしない外�
 | `SECRET_KEY` | 必須 | Flask セッション用。未設定・空・`tutor_secret_key` では起動しない（[参加者ログイン](#参加者ログインid--パスワード)） |
 | `PARTICIPANT_CREDENTIALS_FILE` | 必須 | 参加者の ID/パスワード（ハッシュ）の設定ファイルのパス。ない・読めない・壊れているときは起動しない |
 | `SESSION_COOKIE_SECURE_DISABLED` | ローカルの HTTP のみ | `1` で Cookie の `Secure` を外す。本番（HTTPS）では設定しない |
+| `HTTPS_ENFORCEMENT_DISABLED` | ローカルの HTTP のみ | `1` のときだけ、http の要求の拒否・https への転送と HSTS を解除する。本番では設定しない |
 | `TUTOR_DB_PATH` / `LEARNING_DB_PATH` | 任意 | 未設定時 `db/data/*.db` |
 | `DEFAULT_LECTURE_ID` | 任意 | マップ外 `participant_id` のフォールバック講義 ID（既定 `lecture-1`） |
 | `RESEARCHER_BASIC_AUTH_USER` | 研究用ダウンロード利用時 | 研究者の Basic 認証のユーザー名 |
@@ -289,7 +300,7 @@ Cloud Run では `GOOGLE_APPLICATION_CREDENTIALS` は不要（実行サービス
   ```
 - 対象データがなければ `[]`（状態 200）。応答は `Cache-Control: no-store`。
 
-**注意（セキュリティ）**: 上記のデプロイは `--allow-unauthenticated` を前提としており、研究用ダウンロードを守るのは **この Basic 認証だけ**である。Cloud Run の IAM 認証を有効にすると、ブラウザからの Basic 認証による取得と両立しない。HTTP（ローカル起動）では資格情報は暗号化されない。資格情報は研究者で共有する1組のため、誰が取得したかは区別できず、取得の記録も残さない。
+**注意（セキュリティ）**: 上記のデプロイは `--allow-unauthenticated` を前提としており、研究用ダウンロードを守るのは **この Basic 認証だけ**である。Cloud Run の IAM 認証を有効にすると、ブラウザからの Basic 認証による取得と両立しない。本番では http の要求はアプリが https へ移す（GET・HEAD）か拒否し、資格情報の照合より前に判定する。HTTP（ローカル起動、`HTTPS_ENFORCEMENT_DISABLED=1`）では資格情報は暗号化されない。資格情報は研究者で共有する1組のため、誰が取得したかは区別できず、取得の記録も残さない。
 
 **既知の限界**: 取得できるのは、複製されて復元された範囲のデータである（再デプロイ・再起動の前のデータも、復元されていれば取得できる。許容損失は下記「SQLite 永続化の注意」を参照）。インスタンスは1つ（`--max-instances=1`）なので、要求を受けたインスタンスのデータだけが返る問題は、通常の構成では起きない。`/` を含む参加者ID、空の参加者IDは参加者別 URL で指定できない（一括には含まれる）。
 

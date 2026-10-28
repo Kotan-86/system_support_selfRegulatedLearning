@@ -14,11 +14,17 @@ from framework_drivers.db.learning.lecture_outlines import (
     lecture_1,
     lecture_2,
     lecture_3,
+    lecture_4,
+    lecture_5,
+    lecture_6,
 )
 from framework_drivers.db.learning.quiz_definitions import (
     lecture_1 as quiz_lecture_1,
     lecture_2 as quiz_lecture_2,
     lecture_3 as quiz_lecture_3,
+    lecture_4 as quiz_lecture_4,
+    lecture_5 as quiz_lecture_5,
+    lecture_6 as quiz_lecture_6,
 )
 from interfaces.common.default_lecture import DEFAULT_LECTURE_ID_VALUE
 
@@ -40,6 +46,21 @@ _NEAR_TERM_LECTURES: tuple[tuple[str, str, str], ...] = (
         "線形代数入門（近い実験 3）",
         "https://www.youtube.com/watch?v=Sa06YB2oXyw",
     ),
+    (
+        "lecture-4",
+        "律令制",
+        "https://www.youtube.com/watch?v=cUCNymPtQ5Y",
+    ),
+    (
+        "lecture-5",
+        "心理カウンセリングの基礎",
+        "https://www.youtube.com/watch?v=lLcZEIsyHvg",
+    ),
+    (
+        "lecture-6",
+        "言語の仕組み(音声・音韻・語)",
+        "https://www.youtube.com/watch?v=psbIrfy09Pg",
+    ),
 )
 
 
@@ -60,6 +81,9 @@ def _quiz_definition_for(lecture_id: str) -> QuizDefinition:
         "lecture-1": quiz_lecture_1.build_quiz_definition,
         "lecture-2": quiz_lecture_2.build_quiz_definition,
         "lecture-3": quiz_lecture_3.build_quiz_definition,
+        "lecture-4": quiz_lecture_4.build_quiz_definition,
+        "lecture-5": quiz_lecture_5.build_quiz_definition,
+        "lecture-6": quiz_lecture_6.build_quiz_definition,
     }
     builder = builders.get(lecture_id)
     if builder is None:
@@ -73,6 +97,9 @@ def _lecture_outline_for(lecture_id: str) -> LectureOutline:
         "lecture-1": lecture_1.build_lecture_outline,
         "lecture-2": lecture_2.build_lecture_outline,
         "lecture-3": lecture_3.build_lecture_outline,
+        "lecture-4": lecture_4.build_lecture_outline,
+        "lecture-5": lecture_5.build_lecture_outline,
+        "lecture-6": lecture_6.build_lecture_outline,
     }
     builder = builders.get(lecture_id)
     if builder is None:
@@ -97,14 +124,14 @@ def build_near_term_lecture(*, lecture_id: str = DEFAULT_LECTURE_ID_VALUE) -> Le
 
 
 def build_near_term_lectures() -> tuple[Lecture, ...]:
-    """近い実験の 3 講義を構築する（テスト・Composition Root 向け）。"""
+    """近い実験の講義(lecture-1〜6)を構築する（テスト・Composition Root 向け）。"""
     return tuple(
         build_near_term_lecture(lecture_id=lid) for lid, _, _ in _NEAR_TERM_LECTURES
     )
 
 
 class StaticLectureCatalog(LectureCatalog):
-    """近い実験 3 講義固定の LectureCatalog。"""
+    """近い実験の講義(lecture-1〜6)固定の LectureCatalog。"""
 
     def __init__(self, lectures: tuple[Lecture, ...] | None = None) -> None:
         items = lectures or build_near_term_lectures()

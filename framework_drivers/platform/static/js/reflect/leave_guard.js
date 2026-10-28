@@ -19,7 +19,7 @@
     return hasSpoken && !isEnded();
   }
 
-  function init(participantId) {
+  function init(participantId, lectureId) {
     if (global.ChatPanel && typeof global.ChatPanel.onSendStateChange === "function") {
       global.ChatPanel.onSendStateChange(function (sending) {
         if (sending === true) {
@@ -45,7 +45,7 @@
         global.ApiClient &&
         typeof global.ApiClient.postDialogLogOnLeave === "function"
       ) {
-        global.ApiClient.postDialogLogOnLeave(participantId);
+        global.ApiClient.postDialogLogOnLeave(participantId, lectureId);
       }
     });
   }

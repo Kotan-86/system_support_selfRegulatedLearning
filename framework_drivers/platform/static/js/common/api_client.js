@@ -3,29 +3,52 @@
 (function (global) {
   "use strict";
 
+  /** 講義IDがあるときだけ本文に lecture_id を足す(なければ従来どおり)。 */
+  function withLectureId(payload, lectureId) {
+    if (lectureId !== undefined && lectureId !== null && lectureId !== "") {
+      payload.lecture_id = String(lectureId);
+    }
+    return payload;
+  }
+
   /**
    * POST /api/viewing-log 用の視聴ログ payload を組み立てる（API 契約形状）。
    */
-  function buildViewingLogPayload(participantId, currentTime, action, duration) {
-    return {
+  function buildViewingLogPayload(
+    participantId,
+    currentTime,
+    action,
+    duration,
+    lectureId
+  ) {
+    var payload = {
       participant_id: String(participantId),
       time_stamp: new Date().toISOString(),
       current_time: Number(currentTime),
       action: String(action),
       duration: Number(duration),
     };
+    // 仕様: docs/spec/humanities-lectures.md#受入基準 AC17(講義IDがあるときだけ付ける)
+    return withLectureId(payload, lectureId);
   }
 
   /**
    * POST /api/viewing-log に視聴イベントを送信する。
    * @returns {Promise<Response>}
    */
-  function postViewingLog(participantId, currentTime, action, duration) {
+  function postViewingLog(
+    participantId,
+    currentTime,
+    action,
+    duration,
+    lectureId
+  ) {
     var payload = buildViewingLogPayload(
       participantId,
       currentTime,
       action,
-      duration
+      duration,
+      lectureId
     );
     return fetch("/api/viewing-log", {
       method: "POST",
@@ -50,9 +73,13 @@
    * GET /api/participants/{id}/lad で LAD ViewModel を取得する。
    * @returns {Promise<Response>}
    */
-  function getLad(participantId) {
+  function getLad(participantId, lectureId) {
     var id = encodeURIComponent(String(participantId));
-    return fetch("/api/participants/" + id + "/lad");
+    var query = "";
+    if (lectureId !== undefined && lectureId !== null && lectureId !== "") {
+      query = "?lecture_id=" + encodeURIComponent(String(lectureId));
+    }
+    return fetch("/api/participants/" + id + "/lad" + query);
   }
 
   /**
@@ -76,15 +103,18 @@
     participantId,
     answers,
     scoreNumerator,
-    scoreDenominator
+    scoreDenominator,
+    lectureId
   ) {
-    return {
+    var payload = {
       participant_id: String(participantId),
       timestamp: new Date().toISOString(),
       score_numerator: Number(scoreNumerator),
       score_denominator: Number(scoreDenominator),
       answers: answers,
     };
+    // 仕様: docs/spec/humanities-lectures.md#受入基準 AC18
+    return withLectureId(payload, lectureId);
   }
 
   /**
@@ -106,14 +136,16 @@
    * @param {"end_button"|"page_leave"} endMethod
    * @returns {Promise<Response>}
    */
-  function postDialogLog(participantId, endMethod) {
+  function postDialogLog(participantId, endMethod, lectureId) {
     return fetch("/api/dialog-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        participant_id: String(participantId),
-        end_method: endMethod,
-      }),
+      body: JSON.stringify(
+        withLectureId(
+          { participant_id: String(participantId), end_method: endMethod },
+          lectureId
+        )
+      ),
     });
   }
 
@@ -121,16 +153,21 @@
    * ページ離脱時に page_leave で保存を要求する。結果は待たず、失敗は握りつぶす。
    * 仕様: docs/spec/dialog-log-save.md#PBI-B (B4)
    */
-  function postDialogLogOnLeave(participantId) {
+  function postDialogLogOnLeave(participantId, lectureId) {
     try {
       var p = fetch("/api/dialog-log", {
         method: "POST",
         keepalive: true,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          participant_id: String(participantId),
-          end_method: "page_leave",
-        }),
+        body: JSON.stringify(
+          withLectureId(
+            {
+              participant_id: String(participantId),
+              end_method: "page_leave",
+            },
+            lectureId
+          )
+        ),
       });
       if (p && typeof p.catch === "function") {
         p.catch(function () {});

@@ -6,6 +6,7 @@
 - [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md) は Flask + SQLite 2 DB・Spreadsheet 非参照を決定済み。本仕様は **フロント技術選定** と **講義動画のホスティング方針の更新**（GAS → Flask）・**3 講義カタログ** を追記し、検討結果を1箇所に構造化する
 - 第一目的は **人手介入なしでログを DB に記録し、LAD 表示と AI プロンプトに反映**することである。フレームワーク選定はこの目的から逆算する
 - issue #30（2026-10-26 の PO 承認済み仕様 [participant-login.md](./participant-login.md) を反映）: 参加者の画面と API を、ログイン必須（ID/パスワード）にした。参加者は、URL のクエリ・本文の `participant_id` ではなく、ログインしたセッションから特定する。これに伴い、旧「認証必須化はスコープ外（参加者の画面と API は認証なし）」を取り下げ、導線・HTTP 契約（`participant_id` は省略可、不一致 403、型不正 400、未ログイン 401/302、`/login`・`/logout`）・環境変数（`SECRET_KEY`、`PARTICIPANT_CREDENTIALS_FILE`、`SESSION_COOKIE_SECURE_DISABLED`）を更新した。`/research/*` の Basic 認証は変更しない
+- issue #32（2026-10-26 の PO 承認済み仕様 [https-enforcement.md](./https-enforcement.md) を反映）: 本番で、元の方式が https でない要求（`X-Forwarded-Proto` が `http`、またはヘッダなし）を、すべてのパス（`/research/*` を含む）で処理しないようにした（`GET`・`HEAD` は 301 で `https://` へ、それ以外は 400）。https の応答に HSTS を付ける。HTTP 契約に「HTTPS の強制」の節を、環境変数に `HTTPS_ENFORCEMENT_DISABLED` を追記した。Basic 認証の照合そのものは変更しない
 
 ## スコープ
 
@@ -220,6 +221,8 @@ flowchart TB
 | `/lecture`（ログイン ID `P01`）  | `lecture-1`    | `Y2HC0I8cTAI`                           |
 | `/lecture?lecture_id=lecture-2`  | `lecture-2`    | `1MuwwFipX9o`（`lecture_id` の明示指定）|
 | `/reflect`（ログイン ID `P01`）  | `lecture-1`    | LAD / AI は lecture-1 の Session を参照 |
+| `/reflect?lecture_id=lecture-4`  | `lecture-4`    | LAD / AI / 対話ログは lecture-4 の Session を参照(#33) |
+| `/lecture?lecture_id=lecture-4`  | `lecture-4`    | `cUCNymPtQ5Y`(文系。lecture-5: `lLcZEIsyHvg`、lecture-6: `psbIrfy09Pg`) |
 
 旧来の固定マップ（`participant_id` 1/2/3 → `lecture-1/2/3`）は、ID が `1`/`2`/`3` のときに限り残っている（アプリは ID の形式を確かめない）。
 
@@ -264,7 +267,7 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 | Port                            | 具象（目標パス）                                                        | サブパッケージ | 永続化 / 外部                                          |
 | ------------------------------- | ----------------------------------------------------------------------- | -------------- | ------------------------------------------------------ |
 | `LearningSessionRepository`     | `framework_drivers/db/learning/sqlite_learning_session_repository.py`   | `db`           | `learning.db`                                          |
-| `LectureCatalog`                | `framework_drivers/db/learning/static_lecture_catalog.py`               | `db`           | **3 講義**定数 + `lectures/{lecture-id}/subtitles.srt` |
+| `LectureCatalog`                | `framework_drivers/db/learning/static_lecture_catalog.py`               | `db`           | **6 講義**定数 + `lectures/{lecture-id}/subtitles.srt` |
 | `LearningSessionIdGenerator` 等 | `framework_drivers/db/learning/id_generators.py`                        | `db`           | —                                                      |
 | `TutorSessionRepository`        | `framework_drivers/db/tutoring/sqlite_tutor_session_repository.py`      | `db`           | `tutor.db`                                             |
 | `TutorSessionIdGenerator`       | `framework_drivers/db/tutoring/id_generators.py`                        | `db`           | —                                                      |
@@ -279,11 +282,11 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 
 | 項目     | 規約                                                                                                                |
 | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| 保持件数 | **3 講義**（`lecture-1` / `lecture-2` / `lecture-3`）                                                               |
+| 保持件数 | **6 講義**（`lecture-1`〜`lecture-6`。lecture-4〜6 は #33。参加者の割当は固定マップのまま）                          |
 | 解決     | `find_by_id(LectureId)` — 未知 ID は `None`                                                                         |
 | 動画 URL | 講義 ID ごとの YouTube URL 定数（[application-usecase.md#LectureCatalog](./application-usecase.md#lecturecatalog)） |
 | SRT パス | `_PROJECT_ROOT / "lectures" / {lecture_id} / "subtitles.srt"`                                                       |
-| 小テスト | 講義別 `QuizDefinition`（`quiz_definitions/lecture_1`〜`lecture_3`、各 5 問・実装済み）                             |
+| 小テスト | 講義別 `QuizDefinition`（`quiz_definitions/lecture_1`〜`lecture_6`、各 5 問・実装済み）                             |
 | 公開 API | `build_near_term_lectures()` — テスト・Composition Root から利用                                                    |
 
 `GET /lecture` は `participant_id` → `lecture_id` 解決後、本 Catalog から動画 URL を取得する（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。
@@ -299,6 +302,21 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 ---
 
 ## HTTP 契約
+
+### HTTPS の強制（#32。詳細・AC は [https-enforcement.md](./https-enforcement.md)）
+
+以下の HTTP 契約（JSON API、HTML ページ、ログイン、`/research/*`）は、**元の方式が https の要求**についてのもの。元の方式は、前段（Cloud Run）が付ける `X-Forwarded-Proto` で判定する（複数の値のときは最後の値）。
+
+| 要求 | 応答 |
+|---|---|
+| http の要求（`X-Forwarded-Proto` が `http`、またはヘッダなし）の `GET`・`HEAD` | 301 で、同じホスト・パス・クエリの `https://` の URL へ。本文に学習データ・対話データ・画面を含めない |
+| http の要求の、それ以外のメソッド（`POST` など） | 400。DB に書かず、LLM を呼ばず、ログインを成立させず、セッション Cookie を発行しない（何も記録しない） |
+| https の要求 | 従来どおり処理する。応答に `Strict-Transport-Security: max-age=31536000`（`includeSubDomains`・`preload` なし）を付ける |
+
+- 対象は、すべてのパス（ログイン画面・ログインの送信、参加者の画面と API、静的ファイル、`/research/*`）。
+- http の判定は、研究者の Basic 認証・参加者のログインの確認・DB の接続より**前**に行う。http の要求には、Basic 認証の資格情報が正しくても 401・200 にならず、上表のとおり 301 になる。
+- http の要求への応答（301・400）には HSTS を付けない。
+- 解除: 環境変数 `HTTPS_ENFORCEMENT_DISABLED` が `1` のときだけ、上記を行わず、http の要求を従来どおり処理する（ローカルの HTTP 実行・テスト用。本番では設定しない）。
 
 ### JSON API
 
@@ -345,9 +363,9 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 - セッション Cookie: `HttpOnly`、`SameSite=Lax`、既定で `Secure`（ローカルの HTTP 実行だけ環境変数で外せる）。有効期限はログインから12時間（要求のたびに延長しない）。
 - `lecture_id` は参加者の識別ではないため、従来どおり扱う。
 
-`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
+`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}` と任意の `lecture_id`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403。`lecture_id` は変更: #33、出典 [humanities-lectures.md](./humanities-lectures.md) AC21。省略時は参加者の固定割当の講義、未登録の講義 ID は 404 で何も保存せず、文字列以外は 400）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
-`/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
+`/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須（以下は https の要求のとき。http の要求は、照合の前に上の「HTTPS の強制」で 301 になる）。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
 
 **破壊的変更**: 旧 LAD レスポンス（生 `viewing_logs` dict）は返さない。`LadDashboardViewModel` のみ。
 
@@ -416,6 +434,7 @@ framework_drivers/db + external 具象
 | `SECRET_KEY`                     | **必須**           | セッション Cookie の署名鍵。未設定・空・旧既定値 `tutor_secret_key` ではアプリが起動しない（#30）                 |
 | `PARTICIPANT_CREDENTIALS_FILE`   | **必須**           | 参加者の資格情報の設定ファイル（ハッシュ入り）の場所。未設定・ない・読めない・壊れているとアプリが起動しない（#30）。リポジトリにもイメージにも入れない |
 | `SESSION_COOKIE_SECURE_DISABLED` | 任意               | `1` のとき、セッション Cookie の `Secure` を外す（ローカルの HTTP 実行用。既定は `Secure` あり）（#30）           |
+| `HTTPS_ENFORCEMENT_DISABLED`     | 任意（ローカル用） | `1` のときだけ、HTTPS の強制（http の要求の 301/400、HSTS）を解除する。それ以外の値と未設定は強制（既定）。ローカルの HTTP 実行・テスト用で、本番では設定しない。`SESSION_COOKIE_SECURE_DISABLED` とは独立。詳細は [https-enforcement.md](./https-enforcement.md)（#32） |
 
 ### ローカル秘密情報（What）
 
@@ -500,14 +519,14 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `POST /api/viewing-logs` バッチ | 近い実験では単件 POST で開始。必要時に追加                                         |
 | API キー必須化                  | ADR: 推奨だが必須ではない                                                          |
-| 複数講義 UI                     | 固定マップ（`participant_id` 1/2/3）で 3 講義をカバー。協力者が講義を選ぶ仕組みは別 Issue（#30 の範囲外） |
+| 複数講義 UI                     | 固定マップ（`participant_id` 1/2/3）で理系 3 講義をカバー(文系 lecture-4〜6 は `lecture_id` の URL 指定。#33)。協力者が講義を選ぶ仕組みは別 Issue（#30 の範囲外） |
 | Research Export Infrastructure  | 別コンテキスト（`ExportResearchData`。対話ログだけの研究用ダウンロードは本件の範囲に含めた） |
 
 ---
 
 ## 受入基準（本仕様）
 
-- [ ] `StaticLectureCatalog` が 3 講義（`lecture-1`〜`lecture-3`）と SRT パス規約を返すことが定義されている
+- [ ] `StaticLectureCatalog` が 6 講義（`lecture-1`〜`lecture-6`）と SRT パス規約を返すことが定義されている
 - [ ] 講義動画・小テストの導線が Flask（`/lecture`・`POST /api/*`）のみと明記されている
 - [ ] `participant_id` 1/2/3 と講義・動画の対応が導線として定義されている
 - [ ] ADR との差分（講義動画ホスティング）が明示されている
@@ -517,4 +536,5 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 - [ ] HTTP API と HTML ページの一覧が interfaces 層契約と整合している
 - [ ] `participant_id` の全経路共通が導線として定義されている（値はログインした ID で決まる）
 - [ ] 参加者のログイン必須化（未ログインの 401/302、`participant_id` の省略可・不一致 403・型不正 400）が HTTP 契約に定義されている（#30。AC は participant-login.md）
+- [ ] HTTPS の強制（http の要求の `GET`・`HEAD` は 301、それ以外は 400、認証より前の判定、https の応答の HSTS、`HTTPS_ENFORCEMENT_DISABLED` での解除）が HTTP 契約と環境変数に定義されている（#32。AC は https-enforcement.md）
 - [ ] 実装計画 [framework-drivers-implementation-plan.md](./framework-drivers-implementation-plan.md) が存在する

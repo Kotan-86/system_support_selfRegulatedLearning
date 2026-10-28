@@ -6,8 +6,9 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from application.common.errors import ValidationError
+from application.common.errors import LectureNotFoundError, ValidationError
 from application.common.result import Result
+from application.learning.ports.lecture_catalog import LectureCatalog
 from application.tutoring.dto.save_dialog_log import SaveDialogLogRequest
 from application.tutoring.use_cases.save_dialog_log import SaveDialogLogUseCase
 
@@ -31,9 +32,12 @@ class SaveDialogLogController:
         self,
         use_case: SaveDialogLogUseCase,
         presenter: DialogLogSavedPresenter,
+        lecture_catalog: LectureCatalog | None = None,
     ) -> None:
         self._use_case = use_case
         self._presenter = presenter
+        # 本文の lecture_id が登録済みかの検査に使う(None のときは検査しない)
+        self._lecture_catalog = lecture_catalog
 
     def execute(
         self, payload: Any, *, received_at: datetime
@@ -54,9 +58,23 @@ class SaveDialogLogController:
         if end_method_result.is_err:
             return present_error(end_method_result.error)
 
-        lecture_result = parse_lecture_id_for_participant(participant_id.strip(), None)
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC21(任意の lecture_id。なければ固定割当)
+        raw_lecture_id = payload.get("lecture_id")
+        if raw_lecture_id is not None and not isinstance(raw_lecture_id, str):
+            return present_error(ValidationError("lecture_id must be a string"))
+        lecture_result = parse_lecture_id_for_participant(
+            participant_id.strip(), raw_lecture_id
+        )
         if lecture_result.is_err:
             return present_error(lecture_result.error)
+        if (
+            raw_lecture_id is not None
+            and self._lecture_catalog is not None
+            and self._lecture_catalog.find_by_id(lecture_result.value) is None
+        ):
+            return present_error(
+                LectureNotFoundError(f"lecture not found: {lecture_result.value!s}")
+            )
 
         request = SaveDialogLogRequest(
             learner_id=learner_result.value,

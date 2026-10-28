@@ -5,6 +5,7 @@
 
   var sessionId = null;
   var participantId = null;
+  var lectureId = null;
   var sending = false;
   var sendStateListeners = [];
 
@@ -117,6 +118,9 @@
       notifySendState(true);
 
       var body = { message: userMessage, participant_id: participantId };
+      if (lectureId) {
+        body.lecture_id = lectureId;
+      }
       if (sessionId) {
         body.session_id = sessionId;
       }
@@ -188,8 +192,9 @@
     });
   }
 
-  function init(pid) {
+  function init(pid, lid) {
     participantId = pid;
+    lectureId = lid || null;
     bindForm();
     appendMessage(
       "学習記録をもとに振り返りを始めましょう。メッセージを入力してください。",

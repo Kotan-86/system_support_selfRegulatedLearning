@@ -74,6 +74,7 @@
   <script>
     window.__PARTICIPANT_ID__ = {{ participant_id | tojson }};
     window.__REFLECT_PARTICIPANT_ID__ = {{ participant_id | tojson }};
+    window.__REFLECT_LECTURE_ID__ = {{ lecture_id | tojson }};
     window.__REFLECT_POLL_INTERVAL_MS__ = 5000;
   </script>
   <script src="{{ url_for('static', filename='js/common/participant_context.js') }}"></script>

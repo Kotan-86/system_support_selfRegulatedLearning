@@ -5,7 +5,7 @@
 - [domain-model.md](./domain-model.md) で Entity / 集約 / Domain Service を定義した。次に **アプリケーション層が担う手順（ユースケース）** を仕様化し、Interactor 実装と TDD の契約とする
 - 現行 Flask ルート（`app/main.py`）と Repository（`db/`）に散在するオーケストレーションを、**Use Case + Port** に集約する
 - 各ユースケース仕様は **コードに翻訳できる自然言語** とし、Request / Response / Port / `execute` 手順 / 受入基準を 1 見出しセットで記述する
-- 近い実験は **3 講義**の `LectureCatalog` と SRT 配置規約（`lectures/{lecture-id}/subtitles.srt`）を本仕様で確定する
+- 近い実験は **6 講義**(理系 lecture-1〜3、文系 lecture-4〜6。#33)の `LectureCatalog` と SRT 配置規約（`lectures/{lecture-id}/subtitles.srt`）を本仕様で確定する
 
 ## スコープ
 
@@ -101,7 +101,7 @@ tests/
 | ------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
 | 動画再生                 | 講義動画ページ（Flask `/lecture` + YouTube IFrame API）        | バックエンドは動画バイナリを保持しない      |
 | `Lecture`（ドメイン）    | 講義**メタデータ**（title, videoUrl, srtPath, quizDefinition） | 動画 URL は参照用。実体は YouTube           |
-| `LectureCatalog`（Port） | `lectureId` から `Lecture` メタデータを解決                    | 近い実験は `StaticLectureCatalog`（3 講義） |
+| `LectureCatalog`（Port） | `lectureId` から `Lecture` メタデータを解決                    | 近い実験は `StaticLectureCatalog`（6 講義） |
 
 **Session 確保・視聴記録**では `LectureCatalog` は不要。**小テスト記録・LAD・AI プロンプト**で必要。
 
@@ -148,17 +148,20 @@ tests/
 | ------------ | ----------- | ----------------- | ---------------------------------- |
 | `find_by_id` | `LectureId` | `Lecture \| None` | メタデータ参照。動画本体は返さない |
 
-#### 近い実験: 3 講義カタログ
+#### 近い実験: 6 講義カタログ
 
-`StaticLectureCatalog`（Framework & Drivers 層）は **3 件の `Lecture`** を保持する。`participant_id` と `lecture_id` の対応は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture) を参照。
+`StaticLectureCatalog`（Framework & Drivers 層）は **6 件の `Lecture`** を保持する(lecture-4〜6 は #33 で追加。仕様: [humanities-lectures.md](./humanities-lectures.md))。参加者の割当は固定マップ(`1`/`2`/`3` → lecture-1/2/3、それ以外は lecture-1)のままで、lecture-4〜6 は `lecture_id` の明示指定でだけ開く。`participant_id` と `lecture_id` の対応は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture) を参照。
 
 | lecture_id  | video_url（YouTube）                          |
 | ----------- | --------------------------------------------- |
 | `lecture-1` | `https://www.youtube.com/watch?v=Y2HC0I8cTAI` |
 | `lecture-2` | `https://www.youtube.com/watch?v=1MuwwFipX9o` |
 | `lecture-3` | `https://www.youtube.com/watch?v=Sa06YB2oXyw` |
+| `lecture-4` | `https://www.youtube.com/watch?v=cUCNymPtQ5Y` |
+| `lecture-5` | `https://www.youtube.com/watch?v=lLcZEIsyHvg` |
+| `lecture-6` | `https://www.youtube.com/watch?v=psbIrfy09Pg` |
 
-**小テスト設問（`QuizDefinition`）** は 3 講義共通のプレースホルダ（現行 5 問）で開始してよい。
+**小テスト設問（`QuizDefinition`）** は講義ごとに 5 問(lecture-4〜6 は humanities-lectures.md の付録A のとおり)。
 
 ##### SRT（字幕）配置規約
 

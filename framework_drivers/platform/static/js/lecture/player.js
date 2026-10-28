@@ -24,7 +24,8 @@
       participantId,
       currentTimeValue,
       action,
-      duration
+      duration,
+      global.__LECTURE_ID__
     );
   }
 
