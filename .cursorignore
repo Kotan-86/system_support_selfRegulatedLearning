@@ -1,8 +1,0 @@
-secrets/
-.env
-.env.*
-!.env.example
-**/service_account.json
-**/*-credentials.json
-**/*-service-account*.json
-db/data/*.db
