@@ -4,7 +4,7 @@
 
 ## 背景
 
-- 既存 ADR: [Arcitecture/ADR_SSSRL-backend_2026-02-23.md](../Arcitecture/ADR_SSSRL-backend_2026-02-23.md)
+- 既存 ADR: [Architecture/ADR_SSSRL-backend_2026-02-23.md](../Architecture/ADR_SSSRL-backend_2026-02-23.md)
 - 現行実装は Flask + SQLite（対話用 / 学習データ用の 2 DB）のモノリス
 - リファクタ目的: LAD・AI チューター・将来の統合フロントが共有する**ドメインモデル**を確立し、AI による段階的実装を可能にする
 

@@ -3,7 +3,7 @@
 ## 変更理由（Why）
 
 - [interfaces-layer.md](./interfaces-layer.md) まで **Controller → Use Case → Presenter → ViewModel** の契約は確立済み。次は **Port の具象実装・HTTP 配線・フロント配信・外部連携** を Framework & Drivers 層として仕様化し、Looker Studio 手動 CSV 経由を廃止して **学習直後に LAD と AI が同一学習コンテキストを参照**できるようにする
-- [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md) は Flask + SQLite 2 DB・Spreadsheet 非参照を決定済み。本仕様は **フロント技術選定** と **講義動画のホスティング方針の更新**（GAS → Flask）・**3 講義カタログ** を追記し、検討結果を1箇所に構造化する
+- [ADR_SSSRL-backend_2026-02-23.md](../../Architecture/ADR_SSSRL-backend_2026-02-23.md) は Flask + SQLite 2 DB・Spreadsheet 非参照を決定済み。本仕様は **フロント技術選定** と **講義動画のホスティング方針の更新**（GAS → Flask）・**3 講義カタログ** を追記し、検討結果を1箇所に構造化する
 - 第一目的は **人手介入なしでログを DB に記録し、LAD 表示と AI プロンプトに反映**することである。フレームワーク選定はこの目的から逆算する
 - issue #30（2026-10-26 の PO 承認済み仕様 [participant-login.md](./participant-login.md) を反映）: 参加者の画面と API を、ログイン必須（ID/パスワード）にした。参加者は、URL のクエリ・本文の `participant_id` ではなく、ログインしたセッションから特定する。これに伴い、旧「認証必須化はスコープ外（参加者の画面と API は認証なし）」を取り下げ、導線・HTTP 契約（`participant_id` は省略可、不一致 403、型不正 400、未ログイン 401/302、`/login`・`/logout`）・環境変数（`SECRET_KEY`、`PARTICIPANT_CREDENTIALS_FILE`、`SESSION_COOKIE_SECURE_DISABLED`）を更新した。`/research/*` の Basic 認証は変更しない
 - issue #32（2026-10-26 の PO 承認済み仕様 [https-enforcement.md](./https-enforcement.md) を反映）: 本番で、元の方式が https でない要求（`X-Forwarded-Proto` が `http`、またはヘッダなし）を、すべてのパス（`/research/*` を含む）で処理しないようにした（`GET`・`HEAD` は 301 で `https://` へ、それ以外は 400）。https の応答に HSTS を付ける。HTTP 契約に「HTTPS の強制」の節を、環境変数に `HTTPS_ENFORCEMENT_DISABLED` を追記した。Basic 認証の照合そのものは変更しない
@@ -34,7 +34,7 @@
 
 ## 関連仕様
 
-- ADR: [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md)
+- ADR: [ADR_SSSRL-backend_2026-02-23.md](../../Architecture/ADR_SSSRL-backend_2026-02-23.md)
 - ドメインモデル: [domain-model.md](./domain-model.md)
 - アプリケーション層: [application-usecase.md](./application-usecase.md)
 - interfaces 層: [interfaces-layer.md](./interfaces-layer.md)

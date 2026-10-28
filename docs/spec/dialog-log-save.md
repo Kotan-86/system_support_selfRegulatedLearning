@@ -50,7 +50,7 @@ LLM チューターとの対話ログは、本研究の分析対象である(プ
 - DB は SQLite のファイル2つ: `tutor.db`(対話)と `learning.db`(学習データ)。パスは環境変数 `TUTOR_DB_PATH` / `LEARNING_DB_PATH`、未設定なら `db/data/*.db`。〔確認: 読み取りのみ(`db/config.py`)。実行で一時パスに作成できることを確認〕
 - README は「Cloud Run ではコンテナ内の SQLite を使い、ファイルシステムがエフェメラルなため、**再デプロイやインスタンス再起動で対話履歴・学習データは消える**」「本番で保持するには Cloud SQL や GCS ボリューム等が必要(スコープ外)」と書いている。〔確認: 読み取りのみ(README「SQLite 永続化の注意」)〕
 - 一方、[framework-drivers-layer.md](./framework-drivers-layer.md)「デプロイ・運用」は「SQLite ファイル用 **永続ディスク**(ステートレスのみの PaaS は不可)」「`tutor.db` / `learning.db` の定期コピー」を方針としている。**README の現状と既存仕様の方針が食い違っている**。PO の決定(Q2)により、この食い違いの解消は、消えない保存基盤の別 Issue で扱う。〔確認: 読み取りのみ〕
-- ADR は「実験開始後は**学習データ用DB**のスキーマを変更しない」としている。対話用DBについての同様の制約はない。〔確認: 読み取りのみ(`Arcitecture/ADR_SSSRL-backend_2026-02-23.md`)〕
+- ADR は「実験開始後は**学習データ用DB**のスキーマを変更しない」としている。対話用DBについての同様の制約はない。〔確認: 読み取りのみ(`Architecture/ADR_SSSRL-backend_2026-02-23.md`)〕
 
 **ブラウザの制約(一般的な仕様。このリポジトリでの実機確認はしていない)**
 

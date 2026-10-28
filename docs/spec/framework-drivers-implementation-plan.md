@@ -34,7 +34,7 @@
 - 仕様: [framework-drivers-layer.md](./framework-drivers-layer.md)
 - interfaces: [interfaces-layer.md](./interfaces-layer.md)（Controller / ViewModel 完了）
 - application: [application-usecase.md](./application-usecase.md)
-- ADR: [ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md)
+- ADR: [ADR_SSSRL-backend_2026-02-23.md](../../Architecture/ADR_SSSRL-backend_2026-02-23.md)
 - 既存 DB スキーマ: [db/schema_learning.sql](../../db/schema_learning.sql)、[db/schema.sql](../../db/schema.sql)
 - テスト: `uv run pytest tests/ -v`
 
