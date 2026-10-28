@@ -221,7 +221,7 @@ flowchart TB
 | `/lecture?lecture_id=lecture-2`  | `lecture-2`    | `1MuwwFipX9o`（`lecture_id` の明示指定）|
 | `/reflect`（ログイン ID `P01`）  | `lecture-1`    | LAD / AI は lecture-1 の Session を参照 |
 | `/reflect?lecture_id=lecture-4`  | `lecture-4`    | LAD / AI / 対話ログは lecture-4 の Session を参照(#33) |
-| `/lecture?lecture_id=lecture-4`  | `lecture-4`    | `a-EqZb_Mpvk`(文系。lecture-5: `lLcZEIsyHvg`、lecture-6: `psbIrfy09Pg`) |
+| `/lecture?lecture_id=lecture-4`  | `lecture-4`    | `cUCNymPtQ5Y`(文系。lecture-5: `lLcZEIsyHvg`、lecture-6: `psbIrfy09Pg`) |
 
 旧来の固定マップ（`participant_id` 1/2/3 → `lecture-1/2/3`）は、ID が `1`/`2`/`3` のときに限り残っている（アプリは ID の形式を確かめない）。
 

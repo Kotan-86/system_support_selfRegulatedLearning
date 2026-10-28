@@ -49,7 +49,7 @@ _NEAR_TERM_LECTURES: tuple[tuple[str, str, str], ...] = (
     (
         "lecture-4",
         "律令制",
-        "https://www.youtube.com/watch?v=a-EqZb_Mpvk",
+        "https://www.youtube.com/watch?v=cUCNymPtQ5Y",
     ),
     (
         "lecture-5",

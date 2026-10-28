@@ -42,7 +42,7 @@ class HumanitiesLecture:
 
 LECTURE_4 = HumanitiesLecture(
     lecture_id="lecture-4",
-    video_id="a-EqZb_Mpvk",
+    video_id="cUCNymPtQ5Y",
     title="律令制",
     quiz_title="律令制の仕組み",
     quiz_description="動画で解説された律令制の仕組みに関する確認問題です。",

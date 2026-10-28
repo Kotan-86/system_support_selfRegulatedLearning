@@ -56,7 +56,7 @@
 ### POの意図(確認済み)
 
 - 範囲: lecture-4〜6 をカタログに登録し、`/lecture?lecture_id=lecture-4` などで、動画・小テスト・字幕・AI チューター・講義情報が動くところまで。協力者の選択画面、選択の保存、参加者→講義の割当の変更は、別 PBI。〔出典: PO決定 2026-10-26(`sprint-backlog.md`)〕
-- 対応: lecture-4 = 律令制(YouTube `a-EqZb_Mpvk`)、lecture-5 = 心理カウンセリングの基礎(`lLcZEIsyHvg`)、lecture-6 = 言語の仕組み(音声・音韻・語)(`psbIrfy09Pg`)。〔出典: 同上〕
+- 対応: lecture-4 = 律令制(YouTube `cUCNymPtQ5Y`)、lecture-5 = 心理カウンセリングの基礎(`lLcZEIsyHvg`)、lecture-6 = 言語の仕組み(音声・音韻・語)(`psbIrfy09Pg`)。〔出典: 同上〕
 - 講義情報(章立て、動画内演習、小テストの採点意図 Q1〜Q5)は、AI が案を作り、PO が PO確認シートで講義ごとに確認する。動画内演習がない講義は0件でよい。〔出典: PO決定 2026-10-26(論点9)〕
 - 講義IDの伝搬(論点1 = B): 講義ページが、chat・視聴ログ・小テスト送信(と、LAD 取得など同様に必要なもの)に、ページの講義IDを付ける。`/api/dialog-log` は lecture-1 のまま(別 PBI = FR-62)。その結果のずれを「既知の制約」に書き、ACで現状維持を固定する。既存の理系の挙動(参加者の固定割当、`P01`〜`P30` = lecture-1、participant-login AC25)は変えない。講義IDを送らない既存の呼び出しの後方互換を保つ。〔出典: PO決定 2026-10-26(論点1)〕 → 対話ログの扱いは、下記の論点11 = a で変更された。
 - 振り返りページへの引き継ぎ(論点10 = A): 講義ページの「振り返り画面へ進む」を `/reflect?lecture_id=<ページの講義ID>` にし、振り返りページがその講義IDを `/chat` と LAD の取得に付ける。講義IDなしの `/reflect` は従来どおり固定割当。未登録の講義IDは 404。`framework-drivers-layer.md` の「`lecture_id` は URL に含めない」の記述は AC16 で直す。〔出典: PO決定 2026-10-26(論点10)〕
@@ -92,9 +92,9 @@
 
 ## 受入基準
 
-1. **講義の登録**: 講義カタログで `lecture-4`・`lecture-5`・`lecture-6` を引くと講義が返り、動画 URL はそれぞれ `https://www.youtube.com/watch?v=a-EqZb_Mpvk`、`https://www.youtube.com/watch?v=lLcZEIsyHvg`、`https://www.youtube.com/watch?v=psbIrfy09Pg`、題名はそれぞれ「律令制」「心理カウンセリングの基礎」「言語の仕組み(音声・音韻・語)」である。〔検証: 自動テスト〕
+1. **講義の登録**: 講義カタログで `lecture-4`・`lecture-5`・`lecture-6` を引くと講義が返り、動画 URL はそれぞれ `https://www.youtube.com/watch?v=cUCNymPtQ5Y`、`https://www.youtube.com/watch?v=lLcZEIsyHvg`、`https://www.youtube.com/watch?v=psbIrfy09Pg`、題名はそれぞれ「律令制」「心理カウンセリングの基礎」「言語の仕組み(音声・音韻・語)」である。〔検証: 自動テスト〕
 2. **字幕ファイルの配置**: lecture-4〜6 の字幕のパスは `lectures/<講義ID>/subtitles.srt` で、ファイルが実在する。〔検証: 自動テスト〕
-3. **講義ページの表示**: ログインした状態で `/lecture?lecture_id=lecture-4` を開くと 200 が返り、ページに YouTube 動画ID `a-EqZb_Mpvk` が埋め込まれ、他の講義の動画IDは含まれない。lecture-5(`lLcZEIsyHvg`)、lecture-6(`psbIrfy09Pg`)も同じ。〔検証: 自動テスト〕
+3. **講義ページの表示**: ログインした状態で `/lecture?lecture_id=lecture-4` を開くと 200 が返り、ページに YouTube 動画ID `cUCNymPtQ5Y` が埋め込まれ、他の講義の動画IDは含まれない。lecture-5(`lLcZEIsyHvg`)、lecture-6(`psbIrfy09Pg`)も同じ。〔検証: 自動テスト〕
 4. **小テストの内容**: lecture-4〜6 の小テストは、それぞれ5問、各4択で、各設問の問題文・選択肢(並び順を含む)・正解が付録A と一致する。問題文と選択肢は、付録A の表のセルの文字列そのもので、記号「A.〜D.」と見出しを含まない。正解は、付録A の正解の記号が指す選択肢の文字列である。小テストのデータは解説を持たない。〔検証: 自動テスト〕
 5. **小テストの表示**: `/lecture?lecture_id=lecture-4` のページに、小テストの題名「律令制の仕組み」、説明「動画で解説された律令制の仕組みに関する確認問題です。」、5問の問題文、各選択肢が含まれる。lecture-5 は題名「心理カウンセリングの基礎」・説明「動画で解説された心理カウンセリングの基礎に関する確認問題です。」、lecture-6 は題名「言語の仕組み（音声・音韻・語）」・説明「動画で解説された言語の仕組み（音声・音韻・語）に関する確認問題です。」。ページに付録A の解説の文は含まれない(各講義の解説の1文目で確かめる)。〔検証: 自動テスト〕
 6. **小テストの送信(API)**: 講義IDに `lecture-4`(5、6 も同じ)を指定し、その講義の全問正解の回答で `/api/quiz-attempts` に送ると、201 と attempt_id が返り、記録された試行の講義IDは指定した講義である。〔検証: 自動テスト〕
