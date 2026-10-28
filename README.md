@@ -6,7 +6,17 @@ LLM チューター（Vertex AI Gemini）と対話履歴の SQLite 永続化。
 
 ```powershell
 uv sync
+$env:HTTPS_ENFORCEMENT_DISABLED="1"   # ローカルのみ。付けないと https へ301され、開発サーバーが 400 を返す
 uv run flask --app framework_drivers.platform.main run
+```
+
+ブラウザでは `http://127.0.0.1:5000/` を開く。
+
+Windows で `error: Failed to spawn: flask`（`os error 4551`、アプリケーション制御ポリシーによる flask.exe のブロック）になる場合は、Python 経由で起動する。
+
+```powershell
+$env:HTTPS_ENFORCEMENT_DISABLED="1"
+uv run python -m flask --app framework_drivers.platform.main run
 ```
 
 起動には `SECRET_KEY` と参加者の設定ファイルの指定が必須（[参加者ログイン](#参加者ログインid--パスワード)を参照）。
