@@ -116,6 +116,7 @@ tests/
 | `find_by_learner_and_lecture` | `LearnerId`, `LectureId` | `LearningSession \| None`     |                                                                                                                                                                |
 | `list_by_learner`             | `LearnerId`              | `tuple[LearningSession, ...]` | Session 開始時の重複チェック用                                                                                                                                 |
 | `save`                        | `LearningSession`        | `LearningSession`             | 集約全体を永続化（upsert）し、**DB 確定後の集約**を返す（下記 [save 戻り値と子 Entity ID の確定](#learningsessionrepositorysave-戻り値と子-entity-id-の確定)） |
+| `save_if_learner_has_none`    | `LearningSession`        | `LearningSession`             | 非抽象メソッド(#34、PO 承認 2026-10-28)。1 人 1 講義を保つため、学習者に学習セッションが無いときだけ保存し、保存後の集約を返す。既にあれば保存せず**既存の先頭の Session**(開始時刻の昇順)を返す(後から確定した側は既存の選択を返す)。SQLite 実装は `BEGIN IMMEDIATE` で確認と保存を直列化する。既定実装は排他しない。仕様: [lecture-selection.md](./lecture-selection.md) |
 
 #### `LearningSessionRepository.save` 戻り値と子 Entity ID の確定
 
@@ -150,7 +151,9 @@ tests/
 
 #### 近い実験: 6 講義カタログ
 
-`StaticLectureCatalog`（Framework & Drivers 層）は **6 件の `Lecture`** を保持する(lecture-4〜6 は #33 で追加。仕様: [humanities-lectures.md](./humanities-lectures.md))。参加者の割当は固定マップ(`1`/`2`/`3` → lecture-1/2/3、それ以外は lecture-1)のままで、lecture-4〜6 は `lecture_id` の明示指定でだけ開く。`participant_id` と `lecture_id` の対応は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture) を参照。
+`StaticLectureCatalog`（Framework & Drivers 層）は **6 件の `Lecture`** を保持する(lecture-4〜6 は #33 で追加。仕様: [humanities-lectures.md](./humanities-lectures.md))。講義は、参加者が選んだ講義で決まる(#34。仕様: [lecture-selection.md](./lecture-selection.md)。選択のない参加者は選択の画面へ移る)。`participant_id` と `lecture_id` の対応は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture) を参照。
+
+(置き換えの注記: #30・#33 時点では、参加者の割当は固定マップ(`1`/`2`/`3` → lecture-1/2/3、それ以外は lecture-1)のままで、lecture-4〜6 は `lecture_id` の明示指定でだけ開いた。#34 で、選択に基づく講義の決定に置き換わった。)
 
 | lecture_id  | video_url（YouTube）                          |
 | ----------- | --------------------------------------------- |

@@ -23,6 +23,7 @@ from tests.login_helpers import (
     location_path,
     make_entry,
     post_login,
+    select_lecture_directly,
     write_credentials_file,
 )
 
@@ -56,6 +57,8 @@ def anon(monkeypatch, tmp_path, creds_path):
 def _logged_in(client, pid="A", pw=PW_A):
     response = post_login(client, pid, pw)
     assert response.status_code == 302
+    # 選択前は 409/302 になる(lecture-selection AC)ので、講義は選択済みにしてから各テストの本来の検証へ進む
+    select_lecture_directly(pid, "lecture-1")
     return response
 
 
@@ -68,6 +71,7 @@ class TestAc1ValidCredentials:
 
         assert response.status_code == 302
         assert location_path(response) == "/lecture"
+        select_lecture_directly("A", "lecture-1")  # 選択前は /lecture が 302 になるため
         page = anon.get("/lecture?participant_id=A")
         assert page.status_code == 200
         assert displayed_participant_id(page.get_data(as_text=True)) == "A"

@@ -1,0 +1,27 @@
+{# 仕様: docs/spec/lecture-selection.md#2-選択の画面と導線 #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>講義の選択</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; }
+    .lecture-option { display: flex; align-items: center; gap: 12px; margin: 0.75rem 0; }
+    .lecture-option button { flex: 1; text-align: left; padding: 10px; font-size: 1rem; }
+    .lecture-track { min-width: 3em; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <form method="post" action="/logout"><button type="submit" id="logout-button">ログアウト</button></form>
+  <h3>学習する講義を選んでください</h3>
+  <p>参加者 ID: <strong>{{ participant_id }}</strong></p>
+  <p>一度選ぶと変更できない選択です。次の画面で内容を確認してから確定します。</p>
+  {% for lecture in lectures %}
+  <form method="post" action="/select-lecture" class="lecture-option">
+    <button type="submit" name="lecture_id" value="{{ lecture.id }}">{{ lecture.title }}</button>
+    <span class="lecture-track">{{ lecture.track }}</span>
+  </form>
+  {% endfor %}
+</body>
+</html>

@@ -1,0 +1,23 @@
+{# 仕様: docs/spec/lecture-selection.md#2-選択の画面と導線(確定の前の確認) #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>講義の選択の確認</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; }
+    .select-warning { border: 1px solid #f57c00; background: #fff3e0; padding: 12px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h3>この講義で確定しますか</h3>
+  <p>選んだ講義: <strong>{{ lecture.title }}</strong>({{ lecture.track }})</p>
+  <p class="select-warning" role="alert">一度選ぶと変更できない講義の選択です。この講義でよければ「確定する」を押してください。</p>
+  <form method="post" action="/select-lecture/confirm">
+    <input type="hidden" name="lecture_id" value="{{ lecture.id }}">
+    <button type="submit" id="confirm-lecture-button">確定する</button>
+  </form>
+  <p><a href="/select-lecture" id="back-to-selection">戻って選び直す</a></p>
+</body>
+</html>

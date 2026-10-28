@@ -1,23 +1,31 @@
+# 仕様: docs/spec/lecture-selection.md#4-講義-id-の一貫fr-62
 # 仕様: docs/spec/interfaces-layer.md#default_lecture
-"""participant_id から lecture_id を解決する。"""
+"""参加者の要求の講義 ID を LectureId にする。
+
+participant_id による固定対応(1/2/3 → lecture-1/2/3、それ以外は既定の講義)は、
+講義の選択(FR-60、#34)で廃止した。参加者の講義は保存された選択で決まり、
+platform 層が選択した講義の ID を必ず渡す。
+"""
 from __future__ import annotations
 
 from application.common.errors import ValidationError
 from application.common.result import Result, err, ok
 from domain.shared.ids import LectureId
-
 from interfaces.common.default_lecture import resolve_default_lecture_id
 
-NEAR_TERM_PARTICIPANT_LECTURE_MAP: dict[str, str] = {
-    "1": "lecture-1",
-    "2": "lecture-2",
-    "3": "lecture-3",
-}
-"""近い実験: participant_id → lecture_id の固定マップ。"""
 
+def resolve_lecture_id_for_participant(
+    participant_id: str,
+    lecture_id: str | None = None,
+) -> Result[LectureId, ValidationError]:
+    """明示された lecture_id を検証して LectureId にする(participant_id では決めない)。
 
-def _parse_explicit_lecture_id(lecture_id: str) -> Result[LectureId, ValidationError]:
-    """明示 lecture_id を LectureId へ変換する（default は使用しない）。"""
+    lecture_id が None のときだけ既定の講義(resolve_default_lecture_id)を返す。これは
+    Controller を直接呼ぶ単体テスト・内部用の最終手段で、HTTP の経路では使われない
+    (platform 層が、保存された選択の講義を必ず渡す)。
+    """
+    if lecture_id is None:
+        return ok(resolve_default_lecture_id())
     normalized = lecture_id.strip()
     if not normalized:
         return err(ValidationError("lecture_id must not be empty"))
@@ -25,25 +33,3 @@ def _parse_explicit_lecture_id(lecture_id: str) -> Result[LectureId, ValidationE
         return ok(LectureId(normalized))
     except ValueError as exc:
         return err(ValidationError(str(exc)))
-
-
-def resolve_lecture_id_for_participant(
-    participant_id: str,
-    lecture_id: str | None = None,
-) -> Result[LectureId, ValidationError]:
-    """participant_id と optional lecture_id から LectureId を解決する。
-
-    優先順位:
-    1. lecture_id 明示 → 検証のみ（マップ・default 不使用）
-    2. participant_id が近い実験マップに命中 → 対応 LectureId
-    3. それ以外 → resolve_default_lecture_id()（lecture-1）
-    """
-    if lecture_id is not None:
-        return _parse_explicit_lecture_id(lecture_id)
-
-    normalized_participant = participant_id.strip()
-    mapped = NEAR_TERM_PARTICIPANT_LECTURE_MAP.get(normalized_participant)
-    if mapped is not None:
-        return ok(LectureId(mapped))
-
-    return ok(resolve_default_lecture_id())

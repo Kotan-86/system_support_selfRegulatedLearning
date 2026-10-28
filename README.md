@@ -107,6 +107,23 @@ uv run python scripts/manage_participants.py bulk-add --count 30
   - リポジトリにもイメージにも入れない（既定の場所なら `.gitignore` と `.dockerignore` の除外の内）。設定ファイルを `secrets/` の外に置くと CSV も外にできるので、除外されない場所に置かないこと。
 - 登録の上限は**31件**（停止中の ID も数える。`P31` の次は払い出さない）。このうち1件は**本番の通し確認の専用**（確認後に停止する）で、**協力者に配るのは30件まで**（`P02`〜`P31`。確認専用は `P01`）。スクリプトは確認専用かどうかを区別しない。運用の規則として守る。
 
+### 講義の選択
+
+仕様: [docs/spec/lecture-selection.md](docs/spec/lecture-selection.md)
+
+- ログインした協力者は、**まだ講義を選んでいないと選択の画面（`/select-lecture`）へ移る**。登録された講義（理系3本・文系3本の計6本）が、題名と系統（理系/文系）つきで並ぶ。1本を選ぶと「一度選ぶと変更できない」旨の確認が出て、確定すると選んだ講義の画面になる。
+- 選択は、その協力者の学習セッション（`learning_sessions`）として保存される。**一度確定したら固定**で、ログアウト・再ログイン・別のブラウザ・ログインの有効期限の後も同じ講義になる。動画・字幕・小テスト・LAD・AI との対話・対話ログは、すべて選んだ講義で動く。
+- 旧仕様の `participant_id` による講義の固定対応（`1`/`2`/`3` → `lecture-1/2/3`、それ以外は `lecture-1`）は廃止した。環境変数 `DEFAULT_LECTURE_ID` も、参加者の講義の決定には効かない。
+- **アプリには、選択を変える機能がない**（協力者向けにも研究者向けにもない）。協力者が選び間違えたときの手順:
+  1. 研究者が、作成スクリプトで**新しい ID を払い出す**（`uv run python scripts/manage_participants.py add --note "メモ"`）。
+  2. 元の ID を**停止**する（`uv run python scripts/manage_participants.py suspend <元の ID>`。停止した番号は再利用しない）。
+  3. 協力者に新しい ID とパスワードを配布する。新しい ID でログインして、改めて講義を選ぶ。
+- 選択の機能のリリースの前に記録された学習データ・対話データ（テスト用だけ）は、リリースの前に研究者が消去する。アプリには消去・移行の機能がない。手順（2つの DB `learning.db` / `tutor.db` と、本番の複製（GCS）の両方を消す。**手順の実行は未検証**）:
+  1. 本番のサービスを止める（または協力者が使っていない時間帯にする）。Litestream が複製を書き直すため、サービスが動いたまま GCS だけ消してはいけない。
+  2. 本番の複製（GCS バケットの `learning/` と `tutor/`）を削除する。バケットのバージョニングで古い世代が残る場合は、世代も削除する（[SQLite 永続化の注意](#sqlite-永続化の注意)）。
+  3. ローカルの DB は `db/data/learning.db` / `tutor.db`（`LEARNING_DB_PATH` / `TUTOR_DB_PATH`）を削除する。
+  4. サービスを起動する。複製がなければ空の DB が作られ、全員が未選択から始まる。
+
 ### ローカルでの実行
 
 1. `.env.local` に `SECRET_KEY`、必要なら `PARTICIPANT_CREDENTIALS_FILE` を書く（`.env.example` 参照）。
@@ -273,7 +290,7 @@ Google Apps Script（小テスト Form 等）など、ログインしない外�
 | `SESSION_COOKIE_SECURE_DISABLED` | ローカルの HTTP のみ | `1` で Cookie の `Secure` を外す。本番（HTTPS）では設定しない |
 | `HTTPS_ENFORCEMENT_DISABLED` | ローカルの HTTP のみ | `1` のときだけ、http の要求の拒否・https への転送と HSTS を解除する。本番では設定しない |
 | `TUTOR_DB_PATH` / `LEARNING_DB_PATH` | 任意 | 未設定時 `db/data/*.db` |
-| `DEFAULT_LECTURE_ID` | 任意 | マップ外 `participant_id` のフォールバック講義 ID（既定 `lecture-1`） |
+| `DEFAULT_LECTURE_ID` | 任意 | **参加者の講義の決定には効かない**（参加者の講義は選択の画面で選ぶ。[講義の選択](#講義の選択)）。コード内の既定値の上書きにだけ残っている |
 | `RESEARCHER_BASIC_AUTH_USER` | 研究用ダウンロード利用時 | 研究者の Basic 認証のユーザー名 |
 | `RESEARCHER_BASIC_AUTH_PASSWORD` | 研究用ダウンロード利用時 | 研究者の Basic 認証のパスワード |
 

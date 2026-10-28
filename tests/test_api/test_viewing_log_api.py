@@ -90,17 +90,17 @@ def _viewing_log_lectures(participant_id: str) -> list[str]:
 def test_ac17_viewing_log_with_lecture_id_is_recorded_as_that_lecture(
     phase2_client, lecture_id: str
 ) -> None:
-    """AC17: 講義ID付きの視聴ログは、その講義として記録される(P01 の固定割当は lecture-1)。"""
-    # 仕様: docs/spec/humanities-lectures.md#受入基準 AC17
-    login_as(phase2_client, "P01")
+    """AC17: 講義ID付きの視聴ログは、選択した講義として記録される(P01 がその講義を選んだ状態)。"""
+    # 仕様: docs/spec/humanities-lectures.md#受入基準 AC17 / docs/spec/lecture-selection.md#受入基準 AC10
+    login_as(phase2_client, "P01", lecture=lecture_id)
     payload = {**_valid_viewing_log_payload(), "participant_id": "P01", "lecture_id": lecture_id}
     response = phase2_client.post("/api/viewing-log", json=payload, content_type="application/json")
     assert response.status_code == 201, response.get_data(as_text=True)
     assert _viewing_log_lectures("P01") == [lecture_id]
 
 
-def test_ac20_viewing_log_without_lecture_id_uses_fixed_assignment(phase2_client) -> None:
-    """AC20: 講義IDなしの視聴ログは、従来どおり固定割当(P01 は lecture-1)で記録される。"""
+def test_ac20_viewing_log_without_lecture_id_uses_selected_lecture(phase2_client) -> None:
+    """AC20: 講義IDなしの視聴ログは、選択済みの講義(P01 は lecture-1 を選択済み)で記録される。"""
     # 仕様: docs/spec/humanities-lectures.md#受入基準 AC20
     login_as(phase2_client, "P01")
     payload = {**_valid_viewing_log_payload(), "participant_id": "P01"}

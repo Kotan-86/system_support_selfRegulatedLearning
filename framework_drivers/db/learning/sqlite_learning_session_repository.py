@@ -108,6 +108,35 @@ class SqliteLearningSessionRepository(LearningSessionRepository):
         self._conn.commit()
         return self._load_session(session.id)
 
+    def save_if_learner_has_none(self, session: LearningSession) -> LearningSession:
+        """BEGIN IMMEDIATE で書き込みロックを先に取り、確認と INSERT を直列化する。"""
+        self._conn.commit()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = self._conn.execute(
+                """
+                SELECT id FROM learning_sessions
+                WHERE learner_id = ?
+                ORDER BY started_at ASC, id ASC LIMIT 1
+                """,
+                (str(session.learner_id),),
+            ).fetchone()
+            if row is not None:
+                self._conn.rollback()
+                return self._load_session(LearningSessionId(str(row["id"])))
+            self._conn.execute(
+                """
+                INSERT INTO learning_sessions (id, learner_id, lecture_id, started_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                learning_session_to_insert_params(session),
+            )
+            self._conn.commit()
+        except BaseException:
+            self._conn.rollback()
+            raise
+        return self._load_session(session.id)
+
     def _load_session(self, session_id: LearningSessionId) -> LearningSession:
         session_row = self._conn.execute(
             """

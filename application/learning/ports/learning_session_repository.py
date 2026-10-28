@@ -24,3 +24,14 @@ class LearningSessionRepository(ABC):
     @abstractmethod
     def save(self, session: LearningSession) -> LearningSession:
         """集約全体を upsert し、DB 確定後の集約を返す。"""
+
+    def save_if_learner_has_none(self, session: LearningSession) -> LearningSession:
+        """学習者に Session が無いときだけ保存し、保存後(または既存)の先頭 Session を返す。
+
+        実装は、確認と保存を排他的に行うこと(同時の確定でも1件に保つ)。
+        既定実装は排他しない(単一スレッド用)。
+        """
+        existing = self.list_by_learner(session.learner_id)
+        if existing:
+            return existing[0]
+        return self.save(session)

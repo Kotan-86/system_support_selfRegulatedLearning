@@ -12,6 +12,7 @@ from application.learning.adapters.get_learning_snapshot_query import (
 from application.learning.use_cases.get_learning_snapshot import GetLearningSnapshotUseCase
 from application.learning.use_cases.record_quiz_attempt import RecordQuizAttemptUseCase
 from application.learning.use_cases.record_viewing_event import RecordViewingEventUseCase
+from application.learning.use_cases.select_lecture import SelectLectureUseCase
 from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
@@ -212,6 +213,20 @@ def build_get_learning_snapshot_controller(
         presenter=presenter,
         lecture_catalog=lecture_catalog,
         video_duration_resolver=resolver,
+    )
+
+
+def build_select_lecture_use_case(
+    connection: sqlite3.Connection,
+) -> SelectLectureUseCase:
+    """講義の選択ユースケースを組み立てる(選択は learning_sessions で表す)。
+
+    仕様: docs/spec/lecture-selection.md#3-選択の保存と固定fr-63
+    """
+    return SelectLectureUseCase(
+        repository=_learning_repository(connection),
+        id_generator=UuidLearningSessionIdGenerator(),
+        lecture_catalog=_lecture_catalog(),
     )
 
 

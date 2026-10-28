@@ -23,6 +23,7 @@ from tests.login_helpers import (
     build_app,
     make_entry,
     post_login,
+    select_lecture_directly,
     viewing_payload,
     write_credentials_file,
 )
@@ -164,6 +165,7 @@ class TestAc17NoPlaintextStored:
         app, _ = build_app(monkeypatch, tmp_path)
         client = app.test_client()
         assert post_login(client, pid, password).status_code == 302
+        select_lecture_directly(pid, "lecture-1")  # 選択前は 409(講義の選択 AC)なので、選択済みにする
         assert client.post("/api/viewing-log", json=viewing_payload(pid)).status_code == 201
         for db in ("tutor.db", "learning.db"):
             assert password.encode("utf-8") not in (tmp_path / db).read_bytes()
@@ -466,6 +468,7 @@ class TestBulkAdd:
         for participant_id, password in rows:
             client = app.test_client()
             assert post_login(client, participant_id, password).status_code == 302
+            select_lecture_directly(participant_id, "lecture-1")  # 選択前は 409(講義の選択 AC)
             response = client.post("/api/viewing-log", json=viewing_payload(participant_id))
             assert response.status_code == 201
         for db in ("tutor.db", "learning.db"):

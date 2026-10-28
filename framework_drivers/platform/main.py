@@ -1,4 +1,5 @@
 # 仕様: docs/spec/framework-drivers-layer.md#HTTP-契約
+# 仕様: docs/spec/lecture-selection.md#実現内容what
 # 仕様: docs/spec/participant-login.md#3-参加者の特定fr-52
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-4-platform-配線
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-5-講義動画フロント
@@ -8,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -17,7 +19,7 @@ from flask import Flask, Response, g, redirect, render_template, request, url_fo
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 from application.common.errors import ErrorCode
-from domain.shared.ids import LectureId
+from domain.shared.ids import LearnerId, LectureId
 from framework_drivers.db.learning.quiz_definitions import (
     lecture_1,
     lecture_2,
@@ -56,6 +58,7 @@ from framework_drivers.platform.wiring import (
     build_record_quiz_attempt_controller,
     build_record_viewing_event_controller,
     build_save_dialog_log_controller,
+    build_select_lecture_use_case,
     build_send_chat_message_controller,
     get_learning_db_path,
     get_tutor_db_path,
@@ -180,29 +183,67 @@ def _subtitle_cues_for_lecture(lecture_id: str) -> list[dict[str, object]]:
     ]
 
 
+SELECT_LECTURE_PATH = "/select-lecture"
+_CONFIRM_LECTURE_PATH = "/select-lecture/confirm"
+
+
+def _json_error(error: str, status: int) -> Response:
+    return Response(json.dumps({"error": error}), status=status, mimetype="application/json")
+
+
 def _reject_foreign_claim(claimed: object) -> Response | None:
     """送られた participant_id が本人と異なる/不正な型なら、DB・LLM の前に 403/400 を返す。"""
     status = resolve_claimed_participant_id(claimed, current_participant_id())
     if status is None:
         return None
-    return Response(
-        json.dumps({"error": "forbidden" if status == 403 else "invalid_participant_id"}),
-        status=status,
-        mimetype="application/json",
+    return _json_error("forbidden" if status == 403 else "invalid_participant_id", status)
+
+
+def _selected_lecture_id() -> str | None:
+    """ログインした協力者が選んだ講義(保存された選択)。未選択なら None。"""
+    selected = build_select_lecture_use_case(g.learning_conn).find_selected(
+        LearnerId(current_participant_id())
     )
+    return None if selected is None else str(selected)
+
+
+def _guard_lecture(claimed: object) -> tuple[str | None, Response | None]:
+    """参加者の API の講義を、保存された選択で決める。
+
+    検査の順序(仕様 What 4節。participant_id の検査は呼び出し側が先に行う):
+    未選択 409 → 値の形 400 → 選択との不一致 403。
+    """
+    selected = _selected_lecture_id()
+    if selected is None:
+        return None, _json_error("lecture_not_selected", 409)
+    if claimed is None:
+        return selected, None
+    if isinstance(claimed, bool) or not isinstance(claimed, (str, int, float)) or claimed == "":
+        return None, _json_error("invalid_lecture_id", 400)
+    if str(claimed) != selected:
+        return None, _json_error("forbidden", 403)
+    return selected, None
 
 
 def _own_payload(payload: object) -> tuple[object, Response | None]:
-    """本文の participant_id を検査し、ログインした ID を入れた本文を返す。
+    """本文の participant_id と lecture_id を検査し、ログインした ID と選択した講義を入れた本文を返す。
 
-    本文が JSON オブジェクトでないときは、そのまま Controller の検証に任せる。
+    本文が JSON オブジェクトでないときは、そのまま Controller の検証に任せる(未選択は 409)。
     """
     if not isinstance(payload, dict):
-        return payload, None
+        _, rejection = _guard_lecture(None)
+        return payload, rejection
     rejection = _reject_foreign_claim(payload.get("participant_id"))
     if rejection is not None:
         return payload, rejection
-    return {**payload, "participant_id": current_participant_id()}, None
+    selected, rejection = _guard_lecture(payload.get("lecture_id"))
+    if rejection is not None:
+        return payload, rejection
+    return {
+        **payload,
+        "participant_id": current_participant_id(),
+        "lecture_id": selected,
+    }, None
 
 
 def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
@@ -248,34 +289,84 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
 
     @app.route("/")
     def index():
-        """ルート: ログイン済みなら /lecture へ(未ログインは認証層がログイン画面へ)。"""
+        """ルート: 選択済みなら /lecture へ、未選択なら選択の画面へ(未ログインは認証層がログイン画面へ)。"""
+        if _selected_lecture_id() is None:
+            return redirect(SELECT_LECTURE_PATH, 302)
+        return redirect(DEFAULT_AFTER_LOGIN_PATH, 302)
+
+    @app.route(SELECT_LECTURE_PATH, methods=["GET", "POST"])
+    def select_lecture():
+        """GET: 選択の画面(題名と系統をカタログの順に)。POST: 最初の操作(確認の画面。保存しない)。
+
+        仕様: docs/spec/lecture-selection.md#2-選択の画面と導線
+        """
+        if _selected_lecture_id() is not None:
+            return redirect(DEFAULT_AFTER_LOGIN_PATH, 302)
+        if request.method == "GET":
+            return render_template(
+                "select_lecture.html",
+                lectures=_STATIC_LECTURE_CATALOG.list_all(),
+                participant_id=current_participant_id(),
+            )
+        raw = request.form.get("lecture_id", "").strip()
+        chosen = _STATIC_LECTURE_CATALOG.find_by_id(LectureId(raw)) if raw else None
+        if chosen is None:
+            return Response("lecture not found", status=400, mimetype="text/plain")
+        return render_template("select_lecture_confirm.html", lecture=chosen)
+
+    @app.route(_CONFIRM_LECTURE_PATH, methods=["POST"])
+    def confirm_lecture():
+        """POST: 選択の確定。保存済みの選択は変えない(二重送信・別の講義の送信は最初の講義へ)。
+
+        仕様: docs/spec/lecture-selection.md#3-選択の保存と固定fr-63
+        """
+        raw = request.form.get("lecture_id", "").strip()
+        if not raw:
+            return Response("lecture_id is required", status=400, mimetype="text/plain")
+        use_case = build_select_lecture_use_case(g.learning_conn)
+        learner_id = LearnerId(current_participant_id())
+        try:
+            result = use_case.execute(learner_id, LectureId(raw), datetime.now(timezone.utc))
+        except sqlite3.IntegrityError:
+            # 同時の確定で一意制約に当たった: 先に保存された選択に従う(増やさない)
+            result = None
+        if result is not None and result.is_err:
+            return Response("lecture not found", status=400, mimetype="text/plain")
         return redirect(DEFAULT_AFTER_LOGIN_PATH, 302)
 
     @app.route("/reflect")
     def reflect():
         """GET /reflect: LAD + AI 振り返り統合画面(ログインした本人の画面。クエリの participant_id は無視)。"""
-        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC19(任意の lecture_id。未登録は 404)
+        # 仕様: docs/spec/lecture-selection.md#4-講義-id-の一貫fr-62(DR-001・DR-003)
+        selected = _selected_lecture_id()
+        if selected is None:
+            return redirect(SELECT_LECTURE_PATH, 302)
         lecture_id = request.args.get("lecture_id")
-        # 空文字は LectureId を作れない(ValueError)ので、未登録と同じく 404 にする
-        if lecture_id is not None and (
-            lecture_id == "" or _STATIC_LECTURE_CATALOG.find_by_id(LectureId(lecture_id)) is None
-        ):
+        if lecture_id == "":
             return Response("lecture not found", status=404, mimetype="text/plain")
+        if lecture_id is not None and lecture_id != selected:
+            return Response("forbidden", status=403, mimetype="text/plain")
         return render_template(
             "reflect.html",
             participant_id=current_participant_id(),
-            lecture_id=lecture_id,
+            lecture_id=selected,
             **_REFLECT_FIXED_TEXT,
         )
 
     @app.route("/lecture")
     def lecture():
-        """GET /lecture: 講義動画ページ(ログインした本人の画面。クエリの participant_id は無視)。"""
+        """GET /lecture: 選択した講義の動画ページ(クエリの participant_id・選択と異なる lecture_id は無視)。"""
+        # 仕様: docs/spec/lecture-selection.md#4-講義-id-の一貫fr-62(Q3・DR-003)
         participant_id = current_participant_id()
+        selected = _selected_lecture_id()
+        if selected is None:
+            return redirect(SELECT_LECTURE_PATH, 302)
         try:
+            if request.args.get("lecture_id") == "":
+                raise ValueError("lecture_id must not be empty")
             lecture_id, youtube_video_id = _resolve_youtube_video_id_for_participant(
                 participant_id,
-                lecture_id=request.args.get("lecture_id"),
+                lecture_id=selected,
             )
             quiz_context = _quiz_template_context(lecture_id)
         except ValueError as exc:
@@ -357,7 +448,9 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
         if rejection is not None:
             return rejection
         participant_id = current_participant_id()
-        lecture_id = request.args.get("lecture_id")
+        lecture_id, rejection = _guard_lecture(request.args.get("lecture_id"))
+        if rejection is not None:
+            return rejection
         controller = build_get_last_updated_controller(g.learning_conn)
         result = controller.execute(participant_id, lecture_id=lecture_id)
         return controller_result_to_flask_response(result)
@@ -369,8 +462,10 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
         if rejection is not None:
             return rejection
         participant_id = current_participant_id()
+        lecture_id, rejection = _guard_lecture(request.args.get("lecture_id"))
+        if rejection is not None:
+            return rejection
         controller = build_get_learning_snapshot_controller(g.learning_conn)
-        lecture_id = request.args.get("lecture_id")
         result = controller.execute(participant_id, lecture_id=lecture_id)
         return controller_result_to_flask_response(result)
 

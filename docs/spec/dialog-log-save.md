@@ -39,7 +39,7 @@ LLM チューターとの対話ログは、本研究の分析対象である(プ
 - `tutor.db` の `sessions.participant_id` は、常に空文字で保存される。参加者との対応は、`sessions.learning_session_id` → 学習データ用DB `learning.db` の `learning_sessions`(`learner_id` = participant_id、`lecture_id`)でたどれる。〔確認: 実行(`sessions` の行が `participant_id = ''`、`learning_sessions` に `learner_id='1'`, `lecture_id='lecture-1'`)〕
 - 1つの学習セッションにつき、対話セッションは1つ(2回目以降は既存の対話セッションを返す)。1参加者 × 1講義 につき学習セッションは1つ。〔確認: 実行(既存のテスト `test_start_or_get_tutor_session.py`、`test_start_or_get_learning_session.py` を単体実行し、13件成功。ユースケース単位の確認で、画面からの再訪は未実行)〕
 - **対話セッションは、その参加者が最初に発言を送ったとき(`POST /chat`)に作られる。** 画面を開いただけでは作られない。〔確認: 読み取りのみ(`StartOrGetTutorSessionUseCase` を呼ぶのは `SendChatMessageUseCase` だけ。feasibility-11 §3 でも確認) `(未確認: コードを読んだ推測)`〕
-- participant_id `1`/`2`/`3` はそれぞれ `lecture-1`/`2`/`3` に固定で対応し、それ以外は `lecture-1`。〔確認: 読み取りのみ(`interfaces/common/learner_lecture_mapping.py`) `(未確認: コードを読んだ推測)`〕
+- (置き換え: #34 で、講義は参加者の選択で決まるようになった。仕様: [lecture-selection.md](./lecture-selection.md)。以下は #30・#33 時点の記述)participant_id `1`/`2`/`3` はそれぞれ `lecture-1`/`2`/`3` に固定で対応し、それ以外は `lecture-1`。〔確認: 読み取りのみ(`interfaces/common/learner_lecture_mapping.py`) `(未確認: コードを読んだ推測)`〕
 - 「対話セッションが終了した」ことを表す状態・列・時刻は、ドメインにも DB にもない。〔確認: 読み取りのみ(`domain/tutoring/tutor_session.py`、`db/schema.sql`)〕
 - 既存の `tutor.db` のスキーマは「なければ作る」方式で適用されるため、スキーマの定義に列を足すだけでは、既存の `tutor.db` の `messages` には列が増えない。〔確認: 読み取りのみ(`db/schema.sql` の `CREATE TABLE IF NOT EXISTS`。feasibility-11 F2) `(未確認: コードを読んだ推測)`〕
 - 研究データの出力(`ExportResearchData`、対話ログを含む)は、仕様上の構想だけで未実装。`domain/research_export/` は空のパッケージ。〔確認: 読み取りのみ(`application-usecase.md` の UC 一覧で「未実装」、`git grep` で実装なし)〕
@@ -169,7 +169,7 @@ PBI-A-1 が作り、PBI-A-2(終了ボタンによる保存)と PBI-B(離脱時�
 |---|---|---|
 | `format_version` | 整数 `1` | 研究者のアクセスの別 Issue や、将来の項目の追加のときに、読み手が形を判別できるようにする |
 | `participant_id` | 文字列。画面を開いた participant_id(保存 API に送られた値) | `sessions.participant_id` は空文字のため(前提)、要求の値を使う。Q3 |
-| `lecture_id` | 文字列。保存要求の本文に `lecture_id` があればその講義、なければ参加者の固定割当の講義の学習セッションの講義ID(変更: #33。出典 [humanities-lectures.md](./humanities-lectures.md) AC21) | Q3 |
+| `lecture_id` | 文字列。保存要求の本文に `lecture_id` があればその講義、なければ参加者が選んだ講義の学習セッションの講義ID(置き換え: #34。#30・#33 時点は参加者の固定割当の講義。仕様: [lecture-selection.md](./lecture-selection.md)。変更: #33。出典 [humanities-lectures.md](./humanities-lectures.md) AC21) | Q3 |
 | `learning_session_id` | 文字列。`learning.db` の学習セッションID | Q3。研究データの結合キー `(learnerId, learningSessionId)` を含めるため |
 | `tutor_session_id` | 文字列。`tutor.db` の対話セッションID(`sessions.id`) | Q3。キー名は、他の識別子と見分けられるよう `session_id` ではなく `tutor_session_id` とする |
 | `ended_at` | 時刻の文字列(下記「時刻の形式」) | Q1 |
@@ -211,7 +211,7 @@ PBI-A-1 が作り、PBI-A-2(終了ボタンによる保存)と PBI-B(離脱時�
 | 項目 | 内容 |
 |---|---|
 | 要求 | `POST /api/dialog-log`、本文は JSON(`Content-Type: application/json`) |
-| 本文 | `{"participant_id": "<ID>", "end_method": "end_button" \| "page_leave"}` と、任意の `lecture_id`(変更: #33。出典 [humanities-lectures.md](./humanities-lectures.md) AC21。付けたときはその講義の対話セッションを保存し、付けないときは従来どおり固定割当の講義。未登録の講義IDは 404 で何も保存しない。文字列以外は 400)だけ。対話の本文は送らない(サーバーが `tutor.db` の `messages` から作る)。**変更(#30)**: 参加者はログインしたセッションから特定するため、`participant_id` は省略可。送る場合はログインした ID と一致する値だけ受け付ける |
+| 本文 | `{"participant_id": "<ID>", "end_method": "end_button" \| "page_leave"}` と、任意の `lecture_id`(変更: #33。出典 [humanities-lectures.md](./humanities-lectures.md) AC21。付けたときはその講義の対話セッションを保存し、付けないときは参加者が選んだ講義(置き換え: #34。#30・#33 時点は従来どおり固定割当の講義。仕様: [lecture-selection.md](./lecture-selection.md))。置き換え(#34): 選択した講義と異なる値(未登録の講義IDを含む)は 403、講義を未選択のときは 409 を返し、どちらも何も保存しない。検査順序は lecture-selection.md の DR-004 のとおり。#30・#33 時点は、未登録の講義IDは 404 で何も保存しなかった。文字列以外は 400)だけ。対話の本文は送らない(サーバーが `tutor.db` の `messages` から作る)。**変更(#30)**: 参加者はログインしたセッションから特定するため、`participant_id` は省略可。送る場合はログインした ID と一致する値だけ受け付ける |
 | 成功 | 状態 200。本文は JSON `{"tutor_session_id": "...", "ended_at": "...", "end_method": "..."}`(保存した対話ログの値) |
 | 要求の誤り | `end_method` がない・2つの値以外、本文が JSON でない、`participant_id` の型が文字列・数値・`null` 以外(真偽値・配列・オブジェクト)、のいずれかは、状態 400。対話ログは保存・変更されない。**変更(#30。旧: `participant_id` がない・空・空白だけも 400)**: `participant_id` は省略可(省略・`null`・空文字はログインした参加者として処理する)。ログインした ID と異なる値は 403(記録しない)。未ログインは 401 |
 | 保存の失敗 | DB に書けないなど、サーバー側で保存できなかったときは、2xx 以外の状態を返す(本文の形は定めない)。対話ログは変更されない |

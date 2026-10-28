@@ -244,7 +244,9 @@ class TestZeroMessages:
     def test_a13_saves_empty_log_and_creates_sessions(
         self, client, tutor_db, learning_db
     ) -> None:
-        assert learning_db.execute("SELECT COUNT(*) AS c FROM learning_sessions").fetchone()["c"] == 0
+        # 仕様: docs/spec/lecture-selection.md#受入基準 AC19(講義の選択で学習セッションは先にできている。
+        # 旧: 学習セッションは 0 件から対話ログの保存で作られた。今は選択の確定で作られた 1 件が使われる)
+        assert learning_db.execute("SELECT COUNT(*) AS c FROM learning_sessions").fetchone()["c"] == 1
         assert tutor_db.execute("SELECT COUNT(*) AS c FROM sessions").fetchone()["c"] == 0
 
         response = _save(client)

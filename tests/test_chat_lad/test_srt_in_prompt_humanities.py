@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from interfaces.tutoring.srt import parse_srt_file
+from tests.login_helpers import login_as
 from tests.test_lectures.humanities_data import HUMANITIES_IDS
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -53,10 +54,12 @@ def test_ac11_prompt_has_the_lectures_subtitle_and_outline_not_lecture_1(
     assert own_text and own_text != lecture_1_text  # 前提: 区別できる文であること
 
     client = chat_lad_client
+    # 講義は選択で決まる(#34): 別の参加者 P01 が lecture_id の講義を選んだ状態にする("1" は lecture-1 を選択済み)
+    login_as(client, "P01", lecture=lecture_id)
     r = client.post(
         "/api/viewing-log",
         json={
-            "participant_id": "1",
+            "participant_id": "P01",
             "lecture_id": lecture_id,
             "time_stamp": "2026-10-26T11:18:42",
             "current_time": POSITION_SEC,
@@ -69,7 +72,7 @@ def test_ac11_prompt_has_the_lectures_subtitle_and_outline_not_lecture_1(
     fake_llm_gateway.generate_calls.clear()
     r = client.post(
         "/chat",
-        json={"message": "このあたりの説明がわかりません", "participant_id": "1", "lecture_id": lecture_id},
+        json={"message": "このあたりの説明がわかりません", "participant_id": "P01", "lecture_id": lecture_id},
     )
     assert r.status_code == 200, r.get_data(as_text=True)
     assert fake_llm_gateway.generate_calls
