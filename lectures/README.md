@@ -7,7 +7,7 @@
 | `lecture-1` | `1` | [Y2HC0I8cTAI](https://www.youtube.com/watch?v=Y2HC0I8cTAI) | `lecture-1/subtitles.srt` |
 | `lecture-2` | `2` | [1MuwwFipX9o](https://www.youtube.com/watch?v=1MuwwFipX9o) | `lecture-2/subtitles.srt` |
 | `lecture-3` | `3` | [Sa06YB2oXyw](https://www.youtube.com/watch?v=Sa06YB2oXyw) | `lecture-3/subtitles.srt` |
-| `lecture-4`(律令制) | なし(`?lecture_id=` で指定) | [a-EqZb_Mpvk](https://www.youtube.com/watch?v=a-EqZb_Mpvk) | `lecture-4/subtitles.srt` |
+| `lecture-4`(律令制) | なし(`?lecture_id=` で指定) | [cUCNymPtQ5Y](https://www.youtube.com/watch?v=cUCNymPtQ5Y) | `lecture-4/subtitles.srt` |
 | `lecture-5`(心理カウンセリングの基礎) | なし(`?lecture_id=` で指定) | [lLcZEIsyHvg](https://www.youtube.com/watch?v=lLcZEIsyHvg) | `lecture-5/subtitles.srt` |
 | `lecture-6`(言語の仕組み(音声・音韻・語)) | なし(`?lecture_id=` で指定) | [psbIrfy09Pg](https://www.youtube.com/watch?v=psbIrfy09Pg) | `lecture-6/subtitles.srt` |
 

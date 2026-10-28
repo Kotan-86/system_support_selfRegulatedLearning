@@ -157,7 +157,7 @@ tests/
 | `lecture-1` | `https://www.youtube.com/watch?v=Y2HC0I8cTAI` |
 | `lecture-2` | `https://www.youtube.com/watch?v=1MuwwFipX9o` |
 | `lecture-3` | `https://www.youtube.com/watch?v=Sa06YB2oXyw` |
-| `lecture-4` | `https://www.youtube.com/watch?v=a-EqZb_Mpvk` |
+| `lecture-4` | `https://www.youtube.com/watch?v=cUCNymPtQ5Y` |
 | `lecture-5` | `https://www.youtube.com/watch?v=lLcZEIsyHvg` |
 | `lecture-6` | `https://www.youtube.com/watch?v=psbIrfy09Pg` |
 
