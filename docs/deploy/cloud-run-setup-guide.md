@@ -90,7 +90,7 @@
 
 次のものは、**研究者以外に渡さない・Git に入れない・チャットに貼らない**ものです。
 
-- 協力者のパスワード(作ったときに1回だけ画面に表示される)
+- 協力者のパスワード(作ったときに1回だけ画面に表示される。一括発行 `bulk-add` は画面に出さず、配布用 CSV に書く)
 - `secrets/` フォルダの中身すべて
 - Secret Manager に入れる値すべて
 - 研究者用 Basic 認証のパスワード
@@ -366,7 +366,7 @@ Remove-Item $file -Force; Remove-Variable key
 uv run python scripts/manage_participants.py add --note "動作確認用"
 ```
 
-画面に `ID: P01` と `パスワード: …` が表示されます。**パスワードが表示されるのはこの1回だけです**(ファイルにはハッシュしか残りません)。必ず控えてください。`secrets\participants.json` ができます。
+画面に `ID: P01` と `パスワード: …` が表示されます。**パスワードが表示されるのはこの1回だけです**(ファイルにはハッシュしか残りません。例外として、一括発行 `bulk-add` は端末に出さず、配布用 CSV に書きます)。必ず控えてください。`secrets\participants.json` ができます。
 
 Secret Manager に登録します:
 
@@ -616,7 +616,7 @@ curl.exe -u "<研究者のユーザー名>:<研究者のパスワード>" "<URL>
 
 ### 11-5. 確認が済んだら、動作確認用の ID を止める
 
-実験で使わない ID は、止めておきます(13章 `suspend`)。ただし、**ID は最大30個(停止も数える)で、停止した番号は再利用されません。** 動作確認だけのために番号を消費したくない場合は、「P01 は研究者用のテスト ID」と決めて、止めずに研究者が使い続ける運用もできます。研究室で決めてください。
+`P01` は研究者の確認専用の ID です(PO決定 2026-10-28)。本番の通し確認が済んだら、`P01` を止めます(13章 `suspend`)。**ID は最大31個(停止も数える)で、停止した番号は再利用されません。** 協力者に配るのは `P02`〜`P31` の30件までです。
 
 ---
 
@@ -667,7 +667,7 @@ gcloud run services update-traffic $SERVICE_NAME --region $REGION --to-revisions
 
 > **Mac の方**: この章のコマンドは [付録C-9](#付録c-mac-版のコマンド) の Mac 版を使ってください(説明文は共通です)。
 
-協力者は `P01`〜`P30`(最大30人)の ID と、研究者が発行したパスワードでログインします。**パスワードは発行時に1回だけ表示**され、ファイルにはハッシュ(元に戻せない形)だけが残ります。
+協力者は `P02`〜`P31`(最大30人)の ID と、研究者が発行したパスワードでログインします(`P01` は研究者の確認専用)。**パスワードは発行時に1回だけ表示**され(一括発行 `bulk-add` は端末に出さず、配布用 CSV に書きます)、ファイルにはハッシュ(元に戻せない形)だけが残ります。
 
 ### 13-1. 発行(作成スクリプト)
 
@@ -801,10 +801,10 @@ gcloud secrets versions add participant-credentials --data-file=secrets\particip
 |---|---|
 | 1 | 研究室の Google アカウントでの通し(4〜10章)の実行。特に、組織のポリシー(`--allow-unauthenticated`)と、ビルド権限(7-4)が出るかどうか |
 | 2 | 6章の `Add-SecretFromPrompt` 関数、4-4 の `gcloud billing projects link`、9-1 の `.env.local` の作り方は、手順書の作成時に実行していない(README には無い、このドキュメントでの追記) |
-| 3 | `--set-secrets` のファイルマウント(`/secrets/participant-credentials/participants.json`)の書式とシークレットの大きさの上限は、README でも「公式ドキュメントで確認すること」とされている。起動に失敗する場合は [Cloud Run のシークレットのドキュメント](https://cloud.google.com/run/docs/configuring/services/secrets) を参照 |
+| 3 | ファイルマウントの書式(`PATH=SECRET_NAME:VERSION`)とシークレットの大きさの上限(1バージョン 64 KiB)は、README が 2026-10-28 に公式ドキュメントで確認済み(出典: [Cloud Run のシークレット](https://cloud.google.com/run/docs/configuring/services/secrets)、[Secret Manager の割り当て](https://cloud.google.com/secret-manager/quotas))。**未確認なのは、`--set-secrets` でファイルのパス(`/secrets/participant-credentials/participants.json`)を指定する形**。公式ページがファイルマウントの例に使っているのは `--update-secrets` で、`--set-secrets` の例は環境変数の形だけのため。デプロイ時に確かめ、起動に失敗する場合は上記のドキュメントを参照 |
 | 4 | 研究者用 Basic 認証のシークレット2つを `--set-secrets` で渡す書式は、README の指定(「パスワードは Secret Manager で渡すことを推奨」)に沿った追記で、通しの実行は未確認 |
 | 5 | 初回ビルドの所要時間(10〜20分)は見込み |
-| 6 | 動作確認用の ID(P01)を実験に使うか止めるかの運用(11-5)は、研究室の判断 |
+| 6 | P01 は研究者の確認専用で、通し確認の後に止める運用(11-5)は PO 決定(2026-10-28) |
 | 7 | 実験終了後の GCS データの扱いは、倫理審査の条件(#38)による。仕組みは未整備 |
 
 詳しい根拠・仕様: [README(develop)](../../README.md)、`docs/spec/db-persistence.md`、`docs/spec/participant-login.md`、`docs/spec/framework-drivers-layer.md`(いずれも `develop` ブランチ)。
