@@ -35,6 +35,7 @@ from framework_drivers.platform.http_response import (
     controller_result_to_flask_response,
     http_status_for_error,
 )
+from framework_drivers.platform.https_enforcement import register_https_enforcement
 from framework_drivers.platform.participant_auth import (
     DEFAULT_AFTER_LOGIN_PATH,
     current_participant_id,
@@ -227,6 +228,8 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
     )
     app.config["SECRET_KEY"] = secret_key
 
+    # http の判定は最初(認証・DB の前)。仕様: docs/spec/https-enforcement.md
+    register_https_enforcement(app)
     # 研究者の認証・参加者のログインは DB 接続の before_request より前(未認証なら DB を開かない)
     register_research_auth(app)
     register_participant_auth(app, credentials=credentials, clock=clock)
