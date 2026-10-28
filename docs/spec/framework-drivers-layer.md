@@ -204,6 +204,7 @@ flowchart TB
 
 ```
 1. 研究者が作成スクリプトで ID（P01〜P31）とパスワードを発行し、協力者へ配布する
+   （P01 = 研究者確認用、P02〜P31 = 協力者用の30件）
 2. GET /login  … ID とパスワードでログイン（成功で、開こうとした画面または /lecture へ 302。講義が未選択なら選択の画面へ 302）
 2a. GET /select-lecture  … 未選択のときだけ。登録された講義を題名と系統つきで一覧し、1つを選ぶ（POST /select-lecture で確認の画面、POST /select-lecture/confirm で確定。一度確定したら変更できない）
 3. GET /lecture  … 動画視聴（ログ自動 POST）。ログインした ID が選んだ講義の画面
