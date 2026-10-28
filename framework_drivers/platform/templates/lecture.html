@@ -69,12 +69,13 @@
     <div id="quiz-error" hidden role="alert"></div>
     <div id="quiz-result" hidden>
       <p>小テストの回答を送信しました。お疲れさまでした。</p>
-      <p><a id="quiz-reflect-link" href="/reflect">振り返り画面へ進む</a></p>
+      <p><a id="quiz-reflect-link" href="/reflect?lecture_id={{ lecture_id | urlencode }}">振り返り画面へ進む</a></p>
     </div>
   </section>
 
   <script>
     window.__PARTICIPANT_ID__ = {{ participant_id | tojson }};
+    window.__LECTURE_ID__ = {{ lecture_id | tojson }};
     window.__LECTURE_VIDEO_ID__ = {{ youtube_video_id | tojson }};
     window.__QUIZ_ANSWER_KEY__ = {{ quiz_answer_key | tojson }};
     window.__LECTURE_SUBTITLES__ = {{ subtitle_cues | tojson }};

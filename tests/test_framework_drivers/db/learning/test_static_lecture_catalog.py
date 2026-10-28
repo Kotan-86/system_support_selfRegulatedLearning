@@ -92,3 +92,62 @@ class TestStaticLectureCatalog:
         questions = lecture.quiz_definition.questions
         assert len(questions) == 5
         assert q1_snippet in questions[0].text
+
+
+# ---------------------------------------------------------------------------
+# 文系レベル3講義 lecture-4〜6 の登録 (PBI #33)
+# 仕様: docs/spec/humanities-lectures.md#受入基準 AC1・AC2
+# 期待値は tests/test_lectures/humanities_data.py(仕様のみが出典)。
+# ---------------------------------------------------------------------------
+from tests.test_lectures.humanities_data import (  # noqa: E402
+    HUMANITIES_BY_ID,
+    HUMANITIES_IDS,
+)
+
+
+class TestHumanitiesLecturesRegistered:
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac1_catalog_returns_lecture_with_video_and_title(
+        self, lecture_id: str
+    ) -> None:
+        """AC1: 講義カタログで lecture-4〜6 を引くと、動画 URL と題名が仕様どおり。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC1
+        expected = HUMANITIES_BY_ID[lecture_id]
+        lecture = StaticLectureCatalog().find_by_id(LectureId(lecture_id))
+
+        assert lecture is not None
+        assert str(lecture.id) == lecture_id
+        assert lecture.video_url == expected.video_url
+        assert lecture.title == expected.title
+
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac1_build_near_term_lecture_includes_humanities(
+        self, lecture_id: str
+    ) -> None:
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC1
+        lecture = build_near_term_lecture(lecture_id=lecture_id)
+        assert lecture.video_url == HUMANITIES_BY_ID[lecture_id].video_url
+
+    @pytest.mark.parametrize("lecture_id", HUMANITIES_IDS)
+    def test_ac2_srt_path_is_lectures_dir_and_file_exists(self, lecture_id: str) -> None:
+        """AC2: 字幕のパスは lectures/<講義ID>/subtitles.srt で、ファイルが実在する。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC2
+        lecture = StaticLectureCatalog().find_by_id(LectureId(lecture_id))
+        assert lecture is not None
+        assert lecture.srt_path == str(
+            _PROJECT_ROOT / "lectures" / lecture_id / "subtitles.srt"
+        )
+        assert Path(lecture.srt_path).is_file()
+
+    def test_ac1_existing_lectures_unchanged(self) -> None:
+        """AC13(c): lecture-1〜3 の動画は変わらない(登録後も)。"""
+        # 仕様: docs/spec/humanities-lectures.md#受入基準 AC13(c)
+        expected = {
+            "lecture-1": "https://www.youtube.com/watch?v=Y2HC0I8cTAI",
+            "lecture-2": "https://www.youtube.com/watch?v=1MuwwFipX9o",
+            "lecture-3": "https://www.youtube.com/watch?v=Sa06YB2oXyw",
+        }
+        catalog = StaticLectureCatalog()
+        for lecture_id, url in expected.items():
+            lecture = catalog.find_by_id(LectureId(lecture_id))
+            assert lecture is not None and lecture.video_url == url

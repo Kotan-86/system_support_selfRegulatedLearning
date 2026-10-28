@@ -5,6 +5,7 @@
 
   var lastContentUpdatedAt = null;
   var pollTimerId = null;
+  var lectureId = null;
 
   function getPollIntervalMs() {
     var configured = global.__REFLECT_POLL_INTERVAL_MS__;
@@ -15,7 +16,7 @@
   }
 
   function fetchLad(participantId) {
-    return global.ApiClient.getLad(participantId).then(function (response) {
+    return global.ApiClient.getLad(participantId, lectureId).then(function (response) {
       if (!response.ok) {
         console.error("LAD API エラー:", response.status);
         return null;
@@ -56,14 +57,16 @@
       return;
     }
 
-    global.ChatPanel.init(participantId);
+    // 仕様: docs/spec/humanities-lectures.md#受入基準 AC19・AC21(講義IDなしは null)
+    lectureId = global.__REFLECT_LECTURE_ID__ || null;
+    global.ChatPanel.init(participantId, lectureId);
     // 仕様: docs/spec/dialog-log-save.md#受入基準 (PBI-A-2) A9
     if (global.DialogLog) {
-      global.DialogLog.init(participantId);
+      global.DialogLog.init(participantId, lectureId);
     }
     // 仕様: docs/spec/dialog-log-save.md#PBI-B
     if (global.LeaveGuard) {
-      global.LeaveGuard.init(participantId);
+      global.LeaveGuard.init(participantId, lectureId);
     }
 
     fetchLad(participantId).then(function (viewModel) {

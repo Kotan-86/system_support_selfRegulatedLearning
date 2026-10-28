@@ -115,7 +115,8 @@
         participantId,
         scored.answers,
         scored.scoreNumerator,
-        scored.scoreDenominator
+        scored.scoreDenominator,
+        global.__LECTURE_ID__
       );
 
       global.ApiClient.postQuizAttempt(payload)

@@ -1,3 +1,4 @@
 *.sh text eol=lf
 lectures/**/subtitles.display.srt -text
 lectures/**/display-fillers.md -text
+lectures/lecture-[456]/subtitles.srt -text

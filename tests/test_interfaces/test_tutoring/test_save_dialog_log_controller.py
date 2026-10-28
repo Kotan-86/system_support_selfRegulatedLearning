@@ -204,3 +204,44 @@ class TestJsonAndHttp:
             _, status = controller_result_to_flask_response(error)
 
         assert status == 400
+
+
+# ---------------------------------------------------------------------------
+# 本文の任意項目 lecture_id (PBI #33)
+# 仕様: docs/spec/humanities-lectures.md#受入基準 AC21(b)(c), AC13(d)
+# 未登録の講義ID(404)は API を通したテスト(tests/test_api/test_humanities_lecture_id_flow.py)で確かめる。
+# ---------------------------------------------------------------------------
+class TestLectureIdInPayload:
+    @pytest.mark.parametrize(
+        ("participant_id", "lecture_id"),
+        [("1", "lecture-4"), ("P01", "lecture-5"), ("2", "lecture-6"), ("P01", "lecture-2")],
+    )
+    def test_ac21b_lecture_id_in_payload_decides_the_lecture(
+        self, participant_id: str, lecture_id: str
+    ) -> None:
+        use_case = _FakeUseCase()
+
+        result = _controller(use_case).execute(
+            {"participant_id": participant_id, "lecture_id": lecture_id, "end_method": "end_button"},
+            received_at=RECEIVED_AT,
+        )
+
+        assert isinstance(result, DialogLogSavedViewModel)
+        assert use_case.requests[0].lecture_id == LectureId(lecture_id)
+        assert use_case.requests[0].learner_id == LearnerId(participant_id)
+
+    @pytest.mark.parametrize(
+        ("participant_id", "expected"),
+        [("1", "lecture-1"), ("2", "lecture-2"), ("3", "lecture-3"), ("abc", "lecture-1"), ("P01", "lecture-1")],
+    )
+    def test_ac13d_ac21c_without_lecture_id_fixed_mapping_still_applies(
+        self, participant_id: str, expected: str
+    ) -> None:
+        use_case = _FakeUseCase()
+
+        _controller(use_case).execute(
+            {"participant_id": participant_id, "end_method": "page_leave"},
+            received_at=RECEIVED_AT,
+        )
+
+        assert use_case.requests[0].lecture_id == LectureId(expected)

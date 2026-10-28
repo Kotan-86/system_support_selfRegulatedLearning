@@ -4,6 +4,7 @@
   "use strict";
 
   var participantId = null;
+  var lectureId = null;
   var ended = false;
   var saving = false;
   var waitingReply = false;
@@ -75,7 +76,11 @@
 
     var request;
     try {
-      request = global.ApiClient.postDialogLog(participantId, "end_button");
+      request = global.ApiClient.postDialogLog(
+        participantId,
+        "end_button",
+        lectureId
+      );
     } catch (e) {
       request = Promise.reject(e);
     }
@@ -94,8 +99,9 @@
       });
   }
 
-  function init(pid) {
+  function init(pid, lid) {
     participantId = pid;
+    lectureId = lid;
     var btn = byId("end-dialog-button");
     if (btn && btn.addEventListener) {
       btn.addEventListener("click", onEndClick);
