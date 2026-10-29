@@ -16,6 +16,16 @@ from application.learning.use_cases.select_lecture import SelectLectureUseCase
 from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
 )
+from application.learning.use_cases.export_viewing_logs import ExportViewingLogsUseCase
+from framework_drivers.db.learning.sqlite_viewing_log_export_query import (
+    SqliteViewingLogExportQuery,
+)
+from interfaces.learning.controllers.export_viewing_logs_controller import (
+    ExportViewingLogsController,
+)
+from interfaces.learning.presenters.research_viewing_logs_csv_presenter import (
+    ResearchViewingLogsCsvPresenter,
+)
 from application.tutoring.ports.llm_gateway import LlmGateway
 from application.tutoring.use_cases.export_dialog_logs import ExportDialogLogsUseCase
 from framework_drivers.db.tutoring.sqlite_dialog_log_export_query import (
@@ -326,6 +336,17 @@ def build_export_dialog_logs_controller(
             )
         ),
         presenter=ResearchDialogLogsPresenter(),
+    )
+
+
+def build_export_viewing_logs_controller(
+    learning_connection: sqlite3.Connection,
+) -> ExportViewingLogsController:
+    """ExportViewingLogsController を組み立てる(learning.db を読むだけ)。"""
+    # 仕様: docs/spec/research-lad-csv-download.md
+    return ExportViewingLogsController(
+        use_case=ExportViewingLogsUseCase(SqliteViewingLogExportQuery(learning_connection)),
+        presenter=ResearchViewingLogsCsvPresenter(),
     )
 
 

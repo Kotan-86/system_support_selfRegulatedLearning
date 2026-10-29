@@ -53,6 +53,7 @@ from framework_drivers.platform.research_auth import register_research_auth
 from interfaces.learning.view_models.errors import ErrorViewModel
 from framework_drivers.platform.wiring import (
     build_export_dialog_logs_controller,
+    build_export_viewing_logs_controller,
     build_get_last_updated_controller,
     build_get_learning_snapshot_controller,
     build_record_quiz_attempt_controller,
@@ -469,13 +470,19 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
         result = controller.execute(participant_id, lecture_id=lecture_id)
         return controller_result_to_flask_response(result)
 
-    def _research_response(execute):
+    def _dialog_logs_controller():
+        return build_export_dialog_logs_controller(
+            learning_connection=g.learning_conn,
+            tutor_connection=g.tutor_conn,
+        )
+
+    def _viewing_logs_controller():
+        return build_export_viewing_logs_controller(g.learning_conn)
+
+    def _research_response(execute, make_controller=_dialog_logs_controller):
         """研究用の応答。予期しない例外・エラーは本文や値を出さない固定の応答にする(R9)。"""
         try:
-            controller = build_export_dialog_logs_controller(
-                learning_connection=g.learning_conn,
-                tutor_connection=g.tutor_conn,
-            )
+            controller = make_controller()
             result = execute(controller)
             if isinstance(result, ErrorViewModel):
                 return Response("Error", status=http_status_for_error(result), mimetype="text/plain")
@@ -492,6 +499,18 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
     def research_all_dialog_logs():
         """GET: 全参加者一括の対話ログ(仕様: research-dialog-download.md)。"""
         return _research_response(lambda c: c.execute_all())
+
+    @app.route("/research/participants/<participant_id>/viewing-logs.csv", methods=["GET"])
+    def research_participant_viewing_logs_csv(participant_id: str):
+        """GET: 参加者別の視聴ログ CSV(仕様: research-lad-csv-download.md)。"""
+        return _research_response(
+            lambda c: c.execute_for_participant(participant_id), _viewing_logs_controller
+        )
+
+    @app.route("/research/viewing-logs.csv", methods=["GET"])
+    def research_all_viewing_logs_csv():
+        """GET: 全参加者一括の視聴ログ CSV(仕様: research-lad-csv-download.md)。"""
+        return _research_response(lambda c: c.execute_all(), _viewing_logs_controller)
 
     return app
 

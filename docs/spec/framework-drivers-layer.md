@@ -276,6 +276,7 @@ Application 層 Port と Framework & Drivers 具象の対応。詳細実装順�
 | `TutorSessionIdGenerator`       | `framework_drivers/db/tutoring/id_generators.py`                        | `db`           | —                                                      |
 | `DialogLogRepository`           | `framework_drivers/db/tutoring/sqlite_dialog_log_repository.py`         | `db`           | `tutor.db`（`dialog_logs`。JSON 組み立ては同ディレクトリの `dialog_log_json.py`。発言1件の変換は `interfaces/tutoring/dialog_log_json_format.py` を使う） |
 | `DialogLogExportQuery`          | `framework_drivers/db/tutoring/sqlite_dialog_log_export_query.py`       | `db`           | `tutor.db`（`sessions`・`messages`・`dialog_logs`）と `learning.db`（`learning_sessions`）を読むだけ（研究用ダウンロード） |
+| `ViewingLogExportQuery`         | `framework_drivers/db/learning/sqlite_viewing_log_export_query.py`      | `db`           | `learning.db`（`viewing_logs`・`learning_sessions`）を読むだけ（研究用ダウンロード） |
 | `LlmGateway`                    | `framework_drivers/external/vertex/vertex_llm_gateway.py`               | `external`     | Vertex AI                                              |
 | `VideoDurationResolver`         | `framework_drivers/external/youtube/youtube_video_duration_resolver.py` | `external`     | YouTube API（キャッシュ付き）                          |
 
@@ -337,6 +338,8 @@ interfaces 層 [既存 API 対応表](./interfaces-layer.md#既存-api-対応表
 | `POST /api/dialog-log`           | `SaveDialogLogController`       | `/reflect`（終了ボタン・離脱時。下記）       |
 | `GET /research/participants/{id}/dialog-logs` | `ExportDialogLogsController` | 研究者（Basic 認証。下記） |
 | `GET /research/dialog-logs`      | `ExportDialogLogsController`    | 研究者（Basic 認証。下記）                   |
+| `GET /research/participants/{id}/viewing-logs.csv` | `ExportViewingLogsController` | 研究者（Basic 認証。下記） |
+| `GET /research/viewing-logs.csv` | `ExportViewingLogsController`   | 研究者（Basic 認証。下記）                   |
 
 #### 参加者のログインと `participant_id` の扱い（#30。詳細・AC は [participant-login.md](./participant-login.md)）
 
@@ -371,6 +374,8 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 `POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}` と任意の `lecture_id`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403。`lecture_id` は変更: #33、出典 [humanities-lectures.md](./humanities-lectures.md) AC21。**置き換え(#34、[lecture-selection.md](./lecture-selection.md))**: 省略時と選択と一致する値は選択した講義で保存、未選択は 409、選択と異なる値（未登録の講義 ID を含む）は 403、空文字・文字列と数値以外は 400 で、いずれも何も保存しない）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
 `/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須（以下は https の要求のとき。http の要求は、照合の前に上の「HTTPS の強制」で 301 になる）。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
+
+`/research/*` の視聴ログ CSV（`/research/viewing-logs.csv`、`/research/participants/{id}/viewing-logs.csv`）: 同じ Basic 認証と `Cache-Control: no-store` の下にある。成功は 200 で、`Content-Type: text/csv; charset=utf-8`、`Content-Disposition: attachment; filename="..."`、本文は BOM 付き UTF-8。予期しない例外・エラーは、本文や値を出さない固定の応答（対話ログと同じ）。契約の詳細は [research-lad-csv-download.md](./research-lad-csv-download.md)。
 
 **破壊的変更**: 旧 LAD レスポンス（生 `viewing_logs` dict）は返さない。`LadDashboardViewModel` のみ。
 

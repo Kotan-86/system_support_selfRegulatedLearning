@@ -317,6 +317,22 @@ Cloud Run では `GOOGLE_APPLICATION_CREDENTIALS` は不要（実行サービス
   ```
 - 対象データがなければ `[]`（状態 200）。応答は `Cache-Control: no-store`。
 
+### 研究用の視聴ログ CSV のダウンロード
+
+仕様: [docs/spec/research-lad-csv-download.md](docs/spec/research-lad-csv-download.md)
+
+研究者だけが、視聴ログを CSV で取得できる。認証は上記の対話ログと同じ Basic 認証（同じ環境変数）。
+
+| 取得 | URL |
+|------|-----|
+| 参加者別 | `GET /research/participants/<participant_id>/viewing-logs.csv` |
+| 全参加者一括 | `GET /research/viewing-logs.csv` |
+
+- ブラウザ・curl.exe での取得は、対話ログと同じ（例: `curl.exe -u "<user>:<password>" "https://<service-url>/research/viewing-logs.csv" -o viewing-logs.csv`）。
+- 文字コードは UTF-8（BOM 付き）。Excel でそのまま開ける。
+- 一括には `P01`（研究者の確認用）の記録も含まれる。**分析では `P01` を除くこと**。
+- 文字列の列で、値の先頭が `=` `+` `-` `@`（またはタブ・CR（復帰））のものは、数式として実行されないよう先頭に `'` を付けて書き出す。元の値は、先頭の `'` を除いたもの。
+
 **注意（セキュリティ）**: 上記のデプロイは `--allow-unauthenticated` を前提としており、研究用ダウンロードを守るのは **この Basic 認証だけ**である。Cloud Run の IAM 認証を有効にすると、ブラウザからの Basic 認証による取得と両立しない。本番では http の要求はアプリが https へ移す（GET・HEAD）か拒否し、資格情報の照合より前に判定する。HTTP（ローカル起動、`HTTPS_ENFORCEMENT_DISABLED=1`）では資格情報は暗号化されない。資格情報は研究者で共有する1組のため、誰が取得したかは区別できず、取得の記録も残さない。
 
 **既知の限界**: 取得できるのは、複製されて復元された範囲のデータである（再デプロイ・再起動の前のデータも、復元されていれば取得できる。許容損失は下記「SQLite 永続化の注意」を参照）。インスタンスは1つ（`--max-instances=1`）なので、要求を受けたインスタンスのデータだけが返る問題は、通常の構成では起きない。`/` を含む参加者ID、空の参加者IDは参加者別 URL で指定できない（一括には含まれる）。
