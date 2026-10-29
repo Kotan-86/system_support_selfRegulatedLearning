@@ -13,7 +13,7 @@
 - Use Case: [application-usecase.md](./application-usecase.md)
 - Framework & Drivers 層: [framework-drivers-layer.md](./framework-drivers-layer.md)
 - 実装計画 Phase 0: [framework-drivers-implementation-plan.md#phase-0-mapper-設計骨格](./framework-drivers-implementation-plan.md)
-- ADR（現行スキーマ）: [ADR_SSSRL-backend_2026-02-23.md §5.2](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md)
+- ADR（現行スキーマ）: [ADR_SSSRL-backend_2026-02-23.md §5.2](../../Architecture/ADR_SSSRL-backend_2026-02-23.md)
 - スキーマ DDL: [db/schema_learning.sql](../../db/schema_learning.sql)、[db/schema.sql](../../db/schema.sql)
 
 ---

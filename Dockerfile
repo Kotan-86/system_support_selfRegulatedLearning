@@ -3,7 +3,9 @@
 # --- ビルド用: 修正済みの SQLite(AC20)と Litestream v0.5.17 を用意する ---
 # python:3.12-slim(Debian)の libsqlite3 は、WAL-reset の不具合の修正済みの版(3.51.3 以上など)より
 # 古い見込みのため、SQLite をソースからビルドして差し替える。最終的な合否は、下の RUN の版の確認が決める。
-FROM python:3.12-slim AS fetch
+# 再現性のため版を固定。fetch ステージと実行ステージで同じ Debian にそろえる
+ARG PYTHON_VERSION=3.12.16
+FROM python:${PYTHON_VERSION}-slim AS fetch
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
@@ -23,7 +25,7 @@ RUN curl -fsSL "https://github.com/benbjohnson/litestream/releases/download/v${L
     && /usr/local/bin/litestream version
 
 # --- 実行用 ---
-FROM python:3.12-slim
+FROM python:${PYTHON_VERSION}-slim
 
 WORKDIR /app
 
@@ -33,7 +35,9 @@ ENV LD_LIBRARY_PATH=/opt/sqlite/lib
 COPY --from=fetch /usr/local/bin/litestream /usr/local/bin/litestream
 
 # uv で本番依存のみインストール
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# 再現性のため uv の版を固定
+ARG UV_VERSION=0.13.1
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 

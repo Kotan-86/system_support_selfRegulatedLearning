@@ -26,7 +26,12 @@ lecture_video_platform/
 quiz_form/
 infrastructure/
 app/
-Arcitecture/
+Architecture/
+
+# ランタイム不要の字幕校正の作業資料（実行時に読むのは subtitles.srt と subtitles.display.srt のみ）
+lectures/**/subtitles.proofread.srt
+lectures/**/proofread-diff.md
+lectures/**/display-fillers.md
 
 # その他開発用
 node_modules/

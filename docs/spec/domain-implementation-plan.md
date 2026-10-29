@@ -30,7 +30,7 @@
 ## 前提
 
 - ドメイン定義: [domain-model.md](./domain-model.md)
-- 既存 ADR: [Arcitecture/ADR_SSSRL-backend_2026-02-23.md](../../Arcitecture/ADR_SSSRL-backend_2026-02-23.md)
+- 既存 ADR: [Architecture/ADR_SSSRL-backend_2026-02-23.md](../../Architecture/ADR_SSSRL-backend_2026-02-23.md)
 - テスト実行: `uv run pytest tests/ -v`
 - 実装言語: Python 3.10+
 - ドメイン層は **Flask / SQLite / vertexai を import しない**
