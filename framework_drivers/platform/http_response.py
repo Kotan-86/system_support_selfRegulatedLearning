@@ -21,6 +21,7 @@ from interfaces.common.json_encoding import (
 from interfaces.learning.view_models.errors import ErrorViewModel, StatusKind
 from interfaces.learning.view_models.last_updated import LastUpdatedViewModel
 from interfaces.learning.view_models.lad_dashboard import LadDashboardViewModel
+from interfaces.learning.view_models.research_csv import ResearchCsvViewModel
 from interfaces.learning.view_models.record_responses import (
     RecordQuizAttemptSuccessViewModel,
     RecordViewingEventSuccessViewModel,
@@ -46,6 +47,7 @@ ControllerResult = (
     | ChatResponseViewModel
     | DialogLogSavedViewModel
     | ResearchDialogLogsViewModel
+    | ResearchCsvViewModel
     | ErrorViewModel
 )
 
@@ -93,6 +95,12 @@ def controller_result_to_flask_response(
             Response(text, status=200, content_type="application/json; charset=utf-8"),
             200,
         )
+
+    if isinstance(result, ResearchCsvViewModel):
+        # 仕様: docs/spec/research-lad-csv-download.md#url共有if
+        response = Response(result.content, status=200, content_type="text/csv; charset=utf-8")
+        response.headers["Content-Disposition"] = f'attachment; filename="{result.filename}"'
+        return response, 200
 
     raise TypeError(f"Unsupported controller result type: {type(result)!r}")
 
