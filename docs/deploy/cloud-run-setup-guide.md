@@ -836,7 +836,7 @@ brew install --cask gcloud-cli
 
 - `gcloud-cli` が「見つからない」と出る場合は、古い名前の `brew install --cask google-cloud-sdk` を試してください(Homebrew 側の名前が変わったため。どちらが有効かは未確認)。
 - Python は別に入れなくて構いません(uv が自動で用意します)。
-- Docker Desktop は任意です(本番のビルドは Google の Cloud Build が行います)。入れる場合は `brew install --cask docker`。**Apple シリコンの Mac で手元の `docker build` をする場合は、`docker build --platform linux/amd64 -t sssrl-backend .` のように指定が必要です**(Dockerfile が x86_64 用の部品を取得するため)。`gcloud run deploy --source .` は Google 側でビルドするので、この指定は要りません。
+- Docker Desktop は任意です(本番のビルドは Google の Cloud Build が行います)。入れる場合は `brew install --cask docker`。**Apple シリコンの Mac で手元の `docker build` をする場合は、`docker build --platform linux/amd64 -t sssrl-backend .` のように指定してください**(本番の Cloud Run と同じ x86_64 の形で確かめるため)。`gcloud run deploy --source .` は Google 側でビルドするので、この指定は要りません。
 
 **手順3: 確認する。**
 

@@ -5,6 +5,18 @@
 # 古い見込みのため、SQLite をソースからビルドして差し替える。最終的な合否は、下の RUN の版の確認が決める。
 # 再現性のため版を固定。fetch ステージと実行ステージで同じ Debian にそろえる
 ARG PYTHON_VERSION=3.12.16
+
+# Litestream は公式イメージから取り出す。GitHub のリリースからの取得は、Cloud Build から 504 で
+# 失敗し続けることがあった(2026-11-09)。版はタグで示し、中身は digest で固定する
+ARG LITESTREAM_VERSION=0.5.17
+# 再現性のため uv の版を固定。Cloud Build の docker build(BuildKit なし)は COPY --from の
+# 変数を展開しないため、版の変数は FROM で使い、ステージ名から COPY する
+ARG UV_VERSION=0.13.1
+# FROM で使う ARG は、最初の FROM より前に置く(後ろに置くと、そのステージの中だけの変数になる)
+
+FROM litestream/litestream:${LITESTREAM_VERSION}@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a AS litestream
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
 FROM python:${PYTHON_VERSION}-slim AS fetch
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential ca-certificates curl \
@@ -19,10 +31,8 @@ RUN curl -fsSL "https://www.sqlite.org/${SQLITE_YEAR}/sqlite-autoconf-${SQLITE_A
     && make -j"$(nproc)" \
     && make install
 
-ARG LITESTREAM_VERSION=0.5.17
-RUN curl -fsSL "https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-x86_64.tar.gz" -o /tmp/litestream.tar.gz \
-    && tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream \
-    && /usr/local/bin/litestream version
+COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
+RUN /usr/local/bin/litestream version
 
 # --- 実行用 ---
 FROM python:${PYTHON_VERSION}-slim
@@ -35,9 +45,7 @@ ENV LD_LIBRARY_PATH=/opt/sqlite/lib
 COPY --from=fetch /usr/local/bin/litestream /usr/local/bin/litestream
 
 # uv で本番依存のみインストール
-# 再現性のため uv の版を固定
-ARG UV_VERSION=0.13.1
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /usr/local/bin/uv
+COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
