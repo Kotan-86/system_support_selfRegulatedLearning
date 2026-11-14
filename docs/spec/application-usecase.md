@@ -116,7 +116,22 @@ tests/
 | `find_by_learner_and_lecture` | `LearnerId`, `LectureId` | `LearningSession \| None`     |                                                                                                                                                                |
 | `list_by_learner`             | `LearnerId`              | `tuple[LearningSession, ...]` | Session 開始時の重複チェック用                                                                                                                                 |
 | `save`                        | `LearningSession`        | `LearningSession`             | 集約全体を永続化（upsert）し、**DB 確定後の集約**を返す（下記 [save 戻り値と子 Entity ID の確定](#learningsessionrepositorysave-戻り値と子-entity-id-の確定)） |
-| `save_if_learner_has_none`    | `LearningSession`        | `LearningSession`             | 非抽象メソッド(#34、PO 承認 2026-10-28)。1 人 1 講義を保つため、学習者に学習セッションが無いときだけ保存し、保存後の集約を返す。既にあれば保存せず**既存の先頭の Session**(開始時刻の昇順)を返す(後から確定した側は既存の選択を返す)。SQLite 実装は `BEGIN IMMEDIATE` で確認と保存を直列化する。既定実装は排他しない。仕様: [lecture-selection.md](./lecture-selection.md) |
+| `save_if_learner_session_count` | `LearningSession`, `int` | `bool`                     | 非抽象メソッド(#56 PBI-A。#34 の `save_if_learner_has_none` を置き換え)。回の確定の条件(選択待ちのときだけ保存)を保つため、学習者の Session の数が `expected_count`(選択待ちでは終えた回の数)のときだけ保存し、保存したかを返す(後から確定した側・二重送信は保存しない)。SQLite 実装は `BEGIN IMMEDIATE` で確認と保存を直列化する。既定実装は排他しない。仕様: [multi-video-learning.md](./multi-video-learning.md) |
+| `replace_if_no_records` | `LearningSessionId`, `LearningSession` | `bool` | 非抽象メソッド(#56 PBI-D。選び直し)。今の回の Session に視聴ログ・小テストがなければ、それを消して新しい Session を保存し、置き換えたかを返す(Session がない・記録があるときは何も変えない)。SQLite 実装は `BEGIN IMMEDIATE` で確認と DELETE・INSERT を1つにし、視聴ログ・小テスト・対話ログの保存の要求も同じロックを今の回の判定の前に取る(`main.py` の `_record_learning`)。既定実装は `NotImplementedError`。仕様: [multi-video-learning.md](./multi-video-learning.md) の8節 |
+
+### `RoundRecordQuery`(#56 PBI-A)
+
+| メソッド | 入力 | 出力 | 備考 |
+| --- | --- | --- | --- |
+| `ended_learning_session_ids` | `Collection[LearningSessionId]` | `frozenset[LearningSessionId]` | 対話ログが `end_button` で保存された(= 回を終えた)学習セッション。`tutor.db` を読む |
+| `learning_session_ids_with_tutor_session` | `Collection[LearningSessionId]` | `frozenset[LearningSessionId]` | 対話セッション(発言0件を含む)がある学習セッション(回の記録の判定。Q16) |
+
+### 進行状態(共有IF。#56 PBI-A が固定し、PBI-B・PBI-C が使う)
+
+- `application/learning/use_cases/get_participant_progress.py` — `GetParticipantProgressUseCase(repository, round_records).execute(learner_id) -> ParticipantProgress`。
+- `application/learning/dto/participant_progress.py` — `ParticipantProgress`(`state: ProgressState`〔`WAITING` / `LEARNING` / `FINISHED`〕、`round_number`〔n。全体の終了は 3〕、`current_lecture_id`、`current_learning_session_id`、`current_has_records`、`finished_lecture_ids`〔回の順〕、`can_reselect`)、`TOTAL_ROUNDS = 3`、`round_order(sessions)`(「何本目」= 開始時刻の昇順、同じなら ID の昇順)。
+- 判定: 終えた回 = `end_button` の対話ログがある学習セッション。3つ以上なら全体の終了。終えていない学習セッションがあれば、そのうち最も古いもの(回の順)が今の回(学習中)。なければ選択待ち(n = 終えた回の数 + 1)。
+- `SelectLectureUseCase(repository, id_generator, lecture_catalog, progress)` — `options(progress)`(カタログから終えた回の講義と今の回の講義を除く)、`execute(learner_id, lecture_id, selected_at) -> Result[ParticipantProgress, AppError]`(カタログにない・終えた回の講義は Err。選択待ちなら Session を作り、選び直せる学習中(`can_reselect`)に別の講義なら今の回を `replace_if_no_records` で置き換える。それ以外は何も変えずに今の状態を返す)。
 
 #### `LearningSessionRepository.save` 戻り値と子 Entity ID の確定
 

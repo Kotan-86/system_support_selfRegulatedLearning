@@ -163,7 +163,9 @@ class TestAc3Confirmation:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert title in html
-        assert WARNING_TEXT in html
+        # #34 の「一度選ぶと変更できない」は、#56 の AC15(Q4)で「この回の動画が変えられなくなる条件」に置き換えた。
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC15(条件の文言の検査は test_multi_video_reselect.py)
+        assert WARNING_TEXT not in html
         assert CONFIRM_PATH in html, "確定の操作(action が /select-lecture/confirm のフォーム)がない"
         assert learning_sessions(tmp_path) == []
         assert is_selection_redirect(unselected.get("/lecture"))
@@ -255,8 +257,11 @@ class TestAc6SelectedFlow:
         self, app_env
     ) -> None:
         # 仕様: docs/spec/lecture-selection.md#受入基準 AC6
+        # #56 の AC11・AC13(選び直し)により、記録のない間は選択の画面が開ける(選び直し)。
+        # 「選択の画面を開いても講義の画面へ移る」のは、回の記録ができた後(multi-video-learning.md AC13)。
         client = app_env.test_client()
         login_and_choose(client, PID, "lecture-2")
+        assert client.post("/api/viewing-log", json=_viewing(3)).status_code == 201
 
         response = client.get(SELECT_PATH)
 
@@ -272,8 +277,11 @@ class TestAc8Fixed:
         self, app_env, tmp_path
     ) -> None:
         # 仕様: docs/spec/lecture-selection.md#受入基準 AC8(2つのタブ・送信の二重化)
+        # #56 の AC12・AC13(選び直し)により、記録のない間の別の講義の確定は選び直しになる。
+        # 「別の講義の確定で選択が変わらない」のは、回の記録ができた後(multi-video-learning.md AC13)。
         client = app_env.test_client()
         login_and_choose(client, PID, "lecture-2")
+        assert client.post("/api/viewing-log", json=_viewing(3)).status_code == 201
 
         response = choose(client, "lecture-5")
 

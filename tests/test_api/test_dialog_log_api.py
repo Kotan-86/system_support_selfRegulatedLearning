@@ -199,19 +199,21 @@ class TestSaveAfterConversation:
     def test_a11_a12_saving_again_overwrites_and_keeps_one_row(
         self, client, tutor_db
     ) -> None:
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC25・AC4(#56: 終了ボタンの保存は回の終了で、
+        # その後の保存は 409。上書きは回の途中の保存(page_leave)で確かめ、最後を終了ボタンにした)
         _chat(client, "質問1")
-        _save(client)
-        _save(client)
+        _save(client, end_method="page_leave")
+        _save(client, end_method="page_leave")
         assert len(_log_rows(tutor_db)) == 1
         _chat(client, "質問2")
 
-        response = _save(client, end_method="page_leave")
+        response = _save(client)
 
         assert response.status_code == 200
         (row,) = _log_rows(tutor_db)
-        assert row["end_method"] == "page_leave"
+        assert row["end_method"] == "end_button"
         log = json.loads(row["log_json"])
-        assert log["end_method"] == "page_leave"
+        assert log["end_method"] == "end_button"
         assert [m["content"] for m in log["messages"] if m["role"] == "user"] == [
             "質問1",
             "質問2",
@@ -267,7 +269,9 @@ class TestZeroMessages:
     def test_a13_later_message_is_saved_in_the_same_tutor_session(
         self, client, tutor_db
     ) -> None:
-        saved = _save(client).get_json()
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC25(#56: 終了ボタンの後は 409 のため、
+        # 発言0件の保存を回の途中の保存(page_leave)に改めた)
+        saved = _save(client, end_method="page_leave").get_json()
 
         assert _chat(client, "あとからの発言").status_code == 200
 
@@ -297,11 +301,14 @@ class TestRequestErrors:
     def test_a17_request_errors_return_400_and_save_nothing(
         self, client, tutor_db, kwargs
     ) -> None:
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC4・AC25(#56: 終了ボタンの保存は回の終了で、
+        # その後は 409(検査の順 409 → 400)になり 400 を確かめられないため、最初の保存を回の途中の
+        # 保存(page_leave)に改めた)
         _chat(client, "質問")
-        good = _save(client)
+        good = _save(client, end_method="page_leave")
         assert good.status_code == 200
         before = [dict(r) for r in _log_rows(tutor_db)]
-        _chat(client, "追加の質問")
+        assert _chat(client, "追加の質問").status_code == 200
 
         response = client.post("/api/dialog-log", **kwargs)
 
@@ -323,10 +330,12 @@ class TestSaveFailure:
     def test_a17_db_write_failure_returns_non_2xx_and_keeps_existing_log(
         self, client, tutor_db
     ) -> None:
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC25(#56: 終了ボタンの後は 409 で、DB の失敗を
+        # 確かめられないため、1回目の保存を回の途中の保存(page_leave)に改めた)
         _chat(client, "質問1")
-        assert _save(client).status_code == 200
+        assert _save(client, end_method="page_leave").status_code == 200
         before = [dict(r) for r in _log_rows(tutor_db)]
-        _chat(client, "質問2")
+        assert _chat(client, "質問2").status_code == 200
         # dialog_logs への書き込みを、DB 側で失敗させる
         tutor_db.executescript(
             """

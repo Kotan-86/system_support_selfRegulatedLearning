@@ -65,8 +65,15 @@
       {# 仕様: docs/spec/dialog-log-save.md#受入基準 (PBI-A-2) A1, A9, A10 #}
       <button type="button" id="end-dialog-button" class="end-dialog-button">対話ログを送信して終了する</button>
       <p id="dialog-end-error" class="dialog-end-error" role="alert" hidden>対話ログを送信できませんでした。もう一度「対話ログを送信して終了する」を押してください。</p>
+      {# 仕様: docs/spec/multi-video-learning.md#3-回の終了(1・2本目は次の動画を選ぶ導線、3本目は全体の終了。文言は AC24 で決定済み。仕様の「画面の文言の決定」W4・W5 参照) #}
       <div id="dialog-end-complete" class="dialog-end-complete" role="status" hidden>
-        <p>対話ログを送信しました。ご協力ありがとうございました。このページを閉じて終了してください。</p>
+        <p>対話ログを送信しました。ご協力ありがとうございました。</p>
+        {% if round_number < total_rounds %}
+        <p>{{ round_number }}本目の動画の学習が終わりました。続けて次の動画を選んでください。</p>
+        <p><a href="{{ select_lecture_path }}" id="next-round-link" class="next-round-link">次の動画を選ぶ</a></p>
+        {% else %}
+        <p id="all-rounds-finished">{{ total_rounds }}本すべての動画の学習が終わりました。以降の操作は不要です。このページを閉じて終了してください。</p>
+        {% endif %}
       </div>
     </section>
   </div>

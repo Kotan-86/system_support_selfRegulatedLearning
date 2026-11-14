@@ -1,4 +1,5 @@
 # 仕様: docs/spec/research-lad-csv-download.md#視聴ログの-csv-の列この順pbi-1
+# 仕様: docs/spec/research-lad-csv-download.md#何本目の列round_number共有if2つの-csv-に共通pbi-c決定-multi-video-learningmd-の-q7q-c1q-c42026-11-14
 """研究用の視聴ログ CSV の Presenter。行の順はユースケースの結果のまま。"""
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from interfaces.learning.view_models.research_csv import ResearchCsvViewModel
 
 HEADER = (
     "participant_id",
+    "round_number",
     "lecture_id",
     "learning_session_id",
     "viewing_log_id",
@@ -37,6 +39,7 @@ class ResearchViewingLogsCsvPresenter:
         rows = [
             (
                 guard_formula(log.participant_id),
+                log.round_number,
                 guard_formula(log.lecture_id),
                 guard_formula(log.learning_session_id),
                 log.viewing_log_id,

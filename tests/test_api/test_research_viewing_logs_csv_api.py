@@ -1,12 +1,18 @@
 # 仕様: docs/spec/research-lad-csv-download.md#受入基準 (PBI-1: A1 A2 A3 A4 A5 A6 A7 A8)
+# 仕様: docs/spec/research-lad-csv-download.md#受入基準 (PBI-C #56: A3・A4 の改訂、C4 の回帰)
+# 仕様: docs/spec/research-lad-csv-download.md#何本目の列round_number共有if2つの-csv-に共通pbi-c
 # 仕様: docs/spec/research-lad-csv-download.md#csv-の書式共有if4つに共通pbi-1-で定める
 # A9(ブラウザで取得できる)は PO確認。ここでは検証しない。
 """研究用の視聴ログ CSV(GET /research/.../viewing-logs.csv)を、Flask のテストクライアントで通して確認する。
 
 一時ディレクトリの tutor.db・learning.db と偽の LLM を使う。記録は既存の API
 (POST /api/viewing-log)で作る。API で作れない状態(A6・A7 の特殊な参加者ID・講義ID、
-A8 の固有の参加者ID、A4 の2講義)だけ DB に直接置く。期待値は仕様の AC と DB の値から導き、
+A8 の固有の参加者ID)だけ DB に直接置く。期待値は仕様の AC と DB の値から導き、
 実装の内部クラスには依存しない。
+
+PBI-C(#56)で、見出しの2列目に `round_number` が加わり、lecture_id 以降が1列ずつ後ろへずれた。
+列は位置の数字ではなく、見出しの名前(COL)で読む。A3・A4 の回の準備は、選択の確定と回の終了の
+HTTP の操作で作る(tests/multi_video_helpers.py)。C1〜C4 は test_research_csv_round_number.py。
 """
 from __future__ import annotations
 
@@ -21,6 +27,8 @@ from pathlib import Path
 import pytest
 
 from tests.login_helpers import login_as
+from tests.multi_video_helpers import confirm_round, finish_round, next_second
+from tests.selection_helpers import login_unselected
 from tests.test_application.fakes.tutoring.fake_llm_gateway import FakeLlmGateway
 
 USER_ENV = "RESEARCHER_BASIC_AUTH_USER"
@@ -30,6 +38,7 @@ ALL_URL = "/research/viewing-logs.csv"
 BOM = b"\xef\xbb\xbf"
 HEADER = [
     "participant_id",
+    "round_number",
     "lecture_id",
     "learning_session_id",
     "viewing_log_id",
@@ -39,6 +48,8 @@ HEADER = [
     "duration",
 ]
 HEADER_LINE = ",".join(HEADER)
+COL = {name: index for index, name in enumerate(HEADER)}
+PID, ROUND, LECTURE, LS, VID, TS, POS, ACTION, DURATION = (COL[name] for name in HEADER)
 
 
 def participant_url(pid: str) -> str:
@@ -168,28 +179,23 @@ def record(
     assert response.status_code == 201, response.get_data(as_text=True)
 
 
-def record_in_lecture_2_then_1(client, env: Env, pid: str) -> None:
-    """同じ参加者が lecture-2 → lecture-1 の順で視聴ログを記録した状態を作る。
+def record_two_rounds_5_then_2(client, env: Env, pid: str) -> None:
+    """pid が1本目として lecture-5 を選んで視聴ログを記録して回を終え、2本目として lecture-2 を選んで記録する。
 
-    アプリは、選択後は選択した講義以外を記録させない(異なる講義は 403)。複数の講義の記録は
-    API だけでは作れないので、2つ目の学習セッションの行を DB に置き、その行を「選択」にする
-    (保存済みの選択は started_at が最も古い学習セッション。tests/test_api の既存の補助と同じ)。
-    記録そのものは API で行う。
+    仕様の A4 の準備(「n本目として講義 L を選ぶ」= 選択の確定、「回を終える」= 終了ボタンの保存)。
+    2本目の確定は、1本目の確定と別の秒に行う(next_second)。視聴ログは API で記録する。
+    1本目は2件(viewing_log_id の順を確かめるため)、2本目は1件。
     """
-    login_as(client, pid, lecture="lecture-2")
-    record(client, pid, position=1, time_stamp="2026-10-29T03:00:00+00:00")
-    conn = env.learning()
-    try:
-        conn.execute(
-            "INSERT INTO learning_sessions (id, learner_id, lecture_id, started_at) VALUES (?,?,?,?)",
-            (str(uuid.uuid4()), pid, "lecture-1", "2000-01-01T00:00:00+00:00"),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    record(client, pid, position=2, time_stamp="2026-10-29T02:00:00+00:00")
+    login_unselected(client, pid)
+    confirm_round(client, "lecture-5")
+    record(client, pid, position=51, time_stamp="2026-10-29T03:00:00+00:00")
+    record(client, pid, position=52, action="pause", time_stamp="2026-10-29T02:00:00+00:00")
+    finish_round(client)
+    next_second()
+    confirm_round(client, "lecture-2")
+    record(client, pid, position=21, time_stamp="2026-10-29T01:00:00+00:00")
     lectures = [r["lecture_id"] for r in env.db_logs() if r["learner_id"] == pid]
-    assert lectures == ["lecture-2", "lecture-1"], "テストの準備: 2講義の記録を API で作れていない"
+    assert lectures == ["lecture-5", "lecture-5", "lecture-2"], "テストの準備: 2回の記録を作れていない"
 
 
 def insert_directly(
@@ -370,7 +376,9 @@ class TestA2ResponseShape:
 
 class TestA3Contents:
     def test_a3_three_events_of_participant_p02(self, env: Env, client) -> None:
-        # 仕様: docs/spec/research-lad-csv-download.md#受入基準 A3
+        # 仕様: docs/spec/research-lad-csv-download.md#受入基準 A3(PBI-C で改訂: 見出しと round_number)
+        login_unselected(client, "P02")
+        confirm_round(client, "lecture-1")  # 1本目として lecture-1 を選ぶ(選択の確定)
         record(client, "P02", position=0, action="play", duration=0,
                time_stamp="2026-10-29T01:00:00+00:00")
         record(client, "P02", position=30, action="forward_skip", duration=10,
@@ -382,22 +390,27 @@ class TestA3Contents:
 
         assert response.status_code == 200
         text = text_of(response)
-        assert text.split("\r\n")[0] == HEADER_LINE
+        assert text.split("\r\n")[0] == (
+            "participant_id,round_number,lecture_id,learning_session_id,viewing_log_id,"
+            "time_stamp,current_time,action,duration"
+        )
         rows = parse(text)
         assert rows[0] == HEADER
         assert len(rows) == 4
         db = env.db_logs()
         assert len(db) == 3
         for row, d in zip(rows[1:], db):
-            assert row[0] == "P02"
-            assert row[1] == "lecture-1"
-            assert row[2] == d["ls_id"]
-            assert row[3] == str(d["v_id"])
-            assert row[4] == d["time_stamp"]
-        assert [r[3] for r in rows[1:]] == sorted((r[3] for r in rows[1:]), key=int)
-        assert [r[5] for r in rows[1:]] == ["0", "30", "20"]
-        assert [r[6] for r in rows[1:]] == ["play", "forward_skip", "backward_seek"]
-        assert [r[7] for r in rows[1:]] == ["0.0", "10.0", "-12.0"]
+            assert len(row) == len(HEADER)
+            assert row[PID] == "P02"
+            assert row[ROUND] == "1"
+            assert row[LECTURE] == "lecture-1"
+            assert row[LS] == d["ls_id"]
+            assert row[VID] == str(d["v_id"])
+            assert row[TS] == d["time_stamp"]
+        assert [r[VID] for r in rows[1:]] == sorted((r[VID] for r in rows[1:]), key=int)
+        assert [r[POS] for r in rows[1:]] == ["0", "30", "20"]
+        assert [r[ACTION] for r in rows[1:]] == ["play", "forward_skip", "backward_seek"]
+        assert [r[DURATION] for r in rows[1:]] == ["0.0", "10.0", "-12.0"]
 
     def test_a3_other_participants_rows_are_not_in_participant_csv(self, client) -> None:
         record(client, "P02", position=1)
@@ -405,7 +418,7 @@ class TestA3Contents:
 
         rows = body_rows(client, participant_url("P02"))
 
-        assert [r[0] for r in rows] == ["P02"]
+        assert [r[PID] for r in rows] == ["P02"]
 
 
 # ---------------------------------------------------------------- A4
@@ -414,65 +427,80 @@ class TestA3Contents:
 class TestA4AllParticipantsAndOrder:
     PIDS = ("P01", "P02", "P10", "10", "2")
     SORTED = ["10", "2", "P01", "P02", "P10"]
+    OTHERS = ("P01", "P10", "10", "2")
 
     @pytest.fixture
     def populated(self, env: Env, client):
-        for pid in ("P01", "P10", "10", "2"):
+        for pid in self.OTHERS:
             record(client, pid, position=11, time_stamp="2026-10-29T05:00:00+00:00")
             # 後に記録した行の time_stamp が先の行より早い
             record(client, pid, position=12, action="pause", time_stamp="2026-10-29T04:00:00+00:00")
             # 同じ秒
             record(client, pid, position=13, time_stamp="2026-10-29T04:00:00+00:00")
-        record_in_lecture_2_then_1(client, env, "P02")
+        record_two_rounds_5_then_2(client, env, "P02")
         return client
 
     def test_a4_bulk_is_exactly_the_union_of_per_participant_csvs_in_order(self, populated) -> None:
-        # 仕様: docs/spec/research-lad-csv-download.md#受入基準 A4
+        # 仕様: docs/spec/research-lad-csv-download.md#受入基準 A4(PBI-C で改訂: 同じ参加者の中は回の順)
         bulk = body_rows(populated, ALL_URL)
 
         per_participant: list[list[str]] = []
         for pid in self.SORTED:
             part = body_rows(populated, participant_url(pid))
             assert part, pid
-            assert all(r[0] == pid for r in part)
+            assert all(r[PID] == pid for r in part)
             per_participant += part
         assert bulk == per_participant
-        assert len(bulk) == 4 * 3 + 2
+        assert len(bulk) == 4 * 3 + 3
 
     def test_a4_p01_is_included(self, populated) -> None:
-        assert "P01" in {r[0] for r in body_rows(populated, ALL_URL)}
+        assert "P01" in {r[PID] for r in body_rows(populated, ALL_URL)}
 
     def test_a4_participant_ids_sort_as_strings(self, populated) -> None:
         bulk = body_rows(populated, ALL_URL)
 
         ordered: list[str] = []
         for r in bulk:
-            if not ordered or ordered[-1] != r[0]:
-                ordered.append(r[0])
+            if not ordered or ordered[-1] != r[PID]:
+                ordered.append(r[PID])
         assert ordered == self.SORTED
 
-    def test_a4_within_participant_sorted_by_lecture_then_record_order(self, populated) -> None:
+    def test_a4_within_participant_sorted_by_round_then_record_order(self, populated) -> None:
         bulk = body_rows(populated, ALL_URL)
 
-        p02 = [r for r in bulk if r[0] == "P02"]
-        # lecture-2 を先に記録しても、講義IDの昇順(lecture-1 が先)
-        assert [r[1] for r in p02] == ["lecture-1", "lecture-2"]
-        for pid in ("P01", "P10", "10", "2"):
-            rows = [r for r in bulk if r[0] == pid]
-            ids = [int(r[3]) for r in rows]
+        p02 = [r for r in bulk if r[PID] == "P02"]
+        # 1本目の lecture-5 の行(round_number = 1)が、2本目の lecture-2 の行(2)より前。講義IDの昇順ではない
+        assert [(r[ROUND], r[LECTURE]) for r in p02] == [
+            ("1", "lecture-5"), ("1", "lecture-5"), ("2", "lecture-2"),
+        ]
+        # 同じ回の中は viewing_log_id の昇順(1本目の2行目は、1行目より早い time_stamp)
+        assert [r[POS] for r in p02] == ["51", "52", "21"]
+        first_round_ids = [int(r[VID]) for r in p02[:2]]
+        assert first_round_ids == sorted(first_round_ids)
+        for pid in self.OTHERS:
+            rows = [r for r in bulk if r[PID] == pid]
+            ids = [int(r[VID]) for r in rows]
             assert ids == sorted(ids)
-            assert [r[5] for r in rows] == ["11", "12", "13"]
+            assert [r[POS] for r in rows] == ["11", "12", "13"]
+
+    def test_a4_round_number_is_counted_per_participant(self, populated) -> None:
+        # P02 以外の参加者の行の round_number は 1(参加者ごとに数える)
+        bulk = body_rows(populated, ALL_URL)
+
+        for pid in self.OTHERS:
+            rounds = [r[ROUND] for r in bulk if r[PID] == pid]
+            assert rounds == ["1", "1", "1"], pid
 
     def test_a4_record_order_wins_over_time_stamp_order(self, populated) -> None:
-        rows = [r for r in body_rows(populated, ALL_URL) if r[0] == "P01"]
+        rows = [r for r in body_rows(populated, ALL_URL) if r[PID] == "P01"]
 
         # 2行目は1行目より早い時刻、3行目は2行目と同じ秒。それでも記録順に並ぶ
-        assert [r[4] for r in rows] == [
+        assert [r[TS] for r in rows] == [
             "2026-10-29T05:00:00+00:00",
             "2026-10-29T04:00:00+00:00",
             "2026-10-29T04:00:00+00:00",
         ]
-        assert [r[6] for r in rows] == ["play", "pause", "play"]
+        assert [r[ACTION] for r in rows] == ["play", "pause", "play"]
 
     def test_a4_repeated_download_is_identical(self, populated) -> None:
         first = populated.get(ALL_URL, headers=AUTH)
@@ -529,18 +557,18 @@ class TestA5EmptyIsHeaderOnly:
         assert padded.status_code == 200
         assert padded.data == self.EMPTY
         exact = body_rows(client, participant_url("1"))
-        assert [r[5] for r in exact] == ["44"]
+        assert [r[POS] for r in exact] == ["44"]
 
 
 # ---------------------------------------------------------------- A6
 
 
 class TestA6QuotingOfSpecialCharacters:
-    PID = 'a,b"c\nd'
+    SPECIAL_PID = 'a,b"c\nd'
 
     def test_a6_participant_id_with_comma_quote_and_lf_is_quoted(self, env: Env, client) -> None:
         # 仕様: docs/spec/research-lad-csv-download.md#受入基準 A6
-        insert_directly(env, self.PID, "lecture-1", position=77, action="pause", duration=2.0)
+        insert_directly(env, self.SPECIAL_PID, "lecture-1", position=77, action="pause", duration=2.0)
 
         response = client.get(ALL_URL, headers=AUTH)
 
@@ -548,14 +576,14 @@ class TestA6QuotingOfSpecialCharacters:
         text = text_of(response)
         assert '"a,b""c\nd"' in text  # 値全体を囲み、中の二重引用符を重ねる(LF はそのまま)
         rows = parse(text)
-        row = [r for r in rows[1:] if r[5] == "77"]
+        row = [r for r in rows[1:] if r[POS] == "77"]
         assert len(row) == 1
-        assert row[0][0] == self.PID
+        assert row[0][PID] == self.SPECIAL_PID
         assert len(row[0]) == len(HEADER)
         assert rows[0] == HEADER
 
     def test_a6_plain_values_are_not_quoted(self, env: Env, client) -> None:
-        insert_directly(env, self.PID, "lecture-1")
+        insert_directly(env, self.SPECIAL_PID, "lecture-1")
         record(client, "P01", position=3)
 
         text = text_of(client.get(ALL_URL, headers=AUTH))
@@ -583,18 +611,20 @@ class TestA7FormulaGuard:
         assert response.status_code == 200
         text = text_of(response)
         rows = parse(text)
-        by_session = {r[2]: r for r in rows[1:]}
+        assert rows[0] == HEADER
+        by_session = {r[LS]: r for r in rows[1:]}
         for lecture, ls_id in ids.items():
-            assert by_session[ls_id][1] == "'" + lecture, repr(lecture)
+            assert by_session[ls_id][LECTURE] == "'" + lecture, repr(lecture)
             assert len(by_session[ls_id]) == len(HEADER)
         # 囲みの規則は ' を付けた後の値に掛かる(CR を含むので囲まれ、' は囲みの内側の先頭)
         assert '"\'\rx"' in text
         # 数値の列には ' を付けない
-        backward = [r for r in rows[1:] if r[0] == "P02"]
+        backward = [r for r in rows[1:] if r[PID] == "P02"]
         assert len(backward) == 1
-        assert backward[0][7] == "-12.0"
-        assert backward[0][5] == "20"
-        assert backward[0][3].isdigit()
+        assert backward[0][DURATION] == "-12.0"
+        assert backward[0][POS] == "20"
+        assert backward[0][VID].isdigit()
+        assert backward[0][ROUND] == "1"  # 数値の列(round_number)にも ' を付けない(C4)
 
     def test_a7_apostrophe_is_not_added_to_ordinary_values(self, env: Env, client) -> None:
         record(client, "P02", position=1)
@@ -602,9 +632,9 @@ class TestA7FormulaGuard:
 
         rows = body_rows(client, ALL_URL)
 
-        p02 = [r for r in rows if r[0] == "P02"]
-        assert p02[0][:2] == ["P02", "lecture-1"]
-        assert p02[0][6] == "play"
+        p02 = [r for r in rows if r[PID] == "P02"]
+        assert [p02[0][PID], p02[0][LECTURE]] == ["P02", "lecture-1"]
+        assert p02[0][ACTION] == "play"
         assert not any(v.startswith("'") for v in p02[0])
 
 

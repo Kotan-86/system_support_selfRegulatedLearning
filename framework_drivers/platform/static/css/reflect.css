@@ -262,6 +262,11 @@ body {
   margin: 0;
 }
 
+/* 仕様: docs/spec/multi-video-learning.md#3-回の終了(完了画面の導線・全体の終了の表示) */
+.dialog-end-complete p + p {
+  margin-top: 8px;
+}
+
 .chat-panel.dialog-ended #message-form,
 .chat-panel.dialog-ended #end-dialog-button {
   display: none;

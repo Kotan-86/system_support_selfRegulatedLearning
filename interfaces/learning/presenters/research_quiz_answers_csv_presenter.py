@@ -1,4 +1,5 @@
 # 仕様: docs/spec/research-lad-csv-download.md#小テストの-csv-の列この順pbi-2決定-q1
+# 仕様: docs/spec/research-lad-csv-download.md#何本目の列round_number共有if2つの-csv-に共通pbi-c決定-multi-video-learningmd-の-q7q-c1q-c42026-11-14
 """研究用の小テスト回答 CSV の Presenter。行の順はユースケースの結果のまま。"""
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ from interfaces.learning.view_models.research_csv import ResearchCsvViewModel
 
 HEADER = (
     "participant_id",
+    "round_number",
     "lecture_id",
     "learning_session_id",
     "attempt_id",
@@ -32,6 +34,7 @@ class ResearchQuizAnswersCsvPresenter:
         rows = [
             (
                 guard_formula(r.participant_id),
+                r.round_number,
                 guard_formula(r.lecture_id),
                 guard_formula(r.learning_session_id),
                 r.attempt_id,

@@ -1,4 +1,6 @@
 {# 仕様: docs/spec/lecture-selection.md#2-選択の画面と導線 #}
+{# 仕様: docs/spec/multi-video-learning.md#2-回の選択n本目(「n本目 / 3本」。Q12) #}
+{# 仕様: docs/spec/multi-video-learning.md#8-回の選び直しfr-63-の改訂q4(選び直しの画面と戻る導線) #}
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -10,13 +12,18 @@
     .lecture-option { display: flex; align-items: center; gap: 12px; margin: 0.75rem 0; }
     .lecture-option button { flex: 1; text-align: left; padding: 10px; font-size: 1rem; }
     .lecture-track { min-width: 3em; font-weight: bold; }
+    .round-label { font-weight: bold; }
   </style>
 </head>
 <body>
   <form method="post" action="/logout"><button type="submit" id="logout-button">ログアウト</button></form>
+  <p class="round-label" id="round-label">{{ round_number }}本目 / {{ total_rounds }}本</p>
   <h3>学習する講義を選んでください</h3>
   <p>参加者 ID: <strong>{{ participant_id }}</strong></p>
-  <p>一度選ぶと変更できない選択です。次の画面で内容を確認してから確定します。</p>
+  {% if reselecting %}
+  <p>今の講義の代わりに学習する講義を選んでください。 <a href="/lecture" id="back-to-lecture">今の講義のまま戻る</a></p>
+  {% endif %}
+  <p>次の画面で内容を確認してから確定します。この回の動画を再生する、小テストを受ける、AI と対話する、のいずれかをすると、この回の動画は変えられなくなります。</p>
   {% for lecture in lectures %}
   <form method="post" action="/select-lecture" class="lecture-option">
     <button type="submit" name="lecture_id" value="{{ lecture.id }}">{{ lecture.title }}</button>

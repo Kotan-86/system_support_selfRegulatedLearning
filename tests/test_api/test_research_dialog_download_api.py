@@ -438,9 +438,11 @@ class TestR4ParticipantContents:
 class TestR5SessionsAndEndInfo:
     def test_r5_two_sessions_of_participant_2_with_one_saved(self, env: Env, client) -> None:
         # 仕様: docs/spec/research-dialog-download.md#受入基準 R5
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC21・AC25(#56: 1本目(lecture-2)を終了ボタンで
+        # 終えてから2本目(lecture-3)の対話セッションを置く順に改めた。終了の後の保存は 409 のため)
         chat(client, "lecture-2 の質問", "2")
-        add_second_session_directly(env, "2", "lecture-3", "lecture-3 の質問")
         saved = save(client, "2").get_json()
+        add_second_session_directly(env, "2", "lecture-3", "lecture-3 の質問")
 
         body = get_json(client, participant_url("2"))
 
@@ -455,8 +457,10 @@ class TestR5SessionsAndEndInfo:
         assert by_lecture["lecture-3"]["end_method"] is None
 
     def test_r5_messages_added_after_saving_are_included(self, client) -> None:
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC25(#56: 終了ボタンの後の発言は 409 のため、
+        # 保存を回の途中の保存(page_leave)に改めた)
         chat(client, "保存前の質問", "2")
-        save(client, "2")
+        save(client, "2", end_method="page_leave")
         chat(client, "保存後の質問", "2")
 
         (item,) = get_json(client, participant_url("2"))
@@ -464,7 +468,7 @@ class TestR5SessionsAndEndInfo:
         users = [m["content"] for m in item["messages"] if m["role"] == "user"]
         assert users == ["保存前の質問", "保存後の質問"]
         assert len(item["messages"]) == 4
-        assert item["end_method"] == "end_button"
+        assert item["end_method"] == "page_leave"
 
     def test_r5_page_leave_method_is_reported(self, client) -> None:
         chat(client, "質問", "2")
@@ -494,9 +498,11 @@ class TestR6AllParticipants:
     def populated(self, env: Env, client):
         for pid in ("foo", "2", "10", "1"):
             chat(client, f"{pid}の質問", pid)
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC25(#56: 参加者 2 は1本目を終えてから2本目の
+        # 対話セッションを置く順に改めた)
+        save(client, "2")
         add_second_session_directly(env, "2", "lecture-3", "lecture-3 の質問")
         save(client, "1")
-        save(client, "2")
         return client
 
     def test_r6_contains_exactly_the_union_of_per_participant_lists(self, populated) -> None:

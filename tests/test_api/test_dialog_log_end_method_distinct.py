@@ -84,14 +84,17 @@ def test_b5_end_button_and_page_leave_are_distinguishable(client_and_db) -> None
     assert [m["role"] for m in doc2["messages"]] == ["user", "assistant"]
 
 
-def test_b5_page_leave_after_end_button_overwrites_with_page_leave(client_and_db) -> None:
+def test_b5_end_button_after_page_leave_overwrites_with_end_button(client_and_db) -> None:
     # 仕様: docs/spec/dialog-log-save.md#受入基準 B5(同一対話セッション。上書き規則は A12)
+    # 仕様: docs/spec/multi-video-learning.md#受入基準 AC4・AC25(#56: 終了ボタンの後の page_leave は 409 で
+    # 置き換わらない(tests/test_api/test_multi_video_progress.py の AC4)。旧テスト
+    # 「終了ボタンの後の page_leave で置き換わる」を、回の途中の page_leave の後の終了ボタンに改めた)
     client, db = client_and_db
     _chat(client, "1", "こんにちは")
-    first = client.post("/api/dialog-log", json={"participant_id": "1", "end_method": "end_button"})
+    first = client.post("/api/dialog-log", json={"participant_id": "1", "end_method": "page_leave"})
     assert first.status_code == 200, first.get_data(as_text=True)
-    assert _log_rows(db)["1"][0] == "end_button"
-    second = client.post("/api/dialog-log", json={"participant_id": "1", "end_method": "page_leave"})
+    assert _log_rows(db)["1"][0] == "page_leave"
+    second = client.post("/api/dialog-log", json={"participant_id": "1", "end_method": "end_button"})
     assert second.status_code == 200, second.get_data(as_text=True)
     col, doc = _log_rows(db)["1"]
-    assert (col, doc["end_method"]) == ("page_leave", "page_leave")
+    assert (col, doc["end_method"]) == ("end_button", "end_button")

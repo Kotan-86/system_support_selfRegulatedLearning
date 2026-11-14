@@ -108,22 +108,20 @@ class SqliteLearningSessionRepository(LearningSessionRepository):
         self._conn.commit()
         return self._load_session(session.id)
 
-    def save_if_learner_has_none(self, session: LearningSession) -> LearningSession:
-        """BEGIN IMMEDIATE で書き込みロックを先に取り、確認と INSERT を直列化する。"""
+    def save_if_learner_session_count(
+        self, session: LearningSession, expected_count: int
+    ) -> bool:
+        """BEGIN IMMEDIATE で書き込みロックを先に取り、数の確認と INSERT を直列化する。"""
         self._conn.commit()
         self._conn.execute("BEGIN IMMEDIATE")
         try:
-            row = self._conn.execute(
-                """
-                SELECT id FROM learning_sessions
-                WHERE learner_id = ?
-                ORDER BY started_at ASC, id ASC LIMIT 1
-                """,
+            (count,) = self._conn.execute(
+                "SELECT COUNT(*) FROM learning_sessions WHERE learner_id = ?",
                 (str(session.learner_id),),
             ).fetchone()
-            if row is not None:
+            if count != expected_count:
                 self._conn.rollback()
-                return self._load_session(LearningSessionId(str(row["id"])))
+                return False
             self._conn.execute(
                 """
                 INSERT INTO learning_sessions (id, learner_id, lecture_id, started_at)
@@ -135,7 +133,45 @@ class SqliteLearningSessionRepository(LearningSessionRepository):
         except BaseException:
             self._conn.rollback()
             raise
-        return self._load_session(session.id)
+        return True
+
+    def replace_if_no_records(
+        self, current_id: LearningSessionId, session: LearningSession
+    ) -> bool:
+        """BEGIN IMMEDIATE の中で、記録がないことの確認と DELETE・INSERT を1つにする(選び直し)。
+
+        視聴ログ・小テストの記録の要求も同じ書き込みロックを先に取る(main.py)ため、
+        どちらか一方だけが成立し、消えた学習セッションを指す記録は残らない(AC14)。
+        """
+        self._conn.commit()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            sid = str(current_id)
+            exists = self._conn.execute(
+                "SELECT 1 FROM learning_sessions WHERE id = ? AND learner_id = ?",
+                (sid, str(session.learner_id)),
+            ).fetchone()
+            has_records = self._conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM viewing_logs WHERE learning_session_id = ?)"
+                " OR EXISTS (SELECT 1 FROM quiz_attempts WHERE learning_session_id = ?)",
+                (sid, sid),
+            ).fetchone()[0]
+            if exists is None or has_records:
+                self._conn.rollback()
+                return False
+            self._conn.execute("DELETE FROM learning_sessions WHERE id = ?", (sid,))
+            self._conn.execute(
+                """
+                INSERT INTO learning_sessions (id, learner_id, lecture_id, started_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                learning_session_to_insert_params(session),
+            )
+            self._conn.commit()
+        except BaseException:
+            self._conn.rollback()
+            raise
+        return True
 
     def _load_session(self, session_id: LearningSessionId) -> LearningSession:
         session_row = self._conn.execute(

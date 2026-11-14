@@ -1,7 +1,12 @@
 """
-PBI-A-2 (11-T6): 再訪(終了後に同じ URL を開き直す)の保存内容。
+PBI-A-2 (11-T6): 再訪(保存の後に同じ URL を開き直す)の保存内容。
 
 仕様: docs/spec/dialog-log-save.md#受入基準 (PBI-A-2) A16
+仕様: docs/spec/multi-video-learning.md#受入基準 AC25(回の途中の保存・再訪)・What 4節
+  #56 で、A16 の「再訪で再び対話でき、上書き」は回の途中(終了ボタンの前)に限られた(Q2)。
+  終了ボタンの保存は回の終了で、その後の対話・保存は 409(multi-video-learning.md の AC4。
+  tests/test_api/test_multi_video_progress.py)。そのため、1回目の訪問の保存は、ページ離脱
+  (page_leave)による保存にした(#56 PBI-A で test-writer が改めた)。
 「開き直す」= ページを新規に読み込むこと。画面は session_id を持ち越さないので、再訪後の送信は session_id なしで送られる。
 それを、`session_id` なしの POST /chat と POST /api/dialog-log で再現する。
 通常の画面が表示されること(見た目)は PO確認。
@@ -49,9 +54,9 @@ def _chat(client, message: str) -> dict:
     return r.get_json()
 
 
-def _save(client):
+def _save(client, end_method: str = "end_button"):
     return client.post(
-        "/api/dialog-log", json={"participant_id": PID, "end_method": "end_button"}
+        "/api/dialog-log", json={"participant_id": PID, "end_method": end_method}
     )
 
 
@@ -68,10 +73,10 @@ def test_a16_revisit_saves_same_session_with_both_visits_and_latest_ended_at(rev
     # 仕様: docs/spec/dialog-log-save.md#受入基準 A16(自動テスト部分)
     client, llm, db_path = revisit_env
 
-    # 1回目の訪問: 送信 → 終了ボタン相当の保存
+    # 1回目の訪問: 送信 → ページ離脱の保存(回の途中。#56 の AC25)
     first = _chat(client, "1回目の発言")
     llm.set_response("応答-2")
-    r1 = _save(client)
+    r1 = _save(client, "page_leave")
     assert r1.status_code == 200, r1.get_data(as_text=True)
     session_id_1 = r1.get_json()["tutor_session_id"]
     assert session_id_1 == first["session_id"]
@@ -114,9 +119,10 @@ def test_a16_revisit_saves_same_session_with_both_visits_and_latest_ended_at(rev
 
 
 def test_a16_revisit_after_empty_first_visit_keeps_single_log(revisit_env) -> None:
-    # 仕様: docs/spec/dialog-log-save.md#受入基準 A16, A9(発言0件で終了 → 開き直して発言 → 再び終了)
+    # 仕様: docs/spec/dialog-log-save.md#受入基準 A16, A9(発言0件で離脱の保存 → 開き直して発言 → 終了ボタン)
+    # 仕様: docs/spec/multi-video-learning.md#受入基準 AC25(回の途中の再訪。#56 で1回目を page_leave に改めた)
     client, _llm, db_path = revisit_env
-    r1 = _save(client)
+    r1 = _save(client, "page_leave")
     assert r1.status_code == 200, r1.get_data(as_text=True)
     sid = r1.get_json()["tutor_session_id"]
     assert json.loads(_rows(db_path)[0]["log_json"])["messages"] == []

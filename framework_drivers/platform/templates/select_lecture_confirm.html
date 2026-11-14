@@ -1,4 +1,5 @@
 {# 仕様: docs/spec/lecture-selection.md#2-選択の画面と導線(確定の前の確認) #}
+{# 仕様: docs/spec/multi-video-learning.md#2-回の選択n本目(「n本目 / 3本」。Q12) #}
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -11,9 +12,10 @@
   </style>
 </head>
 <body>
+  <p class="round-label" id="round-label"><strong>{{ round_number }}本目 / {{ total_rounds }}本</strong></p>
   <h3>この講義で確定しますか</h3>
   <p>選んだ講義: <strong>{{ lecture.title }}</strong>({{ lecture.track }})</p>
-  <p class="select-warning" role="alert">一度選ぶと変更できない講義の選択です。この講義でよければ「確定する」を押してください。</p>
+  <p class="select-warning" role="alert">この回の動画を再生する、小テストを受ける、AI と対話する、のいずれかをすると、この回の動画は変えられなくなります。それまでは選び直せます。この講義でよければ「確定する」を押してください。</p>
   <form method="post" action="/select-lecture/confirm">
     <input type="hidden" name="lecture_id" value="{{ lecture.id }}">
     <button type="submit" id="confirm-lecture-button">確定する</button>
