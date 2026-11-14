@@ -53,6 +53,7 @@ from framework_drivers.platform.research_auth import register_research_auth
 from interfaces.learning.view_models.errors import ErrorViewModel
 from framework_drivers.platform.wiring import (
     build_export_dialog_logs_controller,
+    build_export_quiz_answers_controller,
     build_export_viewing_logs_controller,
     build_get_last_updated_controller,
     build_get_learning_snapshot_controller,
@@ -479,6 +480,9 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
     def _viewing_logs_controller():
         return build_export_viewing_logs_controller(g.learning_conn)
 
+    def _quiz_answers_controller():
+        return build_export_quiz_answers_controller(g.learning_conn)
+
     def _research_response(execute, make_controller=_dialog_logs_controller):
         """研究用の応答。予期しない例外・エラーは本文や値を出さない固定の応答にする(R9)。"""
         try:
@@ -511,6 +515,18 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
     def research_all_viewing_logs_csv():
         """GET: 全参加者一括の視聴ログ CSV(仕様: research-lad-csv-download.md)。"""
         return _research_response(lambda c: c.execute_all(), _viewing_logs_controller)
+
+    @app.route("/research/participants/<participant_id>/quiz-answers.csv", methods=["GET"])
+    def research_participant_quiz_answers_csv(participant_id: str):
+        """GET: 参加者別の小テスト CSV(仕様: research-lad-csv-download.md)。"""
+        return _research_response(
+            lambda c: c.execute_for_participant(participant_id), _quiz_answers_controller
+        )
+
+    @app.route("/research/quiz-answers.csv", methods=["GET"])
+    def research_all_quiz_answers_csv():
+        """GET: 全参加者一括の小テスト CSV(仕様: research-lad-csv-download.md)。"""
+        return _research_response(lambda c: c.execute_all(), _quiz_answers_controller)
 
     return app
 

@@ -548,6 +548,7 @@ LAD 学習者タイプ判定に必要な **動画総尺（秒）** を `Lecture`
 | `POST /api/dialog-log`（新設）   | `SaveDialogLogController`       | `DialogLogSavedPresenter`     | `DialogLogSavedViewModel` / Error |
 | `GET /research/participants/{id}/dialog-logs`、`GET /research/dialog-logs`（[research-dialog-download.md](./research-dialog-download.md)） | `ExportDialogLogsController` | `ResearchDialogLogsPresenter` | `ResearchDialogLogsViewModel` / Error |
 | `GET /research/participants/{id}/viewing-logs.csv`、`GET /research/viewing-logs.csv`（[research-lad-csv-download.md](./research-lad-csv-download.md)） | `ExportViewingLogsController` | `ResearchViewingLogsCsvPresenter` | `ResearchCsvViewModel`（`filename`、`content`）/ Error |
+| `GET /research/participants/{id}/quiz-answers.csv`、`GET /research/quiz-answers.csv`（[research-lad-csv-download.md](./research-lad-csv-download.md)） | `ExportQuizAnswersController` | `ResearchQuizAnswersCsvPresenter` | `ResearchCsvViewModel`（`filename`、`content`）/ Error |
 
 研究用 CSV の書き出し（UTF-8 + BOM、CRLF、RFC 4180 の囲み）は `interfaces/common/csv_encoding.py` の `encode_csv` が行い、数式として実行されうる文字列列の先頭に `'` を付ける `guard_formula` もここに置く。
 

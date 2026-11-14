@@ -26,6 +26,16 @@ from interfaces.learning.controllers.export_viewing_logs_controller import (
 from interfaces.learning.presenters.research_viewing_logs_csv_presenter import (
     ResearchViewingLogsCsvPresenter,
 )
+from application.learning.use_cases.export_quiz_answers import ExportQuizAnswersUseCase
+from framework_drivers.db.learning.sqlite_quiz_answer_export_query import (
+    SqliteQuizAnswerExportQuery,
+)
+from interfaces.learning.controllers.export_quiz_answers_controller import (
+    ExportQuizAnswersController,
+)
+from interfaces.learning.presenters.research_quiz_answers_csv_presenter import (
+    ResearchQuizAnswersCsvPresenter,
+)
 from application.tutoring.ports.llm_gateway import LlmGateway
 from application.tutoring.use_cases.export_dialog_logs import ExportDialogLogsUseCase
 from framework_drivers.db.tutoring.sqlite_dialog_log_export_query import (
@@ -347,6 +357,17 @@ def build_export_viewing_logs_controller(
     return ExportViewingLogsController(
         use_case=ExportViewingLogsUseCase(SqliteViewingLogExportQuery(learning_connection)),
         presenter=ResearchViewingLogsCsvPresenter(),
+    )
+
+
+def build_export_quiz_answers_controller(
+    learning_connection: sqlite3.Connection,
+) -> ExportQuizAnswersController:
+    """ExportQuizAnswersController を組み立てる(learning.db を読むだけ)。"""
+    # 仕様: docs/spec/research-lad-csv-download.md
+    return ExportQuizAnswersController(
+        use_case=ExportQuizAnswersUseCase(SqliteQuizAnswerExportQuery(learning_connection)),
+        presenter=ResearchQuizAnswersCsvPresenter(),
     )
 
 
