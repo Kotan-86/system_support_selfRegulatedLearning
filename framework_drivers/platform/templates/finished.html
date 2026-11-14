@@ -1,0 +1,15 @@
+{# 仕様: docs/spec/multi-video-learning.md#1-協力者の進行状態(全体の終了の画面。文言は AC24 で決定済み。仕様の「画面の文言の決定」W6 参照) #}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>学習の終了</title>
+</head>
+<body>
+  <form method="post" action="/logout"><button type="submit" id="logout-button">ログアウト</button></form>
+  <h3>3本の動画の学習がすべて終わりました</h3>
+  <p>参加者 ID: <strong>{{ participant_id }}</strong></p>
+  <p>以降の操作は不要です。ご協力ありがとうございました。</p>
+</body>
+</html>

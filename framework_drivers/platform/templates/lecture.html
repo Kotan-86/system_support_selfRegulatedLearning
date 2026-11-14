@@ -1,5 +1,6 @@
 {# 仕様: docs/spec/framework-drivers-layer.md#HTML-ページ #}
 {# 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-5-講義動画フロント #}
+{# 仕様: docs/spec/multi-video-learning.md#8-回の選び直しfr-63-の改訂q4(選び直しの導線) #}
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -32,6 +33,9 @@
   <h3>講義動画</h3>
   <p>参加者 ID: <strong>{{ participant_id }}</strong></p>
   <p>講義 ID: <strong>{{ lecture_id }}</strong></p>
+  {% if can_reselect %}
+  <p id="reselect-guide">別の講義に変えたいときは、動画を再生する前に <a id="reselect-link" href="/select-lecture">講義を選び直す</a>。再生する、小テストを受ける、AI と対話する、のいずれかをすると、この回の講義は変えられません。</p>
+  {% endif %}
   <div id="player"></div>
   <div id="time">0:00:00</div>
   <input type="range" id="seekbar" min="0" max="100" value="0">

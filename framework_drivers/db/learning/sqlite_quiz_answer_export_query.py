@@ -1,4 +1,5 @@
 # 仕様: docs/spec/research-lad-csv-download.md#対象と並び順
+# 仕様: docs/spec/research-lad-csv-download.md#何本目の列round_number共有if2つの-csv-に共通pbi-c決定-multi-video-learningmd-の-q7q-c1q-c42026-11-14
 """研究用の小テスト回答読み出しの SQLite 実装。learning.db を SELECT するだけ(書き込み・commit なし)。"""
 from __future__ import annotations
 
@@ -6,13 +7,14 @@ import sqlite3
 
 from application.learning.dto.export_quiz_answers import ResearchQuizAnswerRow
 from application.learning.ports.quiz_answer_export_query import QuizAnswerExportQuery
+from framework_drivers.db.learning.sqlite_viewing_log_export_query import ROUNDED_SESSIONS
 
 # 回答のない受験を落とさないため、回答は LEFT JOIN。
 _SELECT = (
-    "SELECT s.learner_id, s.lecture_id, s.id AS learning_session_id, "
+    "SELECT s.learner_id, s.round_number, s.lecture_id, s.id AS learning_session_id, "
     "q.id AS attempt_id, q.created_at, q.score_numerator, q.score_denominator, "
     "a.question_index, a.selected_answer, a.is_correct "
-    "FROM quiz_attempts q JOIN learning_sessions s ON s.id = q.learning_session_id "
+    "FROM quiz_attempts q JOIN " + ROUNDED_SESSIONS + " ON s.id = q.learning_session_id "
     "LEFT JOIN quiz_attempt_answers a ON a.attempt_id = q.id"
 )
 
@@ -38,6 +40,7 @@ class SqliteQuizAnswerExportQuery(QuizAnswerExportQuery):
         return tuple(
             ResearchQuizAnswerRow(
                 participant_id=str(r["learner_id"]),
+                round_number=int(r["round_number"]),
                 lecture_id=str(r["lecture_id"]),
                 learning_session_id=str(r["learning_session_id"]),
                 attempt_id=int(r["attempt_id"]),

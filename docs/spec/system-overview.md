@@ -235,7 +235,9 @@ sequenceDiagram
 
 | DB | 主なテーブル | 書き込み元 | 読み取り先 |
 | --- | --- | --- | --- |
-| `learning.db` | `learning_sessions`（learner × lecture で一意）、`viewing_logs`、`quiz_attempts`、`quiz_attempt_answers` | 視聴ログ API・小テスト API | LAD API、`/chat`（Snapshot 経由） |
+| `learning.db` | `learning_sessions`（learner × lecture で一意。1 人に回ごとに最大 3 つ。回の順は `started_at` の昇順。#56）、`viewing_logs`、`quiz_attempts`、`quiz_attempt_answers` | 視聴ログ API・小テスト API | LAD API、`/chat`（Snapshot 経由） |
 | `tutor.db` | `sessions`（`learning_session_id` で紐づけ）、`messages`（`utterance_type` / `dialogue_move` / `interpretation_state` / `responded_at` 付き）、`dialog_logs`（1 対話セッション = 最大 1 行の対話ログ JSON） | `/chat`（`messages`）、`/api/dialog-log`（`dialog_logs`） | `/chat`（対話履歴・Move 履歴・前回 State Card）、`/api/dialog-log`（`messages` から対話ログを作る） |
 
 パスは環境変数 `LEARNING_DB_PATH` / `TUTOR_DB_PATH` で上書き可能（既定は `db/data/`）。
+
+1 人の研究協力者は 3 本の講義を順に学習する（回。[multi-video-learning.md](./multi-video-learning.md)）。回ごとに学習セッション 1 つ、対話セッション・対話ログが最大 1 つで、1 人あたりそれぞれ最大 3 つになる。協力者の進行状態（選択待ち / 学習中 / 全体の終了）は、表を足さず、`learning_sessions` と `dialog_logs`（`end_method` が `end_button` の行 = 回の終了）から導く。

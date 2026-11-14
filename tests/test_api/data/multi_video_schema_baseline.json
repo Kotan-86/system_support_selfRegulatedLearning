@@ -1,0 +1,102 @@
+{
+ "learning.db": [
+  [
+   "index",
+   "idx_quiz_attempts_session",
+   "quiz_attempts",
+   "CREATE INDEX idx_quiz_attempts_session\n    ON quiz_attempts(learning_session_id)"
+  ],
+  [
+   "index",
+   "idx_viewing_logs_session",
+   "viewing_logs",
+   "CREATE INDEX idx_viewing_logs_session\n    ON viewing_logs(learning_session_id)"
+  ],
+  [
+   "index",
+   "sqlite_autoindex_learning_sessions_1",
+   "learning_sessions",
+   null
+  ],
+  [
+   "index",
+   "sqlite_autoindex_learning_sessions_2",
+   "learning_sessions",
+   null
+  ],
+  [
+   "table",
+   "learning_sessions",
+   "learning_sessions",
+   "CREATE TABLE learning_sessions (\n    id TEXT PRIMARY KEY,\n    learner_id TEXT NOT NULL,\n    lecture_id TEXT NOT NULL,\n    started_at DATETIME NOT NULL,\n    UNIQUE (learner_id, lecture_id)\n)"
+  ],
+  [
+   "table",
+   "quiz_attempt_answers",
+   "quiz_attempt_answers",
+   "CREATE TABLE quiz_attempt_answers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    attempt_id INTEGER NOT NULL,\n    question_index INTEGER NOT NULL,\n    selected_answer TEXT NOT NULL,\n    is_correct INTEGER NOT NULL CHECK (is_correct IN (0, 1)),\n    FOREIGN KEY (attempt_id) REFERENCES quiz_attempts(id)\n)"
+  ],
+  [
+   "table",
+   "quiz_attempts",
+   "quiz_attempts",
+   "CREATE TABLE quiz_attempts (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    learning_session_id TEXT NOT NULL,\n    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    score_numerator INTEGER NOT NULL,\n    score_denominator INTEGER NOT NULL,\n    FOREIGN KEY (learning_session_id) REFERENCES learning_sessions(id)\n)"
+  ],
+  [
+   "table",
+   "sqlite_sequence",
+   "sqlite_sequence",
+   "CREATE TABLE sqlite_sequence(name,seq)"
+  ],
+  [
+   "table",
+   "viewing_logs",
+   "viewing_logs",
+   "CREATE TABLE viewing_logs (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    learning_session_id TEXT NOT NULL,\n    time_stamp DATETIME NOT NULL,\n    \"current_time\" INTEGER NOT NULL,\n    action TEXT NOT NULL,\n    duration REAL NOT NULL,\n    FOREIGN KEY (learning_session_id) REFERENCES learning_sessions(id)\n)"
+  ]
+ ],
+ "tutor.db": [
+  [
+   "index",
+   "idx_messages_session_created",
+   "messages",
+   "CREATE INDEX idx_messages_session_created\n    ON messages(session_id, created_at)"
+  ],
+  [
+   "index",
+   "sqlite_autoindex_dialog_logs_1",
+   "dialog_logs",
+   null
+  ],
+  [
+   "index",
+   "sqlite_autoindex_sessions_1",
+   "sessions",
+   null
+  ],
+  [
+   "table",
+   "dialog_logs",
+   "dialog_logs",
+   "CREATE TABLE dialog_logs (\n    session_id TEXT PRIMARY KEY REFERENCES sessions(id),\n    participant_id TEXT NOT NULL,\n    lecture_id TEXT NOT NULL,\n    learning_session_id TEXT NOT NULL,\n    end_method TEXT NOT NULL,\n    ended_at TEXT NOT NULL,\n    log_json TEXT NOT NULL\n)"
+  ],
+  [
+   "table",
+   "messages",
+   "messages",
+   "CREATE TABLE messages (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    session_id TEXT NOT NULL,\n    role TEXT NOT NULL,\n    content TEXT NOT NULL,\n    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    utterance_type TEXT,\n    dialogue_move TEXT,\n    interpretation_state TEXT,\n    responded_at TEXT,\n    FOREIGN KEY (session_id) REFERENCES sessions(id)\n)"
+  ],
+  [
+   "table",
+   "sessions",
+   "sessions",
+   "CREATE TABLE sessions (\n    id TEXT PRIMARY KEY,\n    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    participant_id TEXT NOT NULL DEFAULT '',\n    learning_session_id TEXT NOT NULL DEFAULT ''\n)"
+  ],
+  [
+   "table",
+   "sqlite_sequence",
+   "sqlite_sequence",
+   "CREATE TABLE sqlite_sequence(name,seq)"
+  ]
+ ]
+}

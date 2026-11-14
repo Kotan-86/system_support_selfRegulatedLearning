@@ -35,6 +35,7 @@
 - (2026-10-28 更新)#47 で、`docs/requirements.md`(実験の規模、FR-54、NFR-43、未決事項の4)、`docs/product-goal.md`(20行目)、`docs/spec/participant-login.md`(POの意図、What の5節、AC19、AC23、AC25)、`docs/spec/framework-drivers-layer.md`(205行目)は、登録の上限31件・ID の範囲 `P01`〜`P31` に更新済み。研究者確認用(確認専用)の ID を `P01` と書いている(requirements.md の18行目・FR-54、participant-login.md の44行目・97行目)。〔確認: 読み取りのみ(検索)。AC15 の結果は受入基準の注記を参照〕
 - `.env.example` は上限にも ID の範囲にも触れていない。〔確認: 読み取りのみ(2026-10-26)〕
 - 講義画面のスクリプトは、動画の準備ができた時点で再生と一時停止を自動で行い、その状態の変化で視聴ログを送る作りに見える。そのため、確認のために本番でログインして `/lecture` を開くだけでも、その ID の視聴ログが記録される可能性がある。〔確認: 読み取りのみ(`framework_drivers/platform/static/js/lecture/player.js` の `onPlayerReady`、`onPlayerStateChange`)(未確認: コードを読んだ推測。ブラウザで確かめていない)〕
+  - **(#56 で変更)** 準備完了の時点の自動の再生・一時停止はしなくなり、`/lecture` を開くだけでは視聴ログは記録されない(利用者の操作だけを記録する。[multi-video-learning.md](./multi-video-learning.md) の9節、Q15)。
 
 ### POの意図(確認済み)
 

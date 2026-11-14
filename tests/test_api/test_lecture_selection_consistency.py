@@ -296,7 +296,10 @@ def _call(client, api: str, lecture_id: str, value=..., participant: str = PID):
         body["participant_id"] = participant
         return client.post("/chat", json=body)
     if api == "dialog-log":
-        body = _dialog_body("end_button", value)
+        # 仕様: docs/spec/multi-video-learning.md#受入基準 AC4・AC25(#56: 終了ボタンの保存は回の終了で、
+        # その後の呼び出しは 409 になる。AC14 の「同じ講義・null は省略と同じ」を続けて呼んで確かめるため、
+        # 回の途中の保存(page_leave)にした)
+        body = _dialog_body("page_leave", value)
         body["participant_id"] = participant
         return client.post("/api/dialog-log", json=body)
     query = "" if value is ... else f"lecture_id={quote(str(value))}"

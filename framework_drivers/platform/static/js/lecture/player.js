@@ -1,5 +1,6 @@
 // 仕様: docs/spec/framework-drivers-layer.md#技術選定確定
 // 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-5-講義動画フロント
+// 仕様: docs/spec/multi-video-learning.md#9-視聴ログの記録-利用者の操作だけを記録するq15視聴ログの記録の変更レベル3
 (function (global) {
   "use strict";
 
@@ -129,13 +130,15 @@
     }
   }
 
-  function onPlayerReady(event) {
+  // 仕様: multi-video-learning.md 9節(Q15)。
+  // 準備完了では再生・一時停止を呼ばない(以前は playVideo → pauseVideo で play/pause が記録された)。
+  // 本物の YouTube は状態の変化を onReady の後に非同期で通知するため、「準備完了の間だけ記録しない」
+  // フラグでは抑えられない。呼ばないことで、通知の時期によらず、利用者の操作の前は何も記録されない。
+  function onPlayerReady() {
     hideYouTubeCaptions();
     range = document.getElementById("seekbar");
     range.max = player.getDuration();
-    event.target.playVideo();
     setPlayerSize(player);
-    player.pauseVideo();
   }
 
   function onPlayerStateChange(event) {

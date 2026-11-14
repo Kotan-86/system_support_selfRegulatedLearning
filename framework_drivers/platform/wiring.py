@@ -12,6 +12,9 @@ from application.learning.adapters.get_learning_snapshot_query import (
 from application.learning.use_cases.get_learning_snapshot import GetLearningSnapshotUseCase
 from application.learning.use_cases.record_quiz_attempt import RecordQuizAttemptUseCase
 from application.learning.use_cases.record_viewing_event import RecordViewingEventUseCase
+from application.learning.use_cases.get_participant_progress import (
+    GetParticipantProgressUseCase,
+)
 from application.learning.use_cases.select_lecture import SelectLectureUseCase
 from application.learning.use_cases.start_or_get_learning_session import (
     StartOrGetLearningSessionUseCase,
@@ -64,6 +67,9 @@ from framework_drivers.db.tutoring.id_generators import (
 )
 from framework_drivers.db.tutoring.sqlite_dialog_log_repository import (
     SqliteDialogLogRepository,
+)
+from framework_drivers.db.tutoring.sqlite_round_record_query import (
+    SqliteRoundRecordQuery,
 )
 from framework_drivers.db.tutoring.sqlite_tutor_session_repository import (
     SqliteTutorSessionRepository,
@@ -236,17 +242,30 @@ def build_get_learning_snapshot_controller(
     )
 
 
-def build_select_lecture_use_case(
-    connection: sqlite3.Connection,
-) -> SelectLectureUseCase:
-    """講義の選択ユースケースを組み立てる(選択は learning_sessions で表す)。
+def build_participant_progress_use_case(
+    learning_connection: sqlite3.Connection,
+    tutor_connection: sqlite3.Connection,
+) -> GetParticipantProgressUseCase:
+    """協力者の進行状態(2つの DB を読む)。仕様: docs/spec/multi-video-learning.md#1-協力者の進行状態"""
+    return GetParticipantProgressUseCase(
+        repository=_learning_repository(learning_connection),
+        round_records=SqliteRoundRecordQuery(tutor_connection),
+    )
 
-    仕様: docs/spec/lecture-selection.md#3-選択の保存と固定fr-63
+
+def build_select_lecture_use_case(
+    learning_connection: sqlite3.Connection,
+    tutor_connection: sqlite3.Connection,
+) -> SelectLectureUseCase:
+    """回の選択ユースケースを組み立てる(選択は learning_sessions で表す)。
+
+    仕様: docs/spec/multi-video-learning.md#2-回の選択n本目
     """
     return SelectLectureUseCase(
-        repository=_learning_repository(connection),
+        repository=_learning_repository(learning_connection),
         id_generator=UuidLearningSessionIdGenerator(),
         lecture_catalog=_lecture_catalog(),
+        progress=build_participant_progress_use_case(learning_connection, tutor_connection),
     )
 
 

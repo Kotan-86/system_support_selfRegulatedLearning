@@ -12,9 +12,9 @@ from application.learning.ports.viewing_log_export_query import ViewingLogExport
 
 
 class ExportViewingLogsUseCase:
-    """参加者ID(文字列の昇順) → 講義ID(文字列の昇順) → viewing_log_id(昇順)に並べる。
+    """参加者ID(文字列の昇順) → round_number(数値の昇順) → viewing_log_id(昇順)に並べる。
 
-    時刻では並べない(時差が混ざると文字列の順が時刻の順にならないため)。
+    講義IDでは並べない。時刻では並べない(時差が混ざると文字列の順が時刻の順にならないため)。
     """
 
     def __init__(self, query: ViewingLogExportQuery) -> None:
@@ -28,6 +28,6 @@ class ExportViewingLogsUseCase:
         else:
             logs = self._query.list_for_participant(request.participant_id)
         ordered = sorted(
-            logs, key=lambda log: (log.participant_id, log.lecture_id, log.viewing_log_id)
+            logs, key=lambda log: (log.participant_id, log.round_number, log.viewing_log_id)
         )
         return ok(ExportViewingLogsResponse(logs=tuple(ordered)))

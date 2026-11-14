@@ -15,7 +15,7 @@
 |---|---|
 | 主な利用者 | 研究協力者(学習者) |
 | 副次的な利用者 | 研究者(対話ログの取得) |
-| 実験の規模 | 6講義から協力者が1つ選ぶ(1学習者につき1講義)。2026-10-26 時点で、ログイン ID は `P01`〜`P31`(協力者は30人以下、登録は研究者確認用 `P01` を含め31件以下)で、講義は協力者がログイン後に6本から1つ選ぶ(#34。1回選んだら固定。固定マップは廃止)([participant-login](./spec/participant-login.md)) |
+| 実験の規模 | 6講義から協力者が3本を1本ずつ選び、順に学習する(1人3回。#56、PO決定 2026-10-29)。2026-10-26 時点で、ログイン ID は `P01`〜`P31`(協力者は30人以下、登録は研究者確認用 `P01` を含め31件以下)で、講義は協力者がログイン後に、回ごとに、終えた回の講義を除いた残りから1つ選ぶ(固定マップは廃止。回の中の選択の変更は FR-63)([participant-login](./spec/participant-login.md)、[multi-video-learning](./spec/multi-video-learning.md)) |
 | 実験の開始 | 2026-10-27(予定)。デプロイ作業は 10/26(月)9:00-10:00 |
 | スコープ外 | 管理画面 |
 | 2026-10-21 時点で変更 | 参加者ログイン、DB の永続化は、スコープに入った(§6) |
@@ -29,7 +29,7 @@ IDは本書内の通し番号。根拠欄は、詳細を定める既存ドキュ
 | ID | 要件 | 根拠 |
 |---|---|---|
 | FR-01 | 学習者は、講義動画(YouTube)を視聴できる | [system-overview](./spec/system-overview.md) |
-| FR-02 | 視聴中の操作(再生・停止・シークなど)を、視聴イベントとして記録する(`POST /api/viewing-log`) | [system-overview](./spec/system-overview.md) |
+| FR-02 | 視聴中の利用者の操作(再生・停止・シークなど)を、視聴イベントとして記録する(`POST /api/viewing-log`)。動画の準備完了による自動の再生・一時停止は記録しない(#56 の Q15、PO決定 2026-10-29) | [system-overview](./spec/system-overview.md) |
 | FR-03 | 学習者は、講義に紐づく小テストを受験でき、回答を受験記録として保存する(`POST /api/quiz-attempts`) | [system-overview](./spec/system-overview.md) |
 | FR-04 | 学習データは、学習者 × 講義 を単位とする学習セッションに集約する(無ければ新規作成) | [domain-model](./spec/domain-model.md) |
 | FR-05 | `participant_id` から講義を自動解決する(1/2/3 → `lecture-1/2/3`、それ以外は `lecture-1`)。**【置き換え済み】FR-60 の、協力者が自分で選ぶ方式に置き換えた(#34。固定対応は廃止)** | [lecture-selection](./spec/lecture-selection.md)、[interfaces-layer](./spec/interfaces-layer.md) |
@@ -52,7 +52,7 @@ IDは本書内の通し番号。根拠欄は、詳細を定める既存ドキュ
 | FR-20 | 学習者はチャットでAIチューターに発言し、応答を受け取れる(`POST /chat`) | [system-overview](./spec/system-overview.md) |
 | FR-21 | 応答は、同じ `LearningSnapshot`(LADと同一の学習コンテキスト)・対話履歴・直前の状態をもとに生成する | [system-overview](./spec/system-overview.md) |
 | FR-22 | 応答生成は3段のLLMパイプライン(学習者の発話の解釈 → 対話方針(Dialogue Move)の選択 → 応答文の生成)で行う | [system-overview](./spec/system-overview.md) |
-| FR-23 | 1学習セッション = 1対話セッション。再訪時は既存の対話セッションに追記する | [dialog-log-save](./spec/dialog-log-save.md) |
+| FR-23 | 1学習セッション = 1対話セッション。回の途中の再訪時は既存の対話セッションに追記する。回の終了(終了ボタンの保存)の後は、終えた回に戻れない(対話・対話ログの保存し直しを受け付けない。#56 Q2、PO決定 2026-10-29) | [dialog-log-save](./spec/dialog-log-save.md)、[multi-video-learning](./spec/multi-video-learning.md) |
 | FR-24 | 初回かつ数字のみの発話には、LLMを呼ばず定型応答を返す | [system-overview](./spec/system-overview.md) |
 | FR-25 | 1往復ごとに、発言と応答(発話タイプ・Move・解釈状態・応答時刻を含む)を保存する | [system-overview](./spec/system-overview.md) |
 | FR-26 | チャット欄で複数行の入力ができる | [reflect-chat-multiline-input](./spec/reflect-chat-multiline-input.md) |
@@ -90,10 +90,11 @@ IDは本書内の通し番号。根拠欄は、詳細を定める既存ドキュ
 
 | ID | 要件 | 根拠 |
 |---|---|---|
-| FR-60 | 協力者は、6本(理系レベル3 + 文系レベル3)の学習コンテンツから、自分で選べる(PO決定、2026-10-21) | PO |
+| FR-60 | 協力者は、6本(理系レベル3 + 文系レベル3)の学習コンテンツから、3本を1本ずつ自分で選ぶ。2本目・3本目は、前の回を終えた後に、終えた回の講義を除いた残りから選ぶ(重複不可)(PO決定、2026-10-21。1人3本は #56、2026-10-29) | PO、[multi-video-learning](./spec/multi-video-learning.md) |
 | FR-61 | 文系レベルの動画・小テスト・講義情報(・SRT)は、PO が用意する。理系レベル3本は準備済み | PO |
-| FR-62 | 選んだコンテンツに応じて、LAD・AIチューター・対話ログの講義IDが一貫する | PO(意図の読み取り) |
-| FR-63 | 1回選んだら固定。アプリでは変更できず、選び間違いは新しい ID の払い出し（元の ID は停止）で対応する（PO決定、2026-10-26） | [lecture-selection](./spec/lecture-selection.md) |
+| FR-62 | 今の回の講義(n本目の学習中の講義)に応じて、LAD・AIチューター・対話ログの講義IDが一貫する。前の回の講義・記録・対話を混ぜない(#56 で回ごとに拡張) | PO(意図の読み取り)、[multi-video-learning](./spec/multi-video-learning.md) |
+| FR-63 | 各回の選択は、その回の記録(視聴・小テスト・対話。発言0件の対話セッションを含む)ができるまで選び直せ、記録ができた後は固定。記録の後の選び間違いは、その回をそのまま続ける(新しい ID は払い出さない)(PO決定 2026-10-29、#56 の Q4・Q16・Q18。#34 の「1回選んだら固定、選び間違いは新しい ID の払い出し」(2026-10-26)を置き換えた) | [multi-video-learning](./spec/multi-video-learning.md)、[lecture-selection](./spec/lecture-selection.md) |
+| FR-64 | 回の進行: 協力者は「n本目の選択待ち」「n本目の学習中」「全体の終了」のいずれかの状態にあり、ログイン後・`/` の移動先はこの状態で決まる(選択の画面 / 今の回の講義の画面 / 全体の終了の画面)。回の終了は、振り返り画面の終了ボタンによる対話ログの保存の成功だけ(発言0件でもよい。ページ離脱の保存では終わらない)。1本目・2本目の完了画面に次の動画を選ぶ導線、3本目の終了で全体の終了。同じ ID で、日をまたいでも続きから再開できる(PO決定 2026-10-29) | [multi-video-learning](./spec/multi-video-learning.md) |
 
 ### 2.8 【追加】字幕
 
@@ -158,7 +159,7 @@ IDは本書内の通し番号。根拠欄は、詳細を定める既存ドキュ
 | NFR-41 | LAD の動画長取得は YouTube Data API(`YOUTUBE_API_KEY`)に依存する。結果はキャッシュする | [interfaces-layer](./spec/interfaces-layer.md) |
 | NFR-42 | LAD 更新はポーリング方式で検知し、更新があったときだけ再取得する(通信量の抑制) | [system-overview](./spec/system-overview.md) |
 | NFR-43 | 【変更】協力者は30人以下(募集の上限、PO決定 2026-10-21。登録は研究者確認用1件を含め31件以下、PO決定 2026-10-26)。同時利用はさらに少数。高負荷・高可用性は要件としない。Gemini API の料金は研究室が負担し、設計の制約にしない | [product-goal](./product-goal.md) |
-| NFR-45 | 【追加】成功指標(有効10人以上を12月末までに確認)を判定できること。有効の条件(視聴・小テスト・1往復以上の対話)を、データから人ごとに集計できる | [product-goal](./product-goal.md) |
+| NFR-45 | 【追加】成功指標(有効10人以上を12月末までに確認)を判定できること。学習セッション(人 × 動画)ごとに有効の条件(その回の `play` の視聴ログ・小テスト・1往復以上の対話)を判定し、3本とも有効な協力者の人数をデータから集計できる(集計の手段はアプリに作らない)(#56 の Q6・Q13、PO決定 2026-10-29) | [product-goal](./product-goal.md) |
 | NFR-44 | AI応答の許容時間(応答遅延の目標値)`(要確認)` | — |
 
 ### 3.6 運用・可搬性

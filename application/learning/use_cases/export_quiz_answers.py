@@ -12,7 +12,7 @@ from application.learning.ports.quiz_answer_export_query import QuizAnswerExport
 
 
 class ExportQuizAnswersUseCase:
-    """参加者ID(文字列) → 講義ID(文字列) → attempt_id → question_index(数値)の昇順に並べる。
+    """参加者ID(文字列) → round_number(数値) → attempt_id → question_index(数値)の昇順に並べる。
 
     時刻では並べない。回答のない受験(question_index が None)の行は1行だけなので順序に影響しない。
     """
@@ -31,7 +31,7 @@ class ExportQuizAnswersUseCase:
             rows,
             key=lambda r: (
                 r.participant_id,
-                r.lecture_id,
+                r.round_number,
                 r.attempt_id,
                 -1 if r.question_index is None else r.question_index,
             ),

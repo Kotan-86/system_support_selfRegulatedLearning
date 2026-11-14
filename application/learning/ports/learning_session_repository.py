@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from domain.learning.learning_session import LearningSession
-from domain.shared.ids import LectureId, LearnerId
+from domain.shared.ids import LectureId, LearnerId, LearningSessionId
 
 
 class LearningSessionRepository(ABC):
@@ -25,13 +25,27 @@ class LearningSessionRepository(ABC):
     def save(self, session: LearningSession) -> LearningSession:
         """集約全体を upsert し、DB 確定後の集約を返す。"""
 
-    def save_if_learner_has_none(self, session: LearningSession) -> LearningSession:
-        """学習者に Session が無いときだけ保存し、保存後(または既存)の先頭 Session を返す。
+    def save_if_learner_session_count(
+        self, session: LearningSession, expected_count: int
+    ) -> bool:
+        """学習者の Session の数が expected_count のときだけ保存し、保存したかを返す。
 
-        実装は、確認と保存を排他的に行うこと(同時の確定でも1件に保つ)。
+        仕様: docs/spec/multi-video-learning.md#2-回の選択n本目
+        実装は、確認と保存を排他的に行うこと(同時の確定でも1つだけ増やす)。
         既定実装は排他しない(単一スレッド用)。
         """
-        existing = self.list_by_learner(session.learner_id)
-        if existing:
-            return existing[0]
-        return self.save(session)
+        if len(self.list_by_learner(session.learner_id)) != expected_count:
+            return False
+        self.save(session)
+        return True
+
+    def replace_if_no_records(
+        self, current_id: LearningSessionId, session: LearningSession
+    ) -> bool:
+        """current_id の Session に視聴ログ・小テストがなければ、それを消して session を保存する。
+
+        仕様: docs/spec/multi-video-learning.md#8-回の選び直しfr-63-の改訂q4
+        置き換えたかを返す(current_id がない・記録があるときは何も変えずに False)。
+        実装は、確認と置き換えを、視聴ログ・小テストの記録と排他的に行うこと。
+        """
+        raise NotImplementedError

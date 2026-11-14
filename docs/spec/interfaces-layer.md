@@ -189,46 +189,46 @@ tests/
 
 ## default_lecture
 
-参加者の講義は、協力者が選択の画面で選んだ講義（保存された選択）で決まる（[lecture-selection.md](./lecture-selection.md)、#34。FR-60・FR-62・FR-63）。**`participant_id` による固定マップ（1/2/3 → lecture-1/2/3）と、マップ外の既定の講義へのフォールバックは廃止した**（FR-05 の置き換え。lecture-selection.md の AC16）。1 参加者 1 講義 1 `LearningSession`（`UNIQUE (learner_id, lecture_id)` は既存のまま）。
+参加者の講義は、**今の回の講義**（n本目の学習中に、協力者が選択の画面で選んだ講義）で決まる（[multi-video-learning.md](./multi-video-learning.md)、#56 の4節。[lecture-selection.md](./lecture-selection.md)（#34）の「選択した講義」を今の回の講義に読み替える。FR-60・FR-62・FR-63・FR-64）。**`participant_id` による固定マップ（1/2/3 → lecture-1/2/3）と、マップ外の既定の講義へのフォールバックは廃止した**（FR-05 の置き換え。lecture-selection.md の AC16）。1 参加者に回ごとの `LearningSession`（最大3。回の順は開始時刻の昇順）。`UNIQUE (learner_id, lecture_id)` は既存のまま（同じ講義は1人1回まで）。
 
 ### 講義の決定
 
 | 層 | 規約 |
 | -- | ---- |
-| platform 層（`framework_drivers/platform/main.py`） | ログインした協力者の保存された選択（`learning_sessions` の行）を引く。参加者の API では、検査の順序（下記）を適用したうえで、選択した講義の ID を本文の `lecture_id` に入れて Controller へ渡す。`GET /lecture`・`GET /reflect` は、選択した講義の画面を表示する |
-| interfaces 層 | `resolve_lecture_id_for_participant(participant_id, lecture_id=None)` は、渡された `lecture_id` を検証して `LectureId` にするだけで、`participant_id` では講義を決めない。`lecture_id` が `None` のときだけ `resolve_default_lecture_id()`（既定 `lecture-1`。環境変数 `DEFAULT_LECTURE_ID` で上書き可）を返す。これは Controller を直接呼ぶ単体テスト・内部用で、HTTP の経路では使われない（platform 層が必ず選択した講義を渡す） |
+| platform 層（`framework_drivers/platform/main.py`） | ログインした協力者の進行状態（`GetParticipantProgressUseCase`。`learning_sessions` と `tutor.db` の対話ログから決まる）を引く。参加者の API では、検査の順序（下記）を適用したうえで、今の回の講義の ID を本文の `lecture_id` に入れて Controller へ渡す。`GET /lecture`・`GET /reflect` は、今の回の講義の画面を表示する |
+| interfaces 層 | `resolve_lecture_id_for_participant(participant_id, lecture_id=None)` は、渡された `lecture_id` を検証して `LectureId` にするだけで、`participant_id` では講義を決めない。`lecture_id` が `None` のときだけ `resolve_default_lecture_id()`（既定 `lecture-1`。環境変数 `DEFAULT_LECTURE_ID` で上書き可）を返す。これは Controller を直接呼ぶ単体テスト・内部用で、HTTP の経路では使われない（platform 層が必ず今の回の講義を渡す） |
 
 ### API の検査の順序（参加者の API。先の検査で拒否したら後は行わない）
 
 | 順 | 検査 | 結果 |
 | -- | ---- | ---- |
 | 1 | 未ログイン、他人の `participant_id`（#30） | 401 / 403 |
-| 2 | 講義が未選択 | HTTP 409（記録しない。`POST /chat` は AI を呼ばない。LAD・最終更新も 409） |
+| 2 | 選択待ち（1〜3本目。本文 `{"error": "lecture_not_selected"}`）、または全体の終了（本文 `{"error": "all_rounds_finished"}`） | HTTP 409（記録しない。`POST /chat` は AI を呼ばない。LAD・最終更新も 409）。回を終えた直後の、終えた回への書き込みもここで拒否される |
 | 3 | `lecture_id` の値の形（空文字、真偽値、配列、オブジェクト） | HTTP 400 |
-| 4 | `lecture_id` が選択した講義と異なる（カタログにない値を含む） | HTTP 403（記録しない） |
+| 4 | `lecture_id` が今の回の講義と異なる（終えた回の講義、カタログにない値を含む） | HTTP 403（記録しない） |
 | 5 | 既存の検査（他人の対話セッションの 404 など。#30 のとおり） | 変えない |
 
-`lecture_id` が送られていない、または `null`、または選択した講義と一致するときは、選択した講義で処理する。
+`lecture_id` が送られていない、または `null`、または今の回の講義と一致するときは、今の回の講義で処理する。
 
 ### 画面の `lecture_id`
 
-| 画面 | 未選択 | 選択済み |
-| ---- | ------ | -------- |
-| `GET /lecture?lecture_id=` | 値によらず選択の画面へ 302 | 指定を無視して選択した講義を 200 で表示。空の値は 404 |
-| `GET /reflect?lecture_id=` | 値によらず選択の画面へ 302 | 指定なしまたは選択と一致で 200（選択した講義の ID を埋め込む）。選択と異なる値（カタログにない値を含む）は 403。空の値は 404 |
+| 画面 | 選択待ち（1〜3本目） | n本目の学習中 | 全体の終了 |
+| ---- | ------ | -------- | -------- |
+| `GET /lecture?lecture_id=` | 値によらず選択の画面へ 302 | 指定を無視して今の回の講義を 200 で表示。空の値は 404 | 値によらず全体の終了の画面（`/finished`）へ 302 |
+| `GET /reflect?lecture_id=` | 値によらず選択の画面へ 302 | 指定なしまたは今の回の講義と一致で 200（今の回の講義の ID と、完了画面の表示を決める n を埋め込む）。異なる値（終えた回の講義、カタログにない値を含む）は 403。空の値は 404 | 値によらず全体の終了の画面へ 302 |
 
 ### 実装配置
 
 | 項目           | 規約                                                                                                                                  |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 選択の保存・取得 | `application/learning/use_cases/select_lecture.py` — `SelectLectureUseCase`（`find_selected`、`execute`）。選択は `learning_sessions` の行 |
+| 選択の保存・取得 | `application/learning/use_cases/select_lecture.py` — `SelectLectureUseCase`（`options`、`execute`）。選択は `learning_sessions` の行。参加者の講義は今の回の講義（`GetParticipantProgressUseCase`。1参加者に回ごとの `LearningSession`(最大3)。[multi-video-learning.md](./multi-video-learning.md)） |
 | 解決関数       | `interfaces/common/learner_lecture_mapping.py` — `resolve_lecture_id_for_participant(participant_id, lecture_id=None)`（検証のみ。固定マップの定数 `NEAR_TERM_PARTICIPANT_LECTURE_MAP` は削除） |
 | ingress ラッパ | `interfaces/common/ingress.py` — `parse_lecture_id_for_participant(...)`                                                              |
 | 既定の講義     | `interfaces/common/default_lecture.py` — `resolve_default_lecture_id()`（単体テスト・内部用。参加者の要求の講義の決定には使わない）  |
 
 ### 利用箇所
 
-`GetLearningSnapshot` / `GetLastUpdated` / Write Controller（`RecordViewingEvent` / `RecordQuizAttempt`）/ `SendChatMessage` / `SaveDialogLog` の ingress。HTTP 経由では、platform 層が選択した講義を `lecture_id` として渡す。
+`GetLearningSnapshot` / `GetLastUpdated` / Write Controller（`RecordViewingEvent` / `RecordQuizAttempt`）/ `SendChatMessage` / `SaveDialogLog` の ingress。HTTP 経由では、platform 層が今の回の講義を `lecture_id` として渡す。
 
 ---
 
@@ -701,7 +701,7 @@ LAD データ（視聴ログ）と小テスト結果を登録した参加者で�
 ## 受入基準（本仕様）
 
 - [ ] 参加者の講義が保存された選択で決まり、`participant_id` の固定マップとフォールバックは廃止されたことが [default_lecture](#default_lecture) に定義されている（lecture-selection.md で置き換え。旧: 固定マップ 1/2/3 とフォールバック `lecture-1`）
-- [ ] 参加者の API の検査の順序（未選択 409 → 値の形 400 → 不一致 403）が定義されている（旧: 明示 `lecture_id` がマップより優先される解決順）
+- [ ] 参加者の API の検査の順序（選択待ち・全体の終了 409 → 値の形 400 → 今の回の講義との不一致 403）が定義されている（旧: 明示 `lecture_id` がマップより優先される解決順）
 - [ ] 2 分バケットは `segment_start_sec = (video_position // 120) * 120` で定義されている
 - [ ] `ViewingBehaviorMetrics` の派生指標（10 分換算・巻き戻し累積比率）が定義されている
 - [ ] `RuleBasedLearnerTypeClassifier` の 4 タイプ判定ルール（優先順・排他）が定義されている

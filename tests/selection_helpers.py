@@ -5,8 +5,8 @@
   - GET  /select-lecture            選択の画面。講義ごとの選択肢は name="lecture_id" と value="<講義ID>" を持つ
                                      要素(submit ボタンまたは radio)で、カタログの順に並ぶ。
   - POST /select-lecture            最初の操作(フォーム項目 lecture_id)。200 で確認の画面を返す。保存しない。
-                                     確認の画面は、講義の題名と「一度選ぶと変更できない」と、
-                                     action が /select-lecture/confirm のフォーム(lecture_id を持つ)を含む。
+                                     確認の画面は、講義の題名と、action が /select-lecture/confirm のフォームを含む
+                                     (#56 の AC15 で「一度選ぶと変更できない」は含まなくなった。WARNING_TEXT は不在の検査に使う)。
   - POST /select-lecture/confirm    確定(フォーム項目 lecture_id)。成功も、選択済みで別の講義が送られた場合も 302 → /lecture。
                                      カタログにない値・空・項目なしは 400(何も保存しない)。
 期待値の出典: 講義の一覧・題名・動画は既存の build_near_term_lectures()(#33 で登録済み)と、仕様の系統の値。
@@ -23,7 +23,7 @@ from tests.test_lectures.humanities_data import HUMANITIES_BY_ID
 
 SELECT_PATH = "/select-lecture"
 CONFIRM_PATH = "/select-lecture/confirm"
-WARNING_TEXT = "一度選ぶと変更できない"
+WARNING_TEXT = "一度選ぶと変更できない"  # #34 の文言(#56 の AC15 以後は表示しない)
 
 ROOT = Path(__file__).resolve().parent.parent
 

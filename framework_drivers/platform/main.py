@@ -1,5 +1,6 @@
 # 仕様: docs/spec/framework-drivers-layer.md#HTTP-契約
 # 仕様: docs/spec/lecture-selection.md#実現内容what
+# 仕様: docs/spec/multi-video-learning.md#実現内容what
 # 仕様: docs/spec/participant-login.md#3-参加者の特定fr-52
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-4-platform-配線
 # 仕様: docs/spec/framework-drivers-implementation-plan.md#Phase-5-講義動画フロント
@@ -19,6 +20,11 @@ from flask import Flask, Response, g, redirect, render_template, request, url_fo
 from jinja2 import ChoiceLoader, FileSystemLoader
 
 from application.common.errors import ErrorCode
+from application.learning.dto.participant_progress import (
+    TOTAL_ROUNDS,
+    ParticipantProgress,
+    ProgressState,
+)
 from domain.shared.ids import LearnerId, LectureId
 from framework_drivers.db.learning.quiz_definitions import (
     lecture_1,
@@ -39,7 +45,6 @@ from framework_drivers.platform.http_response import (
 )
 from framework_drivers.platform.https_enforcement import register_https_enforcement
 from framework_drivers.platform.participant_auth import (
-    DEFAULT_AFTER_LOGIN_PATH,
     current_participant_id,
     load_secret_key,
     register_participant_auth,
@@ -57,6 +62,7 @@ from framework_drivers.platform.wiring import (
     build_export_viewing_logs_controller,
     build_get_last_updated_controller,
     build_get_learning_snapshot_controller,
+    build_participant_progress_use_case,
     build_record_quiz_attempt_controller,
     build_record_viewing_event_controller,
     build_save_dialog_log_controller,
@@ -186,6 +192,8 @@ def _subtitle_cues_for_lecture(lecture_id: str) -> list[dict[str, object]]:
 
 
 SELECT_LECTURE_PATH = "/select-lecture"
+LECTURE_PATH = "/lecture"
+FINISHED_PATH = "/finished"  # 全体の終了の画面(共有IF)
 _CONFIRM_LECTURE_PATH = "/select-lecture/confirm"
 
 
@@ -201,23 +209,43 @@ def _reject_foreign_claim(claimed: object) -> Response | None:
     return _json_error("forbidden" if status == 403 else "invalid_participant_id", status)
 
 
-def _selected_lecture_id() -> str | None:
-    """ログインした協力者が選んだ講義(保存された選択)。未選択なら None。"""
-    selected = build_select_lecture_use_case(g.learning_conn).find_selected(
+def _progress() -> ParticipantProgress:
+    """ログインした協力者の進行状態(仕様: multi-video-learning.md 1節)。"""
+    return build_participant_progress_use_case(g.learning_conn, g.tutor_conn).execute(
         LearnerId(current_participant_id())
     )
-    return None if selected is None else str(selected)
+
+
+def _home_path(progress: ParticipantProgress) -> str:
+    """状態ごとの移動先: 選択待ち → 選択の画面、学習中 → 講義の画面、全体の終了 → 全体の終了の画面。"""
+    if progress.state is ProgressState.LEARNING:
+        return LECTURE_PATH
+    if progress.state is ProgressState.WAITING:
+        return SELECT_LECTURE_PATH
+    return FINISHED_PATH
+
+
+def _round_context(progress: ParticipantProgress) -> dict[str, object]:
+    """画面に渡す回の情報(「n本目 / 3本」、完了画面の導線)。仕様: multi-video-learning.md 2節・3節。"""
+    return {
+        "round_number": progress.round_number,
+        "total_rounds": TOTAL_ROUNDS,
+        "select_lecture_path": SELECT_LECTURE_PATH,
+    }
 
 
 def _guard_lecture(claimed: object) -> tuple[str | None, Response | None]:
-    """参加者の API の講義を、保存された選択で決める。
+    """参加者の API の講義を、今の回の講義で決める。
 
     検査の順序(仕様 What 4節。participant_id の検査は呼び出し側が先に行う):
-    未選択 409 → 値の形 400 → 選択との不一致 403。
+    選択待ち・全体の終了 409 → 値の形 400 → 今の回の講義との不一致 403。
     """
-    selected = _selected_lecture_id()
-    if selected is None:
+    progress = _progress()
+    if progress.state is ProgressState.WAITING:
         return None, _json_error("lecture_not_selected", 409)
+    if progress.state is ProgressState.FINISHED:
+        return None, _json_error("all_rounds_finished", 409)
+    selected = str(progress.current_lecture_id)
     if claimed is None:
         return selected, None
     if isinstance(claimed, bool) or not isinstance(claimed, (str, int, float)) or claimed == "":
@@ -228,9 +256,9 @@ def _guard_lecture(claimed: object) -> tuple[str | None, Response | None]:
 
 
 def _own_payload(payload: object) -> tuple[object, Response | None]:
-    """本文の participant_id と lecture_id を検査し、ログインした ID と選択した講義を入れた本文を返す。
+    """本文の participant_id と lecture_id を検査し、ログインした ID と今の回の講義を入れた本文を返す。
 
-    本文が JSON オブジェクトでないときは、そのまま Controller の検証に任せる(未選択は 409)。
+    本文が JSON オブジェクトでないときは、そのまま Controller の検証に任せる(選択待ち・全体の終了は 409)。
     """
     if not isinstance(payload, dict):
         _, rejection = _guard_lecture(None)
@@ -246,6 +274,26 @@ def _own_payload(payload: object) -> tuple[object, Response | None]:
         "participant_id": current_participant_id(),
         "lecture_id": selected,
     }, None
+
+
+def _record_learning(execute: Callable[[object], object], payload: object) -> Response:
+    """learning.db の書き込みロック(BEGIN IMMEDIATE)を、今の回の判定の前に取って記録する。
+
+    仕様: docs/spec/multi-video-learning.md#8-回の選び直しfr-63-の改訂q4(同時の要求。AC14)
+    選び直し(replace_if_no_records)も同じロックで置き換えるため、今の回の判定から保存までの間に
+    学習セッションが消えることはない(消えた学習セッションへの記録・作り直しを防ぐ)。
+    """
+    conn = g.learning_conn
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        data, rejection = _own_payload(payload)
+        if rejection is not None:
+            return rejection
+        return controller_result_to_flask_response(execute(data))
+    finally:
+        if conn.in_transaction:
+            conn.rollback()
 
 
 def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
@@ -291,41 +339,46 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
 
     @app.route("/")
     def index():
-        """ルート: 選択済みなら /lecture へ、未選択なら選択の画面へ(未ログインは認証層がログイン画面へ)。"""
-        if _selected_lecture_id() is None:
-            return redirect(SELECT_LECTURE_PATH, 302)
-        return redirect(DEFAULT_AFTER_LOGIN_PATH, 302)
+        """ルート: 進行状態の移動先へ(未ログインは認証層がログイン画面へ)。"""
+        return redirect(_home_path(_progress()), 302)
 
     @app.route(SELECT_LECTURE_PATH, methods=["GET", "POST"])
     def select_lecture():
-        """GET: 選択の画面(題名と系統をカタログの順に)。POST: 最初の操作(確認の画面。保存しない)。
+        """GET: 選択の画面(終えた回の講義を除き、カタログの順に)。POST: 確認の画面(保存しない)。
 
-        仕様: docs/spec/lecture-selection.md#2-選択の画面と導線
+        仕様: docs/spec/multi-video-learning.md#2-回の選択n本目
         """
-        if _selected_lecture_id() is not None:
-            return redirect(DEFAULT_AFTER_LOGIN_PATH, 302)
+        progress = _progress()
+        # 選び直し(8節): 記録のない今の回があるあいだも開ける(選択肢は今の回の講義も除く)
+        if progress.state is not ProgressState.WAITING and not progress.can_reselect:
+            return redirect(_home_path(progress), 302)
+        options = build_select_lecture_use_case(g.learning_conn, g.tutor_conn).options(progress)
         if request.method == "GET":
             return render_template(
                 "select_lecture.html",
-                lectures=_STATIC_LECTURE_CATALOG.list_all(),
+                lectures=options,
                 participant_id=current_participant_id(),
+                reselecting=progress.can_reselect,
+                **_round_context(progress),
             )
         raw = request.form.get("lecture_id", "").strip()
-        chosen = _STATIC_LECTURE_CATALOG.find_by_id(LectureId(raw)) if raw else None
+        chosen = next((x for x in options if str(x.id) == raw), None)
         if chosen is None:
             return Response("lecture not found", status=400, mimetype="text/plain")
-        return render_template("select_lecture_confirm.html", lecture=chosen)
+        return render_template(
+            "select_lecture_confirm.html", lecture=chosen, **_round_context(progress)
+        )
 
     @app.route(_CONFIRM_LECTURE_PATH, methods=["POST"])
     def confirm_lecture():
-        """POST: 選択の確定。保存済みの選択は変えない(二重送信・別の講義の送信は最初の講義へ)。
+        """POST: 選択の確定。選択待ちのときだけ保存し、確定の後の状態の移動先へ 302。
 
-        仕様: docs/spec/lecture-selection.md#3-選択の保存と固定fr-63
+        仕様: docs/spec/multi-video-learning.md#2-回の選択n本目
         """
         raw = request.form.get("lecture_id", "").strip()
         if not raw:
             return Response("lecture_id is required", status=400, mimetype="text/plain")
-        use_case = build_select_lecture_use_case(g.learning_conn)
+        use_case = build_select_lecture_use_case(g.learning_conn, g.tutor_conn)
         learner_id = LearnerId(current_participant_id())
         try:
             result = use_case.execute(learner_id, LectureId(raw), datetime.now(timezone.utc))
@@ -334,15 +387,32 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
             result = None
         if result is not None and result.is_err:
             return Response("lecture not found", status=400, mimetype="text/plain")
-        return redirect(DEFAULT_AFTER_LOGIN_PATH, 302)
+        progress = _progress() if result is None else result.value
+        return redirect(_home_path(progress), 302)
+
+    @app.route(FINISHED_PATH)
+    def finished():
+        """GET: 全体の終了の画面(3本すべてを終えたこと、以降の操作は不要。文言は AC24 で決定済み。仕様の「画面の文言の決定」W6 参照)。
+
+        仕様: docs/spec/multi-video-learning.md#3-回の終了
+        """
+        progress = _progress()
+        if progress.state is not ProgressState.FINISHED:
+            return redirect(_home_path(progress), 302)
+        return render_template("finished.html", participant_id=current_participant_id())
 
     @app.route("/reflect")
     def reflect():
-        """GET /reflect: LAD + AI 振り返り統合画面(ログインした本人の画面。クエリの participant_id は無視)。"""
+        """GET /reflect: 今の回の LAD + AI 振り返り統合画面(ログインした本人の画面。クエリの participant_id は無視)。
+
+        完了画面の導線(次の動画を選ぶ / 全体の終了)は、描画の時点の n でテンプレートが決める。
+        """
         # 仕様: docs/spec/lecture-selection.md#4-講義-id-の一貫fr-62(DR-001・DR-003)
-        selected = _selected_lecture_id()
-        if selected is None:
-            return redirect(SELECT_LECTURE_PATH, 302)
+        # 仕様: docs/spec/multi-video-learning.md#3-回の終了(「選択した講義」= 今の回の講義。4節)
+        progress = _progress()
+        if progress.state is not ProgressState.LEARNING:
+            return redirect(_home_path(progress), 302)
+        selected = str(progress.current_lecture_id)
         lecture_id = request.args.get("lecture_id")
         if lecture_id == "":
             return Response("lecture not found", status=404, mimetype="text/plain")
@@ -352,17 +422,19 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
             "reflect.html",
             participant_id=current_participant_id(),
             lecture_id=selected,
+            **_round_context(progress),
             **_REFLECT_FIXED_TEXT,
         )
 
     @app.route("/lecture")
     def lecture():
-        """GET /lecture: 選択した講義の動画ページ(クエリの participant_id・選択と異なる lecture_id は無視)。"""
+        """GET /lecture: 今の回の講義の動画ページ(クエリの participant_id・今の回と異なる lecture_id は無視)。"""
         # 仕様: docs/spec/lecture-selection.md#4-講義-id-の一貫fr-62(Q3・DR-003)
         participant_id = current_participant_id()
-        selected = _selected_lecture_id()
-        if selected is None:
-            return redirect(SELECT_LECTURE_PATH, 302)
+        progress = _progress()
+        if progress.state is not ProgressState.LEARNING:
+            return redirect(_home_path(progress), 302)
+        selected = str(progress.current_lecture_id)
         try:
             if request.args.get("lecture_id") == "":
                 raise ValueError("lecture_id must not be empty")
@@ -388,6 +460,7 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
             lecture_id=lecture_id,
             youtube_video_id=youtube_video_id,
             lecture_error="",
+            can_reselect=progress.can_reselect,
             subtitle_cues=_subtitle_cues_for_lecture(lecture_id),
             **quiz_context,
         )
@@ -411,37 +484,27 @@ def create_app(*, clock: Callable[[], datetime] | None = None) -> Flask:
     @app.route("/api/dialog-log", methods=["POST"])
     def api_dialog_log():
         """POST /api/dialog-log: 対話ログを保存する(仕様: dialog-log-save.md#保存-API)。"""
-        data, rejection = _own_payload(request.get_json(silent=True))
-        if rejection is not None:
-            return rejection
         controller = build_save_dialog_log_controller(
             learning_connection=g.learning_conn,
             tutor_connection=g.tutor_conn,
         )
-        result = controller.execute(
-            data, received_at=datetime.now(timezone.utc)
+        received_at = datetime.now(timezone.utc)
+        return _record_learning(
+            lambda data: controller.execute(data, received_at=received_at),
+            request.get_json(silent=True),
         )
-        return controller_result_to_flask_response(result)
 
     @app.route("/api/quiz-attempts", methods=["POST"])
     def api_quiz_attempts():
         """POST /api/quiz-attempts: 小テスト 1 試行を記録する。"""
-        data, rejection = _own_payload(request.get_json(silent=True) or {})
-        if rejection is not None:
-            return rejection
         controller = build_record_quiz_attempt_controller(g.learning_conn)
-        result = controller.execute(data)
-        return controller_result_to_flask_response(result)
+        return _record_learning(controller.execute, request.get_json(silent=True) or {})
 
     @app.route("/api/viewing-log", methods=["POST"])
     def api_viewing_log():
         """POST /api/viewing-log: 視聴ログ 1 件を記録する。"""
-        data, rejection = _own_payload(request.get_json(silent=True) or {})
-        if rejection is not None:
-            return rejection
         controller = build_record_viewing_event_controller(g.learning_conn)
-        result = controller.execute(data)
-        return controller_result_to_flask_response(result)
+        return _record_learning(controller.execute, request.get_json(silent=True) or {})
 
     @app.route("/api/last-updated", methods=["GET"])
     def api_last_updated():

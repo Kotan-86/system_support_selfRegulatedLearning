@@ -154,7 +154,7 @@ FastAPI への変更、PostgreSQL への移行、マイクロサービス分割�
 | 小テスト入力         | Google Form + GAS       | **`GET /lecture` 埋め込み UI** → `POST /api/quiz-attempts` |
 | バックエンド         | Flask + SQLite 2 DB     | **変更なし**                                               |
 | LAD 表示             | DB 参照（UI 未定）      | **自前 `/reflect` + ECharts**（Looker 廃止）               |
-| 講義数               | 1 講義想定              | **3 講義**（旧: `participant_id` 1/2/3 で自動解決。固定マップは廃止し、現在は登録された講義から協力者が選ぶ。[lecture-selection.md](./lecture-selection.md)） |
+| 講義数               | 1 講義想定              | **3 講義**（旧: `participant_id` 1/2/3 で自動解決。固定マップは廃止し、現在は登録された講義から協力者が回ごとに選び、1人3本を順に学習する。[lecture-selection.md](./lecture-selection.md)、[multi-video-learning.md](./multi-video-learning.md)） |
 
 視聴ログの **API payload 形状**（`participant_id`, `time_stamp`, `current_time`, `action`, `duration`）は ADR・GAS 契約テストと **同一**を維持する。
 
@@ -205,27 +205,28 @@ flowchart TB
 ```
 1. 研究者が作成スクリプトで ID（P01〜P31）とパスワードを発行し、協力者へ配布する
    （P01 = 研究者確認用、P02〜P31 = 協力者用の30件）
-2. GET /login  … ID とパスワードでログイン（成功で、開こうとした画面または /lecture へ 302。講義が未選択なら選択の画面へ 302）
-2a. GET /select-lecture  … 未選択のときだけ。登録された講義を題名と系統つきで一覧し、1つを選ぶ（POST /select-lecture で確認の画面、POST /select-lecture/confirm で確定。一度確定したら変更できない）
-3. GET /lecture  … 動画視聴（ログ自動 POST）。ログインした ID が選んだ講義の画面
+2. GET /login  … ID とパスワードでログイン（成功で、進行状態の移動先へ 302: n本目の選択待ち → 選択の画面、n本目の学習中 → 開こうとした画面または /lecture、全体の終了 → /finished）
+2a. GET /select-lecture  … 選択待ちのとき、または今の回に記録がないあいだ(選び直し。講義の画面の「講義を選び直す」から。選択肢は今の回の講義も除き、講義の画面へ戻る導線を置く)。「n本目 / 3本」と、終えた回の講義を除いた講義を題名と系統つきで一覧し、1つを選ぶ（POST /select-lecture で確認の画面、POST /select-lecture/confirm で確定）
+3. GET /lecture  … 動画視聴（ログ自動 POST）。ログインした ID の今の回の講義の画面
 4. `/lecture` 埋め込み小テスト UI で全問回答・送信 → `POST /api/quiz-attempts` で記録（同一ページに完了表示）
-5. GET /reflect  … LAD + AI 振り返り（同一 Session）
-6. 3〜5 を講義内で自由に往復。終わったら POST /logout（画面のログアウト操作）
+5. GET /reflect  … LAD + AI 振り返り（今の回の Session）
+6. 3〜5 を回の中で自由に往復。「対話ログを送信して終了する」の成功で回が終わる。1本目・2本目は完了画面の「次の動画を選ぶ」から 2a へ、3本目は全体の終了（GET /finished）。中断したら POST /logout（画面のログアウト操作）。同じ ID で再ログインすると続きから再開する
 ```
 
-参加者は**ログインしたセッションから特定**する。URL のクエリの `participant_id` は**無視**し、ログインした本人の画面を出す。**変更(#33)**: 講義ページは、視聴ログと小テストの送信にページの講義IDを付ける。講義ページの「振り返り画面へ進む」は `/reflect?lecture_id=<ページの講義ID>` を開き、振り返りページは URL の講義IDを `/chat`・LAD の取得(`/api/participants/<id>/lad?lecture_id=`)・`/api/dialog-log` の本文に付ける。**置き換え(#34、[lecture-selection.md](./lecture-selection.md))**: 参加者の講義は、協力者が選択の画面で選び、1回で固定される保存された選択で決まる。`participant_id` の固定マップと既定の講義へのフォールバックは廃止した。講義IDなしの要求は、サーバーが保存された選択の講義で処理する。参加者の API は、未選択なら 409、`lecture_id` が選択と異なる（未登録の値を含む）なら 403、値の形の誤り（空文字など）は 400（検査の順序は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。`GET /lecture?lecture_id=` は、選択済みなら指定を無視して選択した講義を表示し、`GET /reflect?lecture_id=` は、選択済みで選択と異なる値なら 403、空の値は 404。未選択で `/`・`/lecture`・`/reflect` を開くと選択の画面へ 302。AI チャット初回の ID 入力プロンプトは **廃止**する。詳細は [participant-login.md](./participant-login.md)。
+参加者は**ログインしたセッションから特定**する。URL のクエリの `participant_id` は**無視**し、ログインした本人の画面を出す。**変更(#33)**: 講義ページは、視聴ログと小テストの送信にページの講義IDを付ける。講義ページの「振り返り画面へ進む」は `/reflect?lecture_id=<ページの講義ID>` を開き、振り返りページは URL の講義IDを `/chat`・LAD の取得(`/api/participants/<id>/lad?lecture_id=`)・`/api/dialog-log` の本文に付ける。**置き換え(#34、[lecture-selection.md](./lecture-selection.md))**: 参加者の講義は、協力者が選択の画面で選び、1回で固定される保存された選択で決まる。`participant_id` の固定マップと既定の講義へのフォールバックは廃止した。講義IDなしの要求は、サーバーが保存された選択の講義で処理する。**読み替え(#56、[multi-video-learning.md](./multi-video-learning.md))**: 「選択した講義」は今の回の講義（n本目の学習中の講義）と読む。「1回で固定」は、その回の記録（視聴・小テスト・対話）ができるまでは講義の画面の導線から選び直せる（選択の画面 `GET/POST /select-lecture` と確定 `POST /select-lecture/confirm` は、記録のない今の回があるあいだも開け、今の回を置き換える。8節）に改めた。参加者の API は、選択待ち・全体の終了なら 409、`lecture_id` が今の回の講義と異なる（終えた回の講義、未登録の値を含む）なら 403、値の形の誤り（空文字など）は 400（検査の順序は [interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)）。`GET /lecture?lecture_id=` は、選択済みなら指定を無視して選択した講義を表示し、`GET /reflect?lecture_id=` は、選択済みで選択と異なる値なら 403、空の値は 404。選択待ちで `/`・`/lecture`・`/reflect` を開くと選択の画面へ、全体の終了では `/finished` へ 302。AI チャット初回の ID 入力プロンプトは **廃止**する。詳細は [participant-login.md](./participant-login.md)。
 
 ### 実験時の URL 例
 
-講義は、ログインした協力者が選択した講義で決まる（#34）。下の表は、ログイン ID が `lecture-4` を選択済みのときの例。
+講義は、ログインした協力者の今の回の講義で決まる（#34、#56）。下の表は、ログイン ID が `lecture-4` の回の学習中のときの例。
 
 | URL                              | 結果                                                              |
 | -------------------------------- | ----------------------------------------------------------------- |
 | `/lecture`                       | 200。`lecture-4` の画面（動画 `cUCNymPtQ5Y`。文系。lecture-5: `lLcZEIsyHvg`、lecture-6: `psbIrfy09Pg`） |
 | `/lecture?lecture_id=lecture-2`  | 200。指定を無視して `lecture-4` の画面                            |
 | `/reflect`・`/reflect?lecture_id=lecture-4` | 200。LAD / AI / 対話ログは lecture-4 の Session を参照 |
-| `/reflect?lecture_id=lecture-2`  | 403（選択と異なる値）                                             |
-| 未選択で `/`・`/lecture`・`/reflect`（値の有無によらず） | 302（選択の画面 `/select-lecture`）                |
+| `/reflect?lecture_id=lecture-2`  | 403（今の回の講義と異なる値。終えた回の講義を含む）               |
+| 選択待ちで `/`・`/lecture`・`/reflect`（値の有無によらず） | 302（選択の画面 `/select-lecture`）                |
+| 全体の終了で `/`・`/lecture`・`/reflect`・`/select-lecture` | 302（全体の終了の画面 `/finished`）              |
 
 旧来の固定マップ（`participant_id` 1/2/3 → `lecture-1/2/3`）は廃止した（アプリは ID の形式で講義を決めない）。
 
@@ -374,7 +375,7 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 - セッション Cookie: `HttpOnly`、`SameSite=Lax`、既定で `Secure`（ローカルの HTTP 実行だけ環境変数で外せる）。有効期限はログインから12時間（要求のたびに延長しない）。
 - `lecture_id` は参加者の識別ではないため、従来どおり扱う。
 
-`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}` と任意の `lecture_id`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403。`lecture_id` は変更: #33、出典 [humanities-lectures.md](./humanities-lectures.md) AC21。**置き換え(#34、[lecture-selection.md](./lecture-selection.md))**: 省略時と選択と一致する値は選択した講義で保存、未選択は 409、選択と異なる値（未登録の講義 ID を含む）は 403、空文字・文字列と数値以外は 400 で、いずれも何も保存しない）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
+`POST /api/dialog-log`: 本文は JSON `{"participant_id", "end_method"}` と任意の `lecture_id`（`end_method` は `end_button` / `page_leave`。`participant_id` は省略可で、省略時はログインした ID。不一致は 403。`lecture_id` は変更: #33、出典 [humanities-lectures.md](./humanities-lectures.md) AC21。**置き換え(#34、[lecture-selection.md](./lecture-selection.md))**: 省略時と選択と一致する値は選択した講義で保存、未選択は 409、選択と異なる値（未登録の講義 ID を含む）は 403、空文字・文字列と数値以外は 400 で、いずれも何も保存しない。#56 では「選択した講義」を今の回の講義と読み、選択待ち・全体の終了（回を終えた後を含む）は 409。`end_button` の保存の成功で回が終わる）。route（`main.py` の `api_dialog_log`）は本文を `request.get_json(silent=True)`（JSON でなければ `None`）で読み、サーバー時刻（UTC）を `received_at` として Controller に渡し、結果を `controller_result_to_flask_response` で返す（成功は 200 + `DialogLogSavedViewModel` の JSON、要求の誤りは 400）。契約の詳細は [dialog-log-save.md#保存 API](./dialog-log-save.md)。
 
 `/research/*`（研究用ダウンロード）: 研究者の Basic 認証が必須（以下は https の要求のとき。http の要求は、照合の前に上の「HTTPS の強制」で 301 になる）。資格情報がない・誤り・サーバーに未設定のときは 401（`WWW-Authenticate` 付き、本文に対話の内容なし）。認証は DB 接続の前に検査し、成功・401 とも `Cache-Control: no-store`。成功は 200 で、対話セッションのリストを JSON で返す。この2つの URL だけ、日本語を UTF-8 のまま・キー順固定で書き出す（既存の JSON API とは異なる。〔PO 決定 DR-001 論点3=B〕）。契約の詳細は [research-dialog-download.md](./research-dialog-download.md)。
 
@@ -386,21 +387,22 @@ API にクライアントが送る `participant_id`（本文・クエリ・URL �
 
 | パス           | テンプレート                                                    | 説明                                   |
 | -------------- | --------------------------------------------------------------- | -------------------------------------- |
-| `GET /lecture` | `framework_drivers/platform/templates/lecture.html`（移行目標） | 講義動画 + 埋め込み小テスト            |
+| `GET /lecture` | `framework_drivers/platform/templates/lecture.html`（移行目標） | 講義動画 + 埋め込み小テスト。記録のない今の回のあいだ、選び直しの導線（`/select-lecture` へのリンク）を表示する（#56 の8節）。動画の準備完了では再生・一時停止を呼ばず、視聴ログは利用者の操作だけ（同9節） |
 | `GET /reflect` | `framework_drivers/platform/templates/reflect.html`（移行目標） | LAD + AI 統合                          |
-| `GET /`        | ログイン済みで選択済みなら `/lecture` へ 302、未選択なら選択の画面へ 302（未ログインはログイン画面へ） | 旧 `index.html` チャット単体は廃止方向 |
-| `GET /select-lecture`・`POST /select-lecture` | `select_lecture.html`、`select_lecture_confirm.html` | 講義の選択（#34）。GET は題名と系統をカタログの順に一覧、POST（`lecture_id`）は確認の画面（保存しない）。選択済みなら `/lecture` へ 302。不正な値は 400 |
-| `POST /select-lecture/confirm` | （画面なし。302 で `/lecture` へ）                              | 選択の確定（#34）。選択済みの場合は保存済みの選択を変えず 302。不正な値は 400 |
+| `GET /`        | ログイン済みなら進行状態の移動先へ 302（学習中 → `/lecture`、選択待ち → 選択の画面、全体の終了 → `/finished`。未ログインはログイン画面へ） | 旧 `index.html` チャット単体は廃止方向 |
+| `GET /select-lecture`・`POST /select-lecture` | `select_lecture.html`、`select_lecture_confirm.html` | n本目の講義の選択（#34、#56）。どちらも「n本目 / 3本」を表示する。GET は終えた回の講義を除いて題名と系統をカタログの順に一覧、POST（`lecture_id`）は確認の画面（保存しない）。選択待ちと、記録のない今の回の学習中（選び直し。選択肢は今の回の講義も除く）以外は状態の移動先へ 302。不正な値・終えた回の講義は 400 |
+| `POST /select-lecture/confirm` | （画面なし。302 で `/lecture` へ）                              | 選択の確定（#34、#56）。選択待ちのときだけ学習セッションを1つ作る。記録のない今の回の学習中に別の講義を送ると、今の回の学習セッションを置き換える（選び直し）。それ以外は何も変えず状態の移動先へ 302。不正な値・終えた回の講義は 400 |
+| `GET /finished` | `finished.html` | 全体の終了の画面（#56）。3本すべてを終えたこと、以降の操作は不要であることを表示する（ログアウト以外の導線を置かない）。全体の終了以外は状態の移動先へ 302 |
 | `GET /login`・`POST /login` | `framework_drivers/platform/templates/login.html` | 参加者のログイン（#30） |
 | `POST /logout` | （画面なし。302 で `/login` へ）                                | 参加者のログアウト（#30）              |
 
-`/lecture`・`/reflect`・`/select-lecture` はログインが必須。`/lecture`・`/reflect` は講義が未選択なら選択の画面へ 302（#34）。詳細は上の「参加者のログインと `participant_id` の扱い」。
+`/lecture`・`/reflect`・`/select-lecture`・`/finished` はログインが必須。`/lecture`・`/reflect` は選択待ちなら選択の画面へ、全体の終了なら `/finished` へ 302（#34、#56）。詳細は上の「参加者のログインと `participant_id` の扱い」。
 
 ### `/reflect` の対話ログ保存（Issue #11。仕様: [dialog-log-save.md](./dialog-log-save.md)）
 
 | 要素 | 内容 |
 |---|---|
-| `reflect.html` | AI チューターの欄に、送信フォームの下へ「対話ログを送信して終了する」ボタン（`#end-dialog-button`）、失敗の表示（`#dialog-end-error`）、完了の表示（`#dialog-end-complete`）を置く。欄（`#chat-panel`）の JS の読み込み順は `chat_panel.js` → `dialog_log.js` → `leave_guard.js` → `reflect_app.js` |
+| `reflect.html` | AI チューターの欄に、送信フォームの下へ「対話ログを送信して終了する」ボタン（`#end-dialog-button`）、失敗の表示（`#dialog-end-error`）、完了の表示（`#dialog-end-complete`）を置く。完了の表示の中身は、描画の時点の今の回の n で決める: n < 3 なら「次の動画を選ぶ」の導線（`#next-round-link`、`/select-lecture` へのリンク）、n = 3 なら全体の終了の表示（`#all-rounds-finished`）（#56 の3節。保存の API の応答は変えない）。欄（`#chat-panel`）の JS の読み込み順は `chat_panel.js` → `dialog_log.js` → `leave_guard.js` → `reflect_app.js` |
 | `js/common/api_client.js` | `ApiClient.postDialogLog(participantId, endMethod)`（`fetch` の Promise を返す）と `ApiClient.postDialogLogOnLeave(participantId)`（`end_method: "page_leave"`、`keepalive: true`。結果を待たず、失敗は握りつぶす） |
 | `js/reflect/chat_panel.js` | 送信の開始・終了を通知する `ChatPanel.onSendStateChange(listener)` と `ChatPanel.isSending()` を提供する（応答待ちの間の判定用） |
 | `js/reflect/dialog_log.js` | `window.DialogLog = { init(participantId), isEnded() }`。終了ボタンで `end_button` の保存を要求する。応答待ちの間・保存中は終了ボタンを無効にする。成功で完了画面に切り替え（入力・送信フォームと終了ボタンを非表示にし、入力・送信を無効にする）、失敗（2xx 以外・通信失敗）では失敗の表示を出して再び押せるようにする。保存中は入力欄・送信ボタンも無効にする（失敗で戻す） |
@@ -422,7 +424,7 @@ framework_drivers/db + external 具象
 
 | 設定                            | 解決元                                                                                                                                                                             |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 参加者の講義                    | 保存された選択（`SelectLectureUseCase`。`build_select_lecture_use_case` で組み立てる）。`participant_id` の固定マップは廃止（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)） |
+| 参加者の講義                    | 今の回の講義（`GetParticipantProgressUseCase`。`build_participant_progress_use_case(learning_conn, tutor_conn)` で組み立てる。選択は `build_select_lecture_use_case(learning_conn, tutor_conn)`。状態ごとの移動先: 選択待ち → `/select-lecture`、学習中 → `/lecture`、全体の終了 → `/finished`。選択待ちの API は 409 `lecture_not_selected`、全体の終了の API は 409 `all_rounds_finished`。[multi-video-learning.md](./multi-video-learning.md)）。`participant_id` の固定マップは廃止（[interfaces-layer.md#default_lecture](./interfaces-layer.md#default_lecture)） |
 | `DEFAULT_LECTURE_ID`            | 環境変数 or 定数（既定 `lecture-1`）。参加者の講義の決定には効かない（単体テスト・内部用の既定）                                                                                   |
 | DB パス                         | `TUTOR_DB_PATH` / `LEARNING_DB_PATH`                                                                                                                                               |
 | Vertex                          | `VERTEX_PROJECT_ID` / `VERTEX_LOCATION` / ADC                                                                                                                                      |
@@ -534,7 +536,7 @@ D3.js 等の低レベル可視化は **不要**。ECharts の標準チャート�
 | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `POST /api/viewing-logs` バッチ | 近い実験では単件 POST で開始。必要時に追加                                         |
 | API キー必須化                  | ADR: 推奨だが必須ではない                                                          |
-| 複数講義 UI                     | 実装済み（#34）。協力者が選択の画面で登録された講義から1つを選び、1回で固定される（[lecture-selection.md](./lecture-selection.md)）。旧: 固定マップ（`participant_id` 1/2/3）は廃止 |
+| 複数講義 UI                     | 実装済み（#34、#56）。協力者が回ごとに選択の画面で、登録された講義のうち終えた回の講義を除いたものから1つを選び、1人3本を順に学習する（[lecture-selection.md](./lecture-selection.md)、[multi-video-learning.md](./multi-video-learning.md)）。旧: 固定マップ（`participant_id` 1/2/3）は廃止 |
 | Research Export Infrastructure  | 別コンテキスト（`ExportResearchData`。対話ログだけの研究用ダウンロードは本件の範囲に含めた） |
 
 ---

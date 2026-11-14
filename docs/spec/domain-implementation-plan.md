@@ -318,7 +318,7 @@ with pytest.raises(ValueError):
 
 ### 備考
 
-- 近い実験（1 講義のみ）では `ParticipantProgram` 未使用でよい
+- 近い実験（1 人 3 本の回。#56、[multi-video-learning.md](./multi-video-learning.md)）では `ParticipantProgram` 未使用でよい（回は同じ学習者の `LearningSession` の並びで表す）
 
 ---
 
